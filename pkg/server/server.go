@@ -167,7 +167,7 @@ func Run(ctx context.Context, opts Options) error {
 	return nil
 }
 
-func makeRouter(db *sql.DB, scoreSvc *service.ScoreService, oauthCfg *oauth.Config, _ Options) *http.ServeMux {
+func makeRouter(db *sql.DB, scoreSvc *service.ScoreService, oauthCfg *oauth.Config, opts Options) *http.ServeMux {
 	scoreRL := newIPRateLimiter(
 		config.GetEnvAsInt("SCORE_RATE_LIMIT", 60),
 		3600, // 1 hour window
@@ -186,6 +186,7 @@ func makeRouter(db *sql.DB, scoreSvc *service.ScoreService, oauthCfg *oauth.Conf
 	mux.Handle("GET /static/", http.FileServer(http.FS(staticFS)))
 
 	// Public
+	mux.HandleFunc("GET /{$}", landingHandler(opts))
 	mux.HandleFunc("GET /health", health.Handler())
 	mux.Handle("GET /auth/github", oauthRL.wrap(oauthStartHandler(oauthCfg)))
 	mux.HandleFunc("GET /auth/github/callback", oauthCallbackHandler(db, oauthCfg))

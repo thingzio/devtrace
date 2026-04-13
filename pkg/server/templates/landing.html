@@ -1,1 +1,39 @@
-{{define "content"}}TODO{{end}}
+{{define "content"}}
+<div class="landing">
+  <section class="hero">
+    <h1>Know your contributors</h1>
+    <p class="hero-sub">Inspect the provenance of any open source contributor at a glance. Trace contribution history, assess license obligations, and surface trust signals before they become risks.</p>
+
+    <form id="try-search" class="search-form">
+      <input id="try-username" type="text" placeholder="GitHub username (e.g., octocat)" autocomplete="off">
+      <button type="submit">Score</button>
+    </form>
+    <div id="try-result"></div>
+
+    <div class="hero-cta">
+      <a href="/auth/github" class="btn btn-primary">Sign in with GitHub</a>
+    </div>
+  </section>
+
+  <section class="features">
+    <div class="feature-card">
+      <h3>Reputation Scoring</h3>
+      <p>22 signals across 5 categories. Know who you're merging code from.</p>
+    </div>
+    <div class="feature-card">
+      <h3>License Analysis</h3>
+      <p>Aggregate license profile across every repo a contributor has touched.</p>
+    </div>
+    <div class="feature-card">
+      <h3>AI Sensing</h3>
+      <p>Detect AI-generated contributions. Separate transparency dimension.</p>
+    </div>
+  </section>
+
+  {{if .Error}}<p class="error-msg">{{.Error}}</p>{{end}}
+
+  <footer class="landing-footer">
+    <p>v{{.Version}}</p>
+  </footer>
+</div>
+{{end}}
