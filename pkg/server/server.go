@@ -200,7 +200,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 
 	// Settings + ToS — requires session
 	mux.Handle("GET /settings", requireSession(settingsHandler(store)))
-	mux.Handle("GET /tos", requireSession(tosPageHandler()))
+	mux.HandleFunc("GET /tos", tosPageHandler())
 	mux.Handle("POST /tos/accept", requireSession(tosAcceptHandler(store)))
 
 	// Score card page — accepts any auth
