@@ -94,7 +94,7 @@ func (rl *ipRateLimiter) wrap(next http.Handler) http.Handler {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Retry-After", fmt.Sprintf("%d", rl.retryAfter(ip)))
 			w.WriteHeader(http.StatusTooManyRequests)
-			json.NewEncoder(w).Encode(map[string]string{"error": "rate limit exceeded"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "rate limit exceeded"})
 			return
 		}
 		next.ServeHTTP(w, r)

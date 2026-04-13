@@ -23,9 +23,9 @@ type Options struct {
 	Date    string
 }
 
-// Run starts the HTTP server and blocks until the context is cancelled or a fatal error occurs.
+// Run starts the HTTP server and blocks until the context is canceled or a fatal error occurs.
 func Run(ctx context.Context, opts Options) error {
-	store, err := postgres.NewFromEnv()
+	store, err := postgres.NewFromEnv(ctx)
 	if err != nil {
 		return fmt.Errorf("init store: %w", err)
 	}
@@ -91,7 +91,7 @@ func makeRouter(scoreSvc *service.ScoreService, _ Options) *http.ServeMux {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", health.Handler())
-	mux.Handle("GET /api/v1/score/{username}", scoreRL.wrap(http.HandlerFunc(scoreHandler(scoreSvc))))
+	mux.Handle("GET /api/v1/score/{username}", scoreRL.wrap(scoreHandler(scoreSvc)))
 	return mux
 }
 

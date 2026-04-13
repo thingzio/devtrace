@@ -51,7 +51,7 @@ func TestScoreHandler(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/score/{username}", scoreHandler(svc))
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/score/testuser", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/score/testuser", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
@@ -93,14 +93,14 @@ func TestScoreHandlerSecurityHeaders(t *testing.T) {
 	mux := makeRouter(svc, Options{})
 	handler := securityHeaders(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/score/u", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/score/u", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	tests := map[string]string{
 		"X-Content-Type-Options": "nosniff",
-		"X-Frame-Options":       "DENY",
-		"Referrer-Policy":       "strict-origin-when-cross-origin",
+		"X-Frame-Options":        "DENY",
+		"Referrer-Policy":        "strict-origin-when-cross-origin",
 	}
 	for header, want := range tests {
 		if got := rec.Header().Get(header); got != want {

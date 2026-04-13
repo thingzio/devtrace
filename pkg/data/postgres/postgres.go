@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -29,7 +30,7 @@ func DefaultPoolConfig() PoolConfig {
 	}
 }
 
-func New(dsn string, cfg PoolConfig) (*Store, error) {
+func New(ctx context.Context, dsn string, cfg PoolConfig) (*Store, error) {
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
@@ -38,16 +39,21 @@ func New(dsn string, cfg PoolConfig) (*Store, error) {
 	db.SetMaxIdleConns(cfg.MaxIdleConns)
 	db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
 	db.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("ping db: %w", err)
 	}
 	return &Store{db: db}, nil
 }
 
-func NewFromEnv() (*Store, error) {
+func NewFromEnv(ctx context.Context) (*Store, error) {
 	dsn := config.GetEnv("DATABASE_URL", "postgres://devtrace:devtrace@localhost:5432/devtrace?sslmode=disable")
-	return New(dsn, DefaultPoolConfig())
+	return New(ctx, dsn, DefaultPoolConfig())
 }
 
-func (s *Store) DB() *sql.DB { return s.db }
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) DB() *sql.DB {
+	return s.db
+}
+
+func (s *Store) Close() error {
+	return s.db.Close()
+}

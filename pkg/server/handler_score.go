@@ -19,7 +19,7 @@ func scoreHandler(svc *service.ScoreService) http.HandlerFunc {
 			slog.Error("scoring failed", "username", username, "error", err)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(map[string]string{"error": "scoring failed"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "scoring failed"})
 			return
 		}
 

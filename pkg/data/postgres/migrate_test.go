@@ -14,7 +14,7 @@ func testStore(t *testing.T) *postgres.Store {
 	if dsn == "" {
 		dsn = "postgres://devtrace:devtrace@localhost:5432/devtrace?sslmode=disable"
 	}
-	store, err := postgres.New(dsn, postgres.DefaultPoolConfig())
+	store, err := postgres.New(context.Background(), dsn, postgres.DefaultPoolConfig())
 	if err != nil {
 		t.Skipf("skipping integration test: %v", err)
 	}

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -17,7 +18,7 @@ func TestRateLimiter(t *testing.T) {
 
 	// First 2 requests from same IP should succeed.
 	for i := range 2 {
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 		req.RemoteAddr = "1.2.3.4:1234"
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -27,7 +28,7 @@ func TestRateLimiter(t *testing.T) {
 	}
 
 	// 3rd request from same IP should be rate limited.
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = "1.2.3.4:1234"
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -55,7 +56,7 @@ func TestRateLimiter(t *testing.T) {
 	}
 
 	// Request from a different IP should succeed.
-	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req = httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.RemoteAddr = "5.6.7.8:5678"
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -99,7 +100,7 @@ func TestExtractIP(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 			req.RemoteAddr = tc.remoteAddr
 			if tc.xff != "" {
 				req.Header.Set("X-Forwarded-For", tc.xff)

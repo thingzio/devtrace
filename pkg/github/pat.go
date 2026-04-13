@@ -35,6 +35,8 @@ func (c *PATClient) FetchUser(ctx context.Context, username string) (*UserProfil
 }
 
 // FetchSignals retrieves scoring signals for the given user, optionally scoped to a repo.
+//
+//nolint:funlen // concurrent API calls make this naturally long; splitting hurts readability
 func (c *PATClient) FetchSignals(ctx context.Context, username, repo string) (*score.InputSignals, error) {
 	u, _, err := c.api.Users.Get(ctx, username)
 	if err != nil {
