@@ -137,7 +137,11 @@
           },
           options: {
             responsive: true,
-            scales: { y: { min: 0, max: 1 } },
+            maintainAspectRatio: false,
+            scales: {
+              y: { min: 0, max: 1, ticks: { color: '#8b949e' } },
+              x: { ticks: { color: '#8b949e' } }
+            },
             plugins: { legend: { display: false } }
           }
         });

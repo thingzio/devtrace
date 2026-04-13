@@ -74,7 +74,9 @@
   <section class="trend">
     <h2>Score Trend</h2>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <canvas id="trend-chart" data-username="{{.Username}}" height="200"></canvas>
+    <div style="max-height: 200px;">
+      <canvas id="trend-chart" data-username="{{.Username}}"></canvas>
+    </div>
   </section>
 
   {{if .ShowSignUp}}

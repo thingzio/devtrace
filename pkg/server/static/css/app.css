@@ -2056,7 +2056,7 @@ a.link {
 .bar-track {
   flex: 1;
   height: 20px;
-  background: var(--bgColor-muted, #f6f8fa);
+  background: var(--page-content-blockColor, #f6f8fa);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -2081,20 +2081,22 @@ a.link {
 .signal-table th, .signal-table td {
   padding: 0.5rem 0.75rem;
   text-align: left;
-  border-bottom: 1px solid var(--borderColor-default, #e1e4e8);
+  border-bottom: 1px solid var(--border-color, #e1e4e8);
 }
 .signal-table th {
   font-weight: 600;
-  background: var(--bgColor-muted, #f6f8fa);
+  background: var(--page-content-blockColor, #f6f8fa);
+  color: var(--medium-color, #6a737d);
 }
 
 /* Risk summary */
 .risk-summary {
   padding: 1rem;
   margin: 1rem 0;
-  background: var(--bgColor-muted, #f6f8fa);
+  background: var(--page-content-blockColor, #f6f8fa);
   border-radius: 6px;
-  border-left: 4px solid var(--fgColor-accent, #0366d6);
+  border-left: 4px solid var(--blue, #0366d6);
+  color: var(--page-content-txtColor, #24292e);
 }
 
 /* Dashboard */
@@ -2273,6 +2275,7 @@ section h2 {
 .signup-cta {
   text-align: center;
   padding: 2rem;
-  background: var(--bgColor-muted, #f6f8fa);
+  background: var(--page-content-blockColor, #f6f8fa);
+  color: var(--page-content-txtColor, #24292e);
   border-radius: 8px;
 }
