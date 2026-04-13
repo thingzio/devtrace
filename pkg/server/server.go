@@ -18,6 +18,7 @@ import (
 	"github.com/thingzio/devtrace/pkg/middleware"
 	"github.com/thingzio/devtrace/pkg/oauth"
 	"github.com/thingzio/devtrace/pkg/service"
+	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
 // Options holds server configuration passed from the entry point.
@@ -39,13 +40,31 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	token := config.GetEnv("GITHUB_TOKEN", "")
-	if token == "" {
-		return fmt.Errorf("GITHUB_TOKEN is required")
+	var ghClient ghclient.Client
+
+	// Try GitHub App installation client first.
+	if appCfg, appErr := tenant.LoadGitHubAppConfig(); appErr == nil {
+		instID := int64(config.GetEnvAsInt("GITHUB_APP_INSTALLATION_ID", 0))
+		if instID > 0 {
+			ghClient = ghclient.NewInstallationClient(appCfg, instID)
+			slog.Info("using GitHub App installation client",
+				"app_id", appCfg.AppID,
+				"installation_id", instID,
+			)
+		}
 	}
 
-	gh := ghclient.NewPATClient(ctx, token)
-	scoreSvc := service.NewScoreService(gh, nil)
+	// Fall back to PAT.
+	if ghClient == nil {
+		token := config.GetEnv("GITHUB_TOKEN", "")
+		if token == "" {
+			return fmt.Errorf("GITHUB_TOKEN or GitHub App config (GITHUB_APP_ID+KEY+INSTALLATION_ID) required")
+		}
+		ghClient = ghclient.NewPATClient(ctx, token)
+		slog.Info("using PAT GitHub client")
+	}
+
+	scoreSvc := service.NewScoreService(ghClient, nil)
 
 	db := store.DB()
 
