@@ -129,21 +129,21 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 # Check quota headers
 curl -s -D- -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/score/octocat 2>&1 | grep -i x-quota
-# X-Quota-Limit: 200
-# X-Quota-Remaining: 199
+# X-Quota-Limit: 50
+# X-Quota-Remaining: 49
 # X-Quota-Reset: ...
 ```
 
 Compare authenticated vs unauthenticated:
 ```bash
-# Unauth — minimal response
+# Unauth — minimal response (score + detail only)
 curl -s http://localhost:8080/api/v1/score/octocat | jq 'keys'
 # ["cached_at","detail","provider","score","scored_at","username"]
 
-# Auth — full response
+# Auth — full response (signals + risk summary, nil fields omitted by omitempty)
 curl -s -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/score/octocat | jq 'keys'
-# ["ai_sensing","license","provider","repo_context","risk_summary","score","scored_at","signals","username"]
+# ["provider","risk_summary","score","scored_at","signals","username"]
 ```
 
 With repo context:
