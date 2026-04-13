@@ -35,7 +35,10 @@ func scorecardHandler(svc *service.ScoreService) http.HandlerFunc {
 
 		repo := r.URL.Query().Get("repo")
 
-		plan := ""
+		// Score card page always shows full data — it's the marketing showcase.
+		// Use "free" as minimum to get signals/categories/risk summary.
+		// The API endpoint (/api/v1/score) still gates by actual plan.
+		plan := "free"
 		if tn := middleware.TenantFromContext(r.Context()); tn != nil {
 			plan = tn.Plan
 		}
@@ -65,6 +68,9 @@ func scorecardHandler(svc *service.ScoreService) http.HandlerFunc {
 			}
 		}
 
+		// Show sign-up CTA for unauthenticated visitors
+		showSignUp := middleware.TenantFromContext(r.Context()) == nil
+
 		renderTemplate(w, "scorecard.html", map[string]any{
 			"Title":        username,
 			"Username":     username,
@@ -76,7 +82,7 @@ func scorecardHandler(svc *service.ScoreService) http.HandlerFunc {
 			"Signals":      resp.Signals,
 			"RiskSummary":  resp.RiskSummary,
 			"RepoContext":  resp.RepoContext,
-			"Detail":       resp.Detail,
+			"ShowSignUp":   showSignUp,
 		})
 	}
 }

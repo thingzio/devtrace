@@ -77,9 +77,9 @@
     <canvas id="trend-chart" data-username="{{.Username}}" height="200"></canvas>
   </section>
 
-  {{if .Detail}}
+  {{if .ShowSignUp}}
   <section class="signup-cta">
-    <p>{{.Detail}}</p>
+    <p>Sign up to track contributors, manage API tokens, and integrate with CI/CD.</p>
     <a href="/auth/github" class="btn btn-primary">Sign in with GitHub</a>
   </section>
   {{end}}
