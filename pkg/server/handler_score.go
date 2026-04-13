@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/thingzio/devtrace/pkg/middleware"
 	"github.com/thingzio/devtrace/pkg/service"
 )
 
@@ -12,7 +13,11 @@ func scoreHandler(svc *service.ScoreService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := r.PathValue("username")
 		repo := r.URL.Query().Get("repo")
-		plan := "free"
+
+		plan := ""
+		if tn := middleware.TenantFromContext(r.Context()); tn != nil {
+			plan = tn.Plan
+		}
 
 		resp, err := svc.Score(r.Context(), username, repo, plan)
 		if err != nil {

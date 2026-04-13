@@ -2,17 +2,21 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/thingzio/devtrace/pkg/config"
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/health"
+	"github.com/thingzio/devtrace/pkg/middleware"
+	"github.com/thingzio/devtrace/pkg/oauth"
 	"github.com/thingzio/devtrace/pkg/service"
 )
 
@@ -43,7 +47,15 @@ func Run(ctx context.Context, opts Options) error {
 	gh := ghclient.NewPATClient(ctx, token)
 	scoreSvc := service.NewScoreService(gh, nil)
 
-	mux := makeRouter(scoreSvc, opts)
+	db := store.DB()
+
+	oauthCfg := &oauth.Config{
+		ClientID:     os.Getenv("GITHUB_OAUTH_CLIENT_ID"),
+		ClientSecret: os.Getenv("GITHUB_OAUTH_CLIENT_SECRET"),
+		RedirectURL:  config.GetEnv("BASE_URL", "http://localhost:8080") + "/auth/github/callback",
+	}
+
+	mux := makeRouter(db, scoreSvc, oauthCfg, opts)
 
 	port := config.GetEnv("PORT", "8080")
 	srv := &http.Server{
@@ -83,15 +95,37 @@ func Run(ctx context.Context, opts Options) error {
 	return nil
 }
 
-func makeRouter(scoreSvc *service.ScoreService, _ Options) *http.ServeMux {
+func makeRouter(db *sql.DB, scoreSvc *service.ScoreService, oauthCfg *oauth.Config, _ Options) *http.ServeMux {
 	scoreRL := newIPRateLimiter(
 		config.GetEnvAsInt("SCORE_RATE_LIMIT", 60),
 		3600, // 1 hour window
 	)
+	oauthRL := newIPRateLimiter(
+		config.GetEnvAsInt("OAUTH_RATE_LIMIT", 20),
+		60,
+	)
+
+	requireAny := middleware.RequireAnyAuth(db)
+	requireSession := middleware.RequireAuth(db, "/auth/github")
 
 	mux := http.NewServeMux()
+
+	// Public
 	mux.HandleFunc("GET /health", health.Handler())
-	mux.Handle("GET /api/v1/score/{username}", scoreRL.wrap(scoreHandler(scoreSvc)))
+	mux.Handle("GET /auth/github", oauthRL.wrap(oauthStartHandler(oauthCfg)))
+	mux.HandleFunc("GET /auth/github/callback", oauthCallbackHandler(db, oauthCfg))
+
+	// Score — accepts any auth (token, session, or none)
+	mux.Handle("GET /api/v1/score/{username}", scoreRL.wrap(requireAny(scoreHandler(scoreSvc))))
+
+	// Token management — requires session auth (UI only)
+	mux.Handle("POST /api/v1/token", requireSession(createTokenHandler(db)))
+	mux.Handle("GET /api/v1/token", requireSession(listTokensHandler(db)))
+	mux.Handle("DELETE /api/v1/token/{id}", requireSession(revokeTokenHandler(db)))
+
+	// Session
+	mux.Handle("POST /auth/signout", requireSession(signoutHandler(db)))
+
 	return mux
 }
 
