@@ -1,0 +1,165 @@
+version: "2"
+
+run:
+  go: "1.26"      # keep in sync with .settings.yaml languages.go
+  timeout: 5m      # keep in sync with .settings.yaml quality.lint_timeout
+  tests: true
+  modules-download-mode: readonly
+
+output:
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
+      colors: true
+  sort-order:
+    - linter
+    - severity
+    - file
+
+linters:
+  enable:
+    # Bug detection
+    - bodyclose       # HTTP response body must be closed
+    - copyloopvar     # Loop variable capture issues
+    - errorlint       # Error wrapping and comparison
+    - nilerr          # Return nil after error check
+    - staticcheck     # Advanced static analysis
+    # - sqlclosecheck # Unclosed sql.Rows (disabled: data layer needs stmt.Close refactor)
+
+    # Code quality
+    - asciicheck      # Non-ASCII in identifiers
+    - dogsled         # Too many blank identifiers
+    - dupl            # Duplicate code detection
+    - funlen          # Function length
+    - goconst         # Repeated strings
+    - gocritic        # Opinionated checks
+    - gocyclo         # Cyclomatic complexity
+    - govet           # Go vet checks
+    - importas        # Import alias consistency
+    - ineffassign     # Useless assignments
+    - misspell        # Spelling
+    - nakedret        # Naked returns
+    - prealloc        # Slice preallocation
+    - revive          # General code quality
+    - tparallel       # t.Parallel usage errors
+    - unconvert       # Unnecessary conversions
+    - unparam         # Unused parameters
+    - unused          # Unused code
+    - whitespace      # Whitespace issues
+
+    # Security
+    - gosec           # Security checks
+
+    # HTTP/Context
+    # - noctx         # HTTP requests without context (disabled: data layer needs context refactor)
+
+    # Dependency management
+    - depguard        # Ban deprecated/unwanted packages
+
+    # Style
+    - nolintlint      # Require nolint justification
+    - lll             # Line length
+
+  settings:
+    dupl:
+      threshold: 100
+
+    gosec:
+      excludes:
+        - G706  # slog structured logging does not interpolate values
+
+    funlen:
+      lines: 150
+      statements: 80
+      ignore-comments: true
+
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+
+    gocyclo:
+      min-complexity: 20
+
+    govet:
+      enable:
+        - shadow
+
+    lll:
+      line-length: 200
+
+    misspell:
+      locale: US
+
+    nolintlint:
+      allow-unused: false
+      require-explanation: true
+      require-specific: true
+
+    revive:
+      rules:
+        - name: blank-imports
+          disabled: true
+        - name: redefines-builtin-id
+          disabled: true
+        - name: var-naming
+          disabled: true
+
+    unparam:
+      check-exported: false
+
+    depguard:
+      rules:
+        main:
+          list-mode: lax
+          deny:
+            - pkg: io/ioutil
+              desc: "Deprecated since Go 1.16. Use io and os packages instead."
+            - pkg: math/rand$
+              desc: "Use math/rand/v2 or crypto/rand instead."
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Relaxed rules for test files
+      - linters:
+          - dupl
+          - errcheck
+          - funlen
+          - goconst
+          - gocyclo
+          - gosec
+          - revive
+          - tparallel
+        path: _test\.go
+      # Relaxed rules for main entry point
+      - linters:
+          - funlen
+        path: cmd/.*/main\.go
+      # QF1008: removing embedded field from selector causes ambiguity in github API types
+      - linters:
+          - staticcheck
+        text: "QF1008"
+    paths:
+      - vendor$
+      - tools$
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - vendor$
+      - tools$

@@ -1,0 +1,69 @@
+version: 2
+
+project_name: devtrace
+
+builds:
+  - id: devtrace-site
+    binary: devtrace-site
+    dir: ./cmd/devtrace-site
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+        -X main.version={{.Version}}
+        -X main.commit={{.ShortCommit}}
+        -X main.date={{.CommitDate}}
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+release:
+  github:
+    owner: thingzio
+    name: devtrace
+  prerelease: auto
+  draft: true
+
+kos:
+  - id: devtrace-site
+    build: devtrace-site
+    repositories:
+      - us-west1-docker.pkg.dev/devpulseio/devtrace-saas-images/devtrace-site
+    platforms:
+      - linux/amd64
+    tags:
+      - latest
+      - "{{.Tag}}"
+    preserve_import_paths: false
+    bare: true
+
+report_sizes: true
+
+snapshot:
+  version_template: "{{.Tag}}-next"
+
+changelog:
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^build:"
+      - "^ci:"
+      - "^style:"
+      - typo
+      - readme
