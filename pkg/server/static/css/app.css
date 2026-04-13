@@ -1896,12 +1896,12 @@ a.link {
 .grade-score {
   font-size: 1.5rem;
   font-weight: 600;
-  color: var(--medium-color, #6a737d);
+  color: var(--page-content-txtColor, #e6edf3);
   line-height: 1.2;
 }
 .grade-model-label {
   font-size: 0.8rem;
-  color: var(--page-content-txtColor, #24292e);
+  color: var(--medium-color, #6a737d);
 }
 .grade-detail {
   margin-top: 0.5rem;
