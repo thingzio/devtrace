@@ -1,0 +1,120 @@
+name: test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_call: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17.5-alpine
+        env:
+          POSTGRES_DB: devtrace_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d devtrace_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run Tests
+        env:
+          DATABASE_URL: "postgres://test:test@localhost:5432/devtrace_test?sslmode=disable"
+        run: make test
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Load Settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "GOLANGCI_LINT_VERSION=$(yq -r '.linting.golangci_lint' .settings.yaml)" >> "$GITHUB_ENV"
+
+      - name: Lint Go
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+
+      - name: Lint YAML
+        uses: karancode/yamllint-github-action@v3
+        with:
+          yamllint_config_filepath: .yamllint.yaml
+
+  tfsec:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install and Run tfsec
+        shell: bash
+        run: |
+          set -euo pipefail
+          TFSEC_VERSION=$(yq -r '.build_tools.tfsec' .settings.yaml)
+          TFSEC_VERSION="${TFSEC_VERSION#v}"
+          TFSEC_BASE="https://github.com/aquasecurity/tfsec/releases/download/v${TFSEC_VERSION}"
+          TFSEC_TAR="tfsec_${TFSEC_VERSION}_linux_amd64.tar.gz"
+          TFSEC_TMP="$(mktemp -d)"
+          curl -fsSL -o "${TFSEC_TMP}/${TFSEC_TAR}" "${TFSEC_BASE}/${TFSEC_TAR}"
+          curl -fsSL -o "${TFSEC_TMP}/checksums.txt" "${TFSEC_BASE}/tfsec_${TFSEC_VERSION}_checksums.txt"
+          EXPECTED=$(grep "${TFSEC_TAR}" "${TFSEC_TMP}/checksums.txt" | head -1 | awk '{print $1}')
+          ACTUAL=$(sha256sum "${TFSEC_TMP}/${TFSEC_TAR}" | awk '{print $1}')
+          if [[ "${ACTUAL}" != "${EXPECTED}" ]]; then
+            echo "::error::tfsec checksum mismatch: expected ${EXPECTED}, got ${ACTUAL}"
+            exit 1
+          fi
+          tar -xzf "${TFSEC_TMP}/${TFSEC_TAR}" -C "${TFSEC_TMP}"
+          sudo mv "${TFSEC_TMP}/tfsec" /usr/local/bin/tfsec
+          sudo chmod +x /usr/local/bin/tfsec
+          rm -rf "${TFSEC_TMP}"
+          tfsec --version
+          tfsec infra/saas
