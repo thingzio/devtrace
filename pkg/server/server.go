@@ -193,6 +193,9 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 	mux.Handle("GET /auth/github", oauthRL.wrap(oauthStartHandler(oauthCfg)))
 	mux.HandleFunc("GET /auth/github/callback", oauthCallbackHandler(db, oauthCfg))
 
+	// Dashboard — requires session
+	mux.Handle("GET /dashboard", requireSession(dashboardHandler(store, opts)))
+
 	// Score card page — accepts any auth
 	mux.Handle("GET /score/{username}", requireAny(scorecardHandler(scoreSvc)))
 

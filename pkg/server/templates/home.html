@@ -1,5 +1,78 @@
 {{define "home"}}
 {{template "header" .}}
-TODO
+
+<section class="dashboard-section">
+  <div class="welcome-header">
+    <img src="{{.avatar_url}}" alt="" class="welcome-avatar" width="48" height="48">
+    <div>
+      <h1>Welcome, {{.username}}</h1>
+      <span class="plan-badge">{{.plan}}</span>
+    </div>
+  </div>
+</section>
+
+<section class="dashboard-section">
+  <h2>Quota</h2>
+  <div class="quota-bar-container">
+    <div class="quota-bar" style="width: {{.quota_pct}}%"></div>
+  </div>
+  <p class="quota-label">{{comma .quota_used}} of {{comma .quota_limit}} contributors scored this period</p>
+</section>
+
+<section class="dashboard-section">
+  <h2>API Tokens</h2>
+  {{if .tokens}}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Prefix</th>
+        <th>Last Used</th>
+        <th>Created</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .tokens}}
+      <tr>
+        <td>{{.Name}}</td>
+        <td><code>{{.Prefix}}…</code></td>
+        <td>{{if .LastUsed}}{{.LastUsed.Format "2006-01-02 15:04"}}{{else}}Never{{end}}</td>
+        <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+        <td><button class="btn btn-sm btn-danger" onclick="revokeToken('{{.ID}}')">Revoke</button></td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <p>No API tokens yet.</p>
+  {{end}}
+  <button class="btn btn-primary" onclick="generateToken()">Generate Token</button>
+</section>
+
+<section class="dashboard-section">
+  <h2>Recently Scored</h2>
+  {{if .recent}}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Contributor</th>
+        <th>Scored</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .recent}}
+      <tr>
+        <td><a href="/score/{{.Username}}">{{.Username}}</a></td>
+        <td>{{.ScoredAt.Format "2006-01-02 15:04"}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <p>No contributors scored yet. Use the API or search bar to score your first contributor.</p>
+  {{end}}
+</section>
+
 {{template "footer" .}}
 {{end}}

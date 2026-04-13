@@ -37,6 +37,36 @@ func BillingPeriodStart() time.Time {
 	return time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 }
 
+// RecentScored represents a recently scored contributor.
+type RecentScored struct {
+	Username string
+	ScoredAt time.Time
+}
+
+// GetRecentScored returns the most recently scored contributors for a tenant.
+func GetRecentScored(ctx context.Context, db *sql.DB, tenantID string, limit int) ([]RecentScored, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT username_scored, MAX(scored_at) as last_scored
+		 FROM usage_record WHERE tenant_id = $1
+		 GROUP BY username_scored
+		 ORDER BY last_scored DESC LIMIT $2`,
+		tenantID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get recent scored: %w", err)
+	}
+	defer rows.Close()
+
+	var result []RecentScored
+	for rows.Next() {
+		var r RecentScored
+		if err := rows.Scan(&r.Username, &r.ScoredAt); err != nil {
+			return nil, fmt.Errorf("scan recent: %w", err)
+		}
+		result = append(result, r)
+	}
+	return result, rows.Err()
+}
+
 // NextBillingPeriodStart returns the start of the next monthly billing period.
 func NextBillingPeriodStart() time.Time {
 	now := time.Now().UTC()

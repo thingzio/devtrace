@@ -4,8 +4,11 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/thingzio/devtrace/pkg/data/postgres"
 	"github.com/thingzio/devtrace/pkg/middleware"
+	"github.com/thingzio/devtrace/pkg/plan"
 	"github.com/thingzio/devtrace/pkg/service"
+	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
 var errMessages = map[string]string{
@@ -75,6 +78,51 @@ func scorecardHandler(svc *service.ScoreService) http.HandlerFunc {
 			"RepoContext":  resp.RepoContext,
 			"Detail":       resp.Detail,
 		})
+	}
+}
+
+func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tn := middleware.TenantFromContext(r.Context())
+		if tn == nil {
+			http.Redirect(w, r, "/auth/github", http.StatusFound)
+			return
+		}
+
+		db := store.DB()
+		limits, _ := plan.Get(tn.Plan)
+		maxContribs := tn.MaxContributors
+		if maxContribs == 0 {
+			maxContribs = limits.MaxContributors
+		}
+
+		used, _ := tenant.GetUsageCount(r.Context(), db, tn.ID, tenant.BillingPeriodStart())
+		tokens, _ := tenant.ListAPITokens(r.Context(), db, tn.ID)
+		recent, _ := tenant.GetRecentScored(r.Context(), db, tn.ID, 10)
+
+		pct := 0
+		if maxContribs > 0 {
+			pct = (used * 100) / maxContribs
+			if pct > 100 {
+				pct = 100
+			}
+		}
+
+		t := pageTemplates["home.html"]
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := t.ExecuteTemplate(w, "home", map[string]any{
+			"username":    tn.Username,
+			"avatar_url":  tn.AvatarURL,
+			"plan":        tn.Plan,
+			"quota_used":  used,
+			"quota_limit": maxContribs,
+			"quota_pct":   pct,
+			"tokens":      tokens,
+			"recent":      recent,
+			"version":     opts.Version,
+		}); err != nil {
+			slog.Error("render dashboard", "error", err)
+		}
 	}
 }
 
