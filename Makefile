@@ -82,6 +82,7 @@ tf-apply: ## Applies Terraform changes
 .PHONY: test
 test: tidy ## Runs unit tests with race detector and coverage
 	GOFLAGS="-mod=vendor" go test -short -count=1 -race -timeout=$(TEST_TIMEOUT) -covermode=atomic -coverprofile=cover.out ./...
+	@echo ""; go tool cover -func=cover.out | grep total
 
 .PHONY: test-coverage
 test-coverage: test ## Runs tests and enforces coverage threshold
