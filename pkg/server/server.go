@@ -84,9 +84,14 @@ func Run(ctx context.Context, opts Options) error {
 }
 
 func makeRouter(scoreSvc *service.ScoreService, _ Options) *http.ServeMux {
+	scoreRL := newIPRateLimiter(
+		config.GetEnvAsInt("SCORE_RATE_LIMIT", 60),
+		3600, // 1 hour window
+	)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", health.Handler())
-	mux.HandleFunc("GET /api/v1/score/{username}", scoreHandler(scoreSvc))
+	mux.Handle("GET /api/v1/score/{username}", scoreRL.wrap(http.HandlerFunc(scoreHandler(scoreSvc))))
 	return mux
 }
 
