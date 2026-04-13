@@ -1964,15 +1964,17 @@ a.link {
 }
 .feature-card {
   flex: 1;
-  min-width: 240px;
-  max-width: 280px;
+  min-width: 200px;
+  max-width: 220px;
   padding: 1.5rem;
-  border: 1px solid var(--borderColor-default, #e1e4e8);
+  border: 1px solid var(--border-color, #e1e4e8);
   border-radius: 8px;
-  background: var(--bgColor-default, #fff);
+  background: var(--page-content-blockColor, #f6f8fa);
+  color: var(--page-content-txtColor, #24292e);
 }
 .feature-card h3 {
   margin-bottom: 0.5rem;
+  color: var(--blue, #0366d6);
 }
 
 /* Buttons */
