@@ -1,1 +1,87 @@
-{{define "content"}}TODO{{end}}
+{{define "content"}}
+<div class="scorecard">
+  <a href="/" class="back-link">&larr; Back</a>
+
+  <div class="score-header">
+    <h1>{{.Username}}</h1>
+    <div class="grade-display">
+      <span class="grade-badge {{.GradeClass}}">{{.Grade}}</span>
+      <span class="grade-value">{{printf "%.2f" .Value}}</span>
+      <span class="grade-model">v{{.ModelVersion}}</span>
+    </div>
+  </div>
+
+  {{if .RiskSummary}}
+  <section class="risk-summary">
+    <p>{{.RiskSummary}}</p>
+  </section>
+  {{end}}
+
+  {{if .Categories}}
+  <section class="categories">
+    <h2>Category Breakdown</h2>
+    <div class="category-bars">
+      {{range $name, $val := .Categories}}
+      <div class="category-bar">
+        <label>{{$name}}</label>
+        <div class="bar-track">
+          <div class="bar-fill" style="width: {{printf "%.0f" (mul $val 100.0)}}%"></div>
+        </div>
+        <span class="bar-value">{{printf "%.2f" $val}}</span>
+      </div>
+      {{end}}
+    </div>
+  </section>
+  {{end}}
+
+  {{if .Signals}}
+  <section class="signals">
+    <h2>Signals</h2>
+    <table class="signal-table">
+      <tr><th>Signal</th><th>Value</th></tr>
+      <tr><td>Account age</td><td>{{.Signals.AccountAgeDays}} days</td></tr>
+      <tr><td>Followers</td><td>{{.Signals.Followers}}</td></tr>
+      <tr><td>Following</td><td>{{.Signals.Following}}</td></tr>
+      <tr><td>Public repos</td><td>{{.Signals.PublicRepos}}</td></tr>
+      <tr><td>Forked repos</td><td>{{.Signals.ForkedRepos}}</td></tr>
+      <tr><td>PRs merged</td><td>{{.Signals.PRsMerged}}</td></tr>
+      <tr><td>PRs closed</td><td>{{.Signals.PRsClosed}}</td></tr>
+      <tr><td>Recent PR repos</td><td>{{.Signals.RecentPRRepoCount}}</td></tr>
+      <tr><td>Has bio</td><td>{{if .Signals.HasBio}}&#10003;{{else}}&#10007;{{end}}</td></tr>
+      <tr><td>Has company</td><td>{{if .Signals.HasCompany}}&#10003;{{else}}&#10007;{{end}}</td></tr>
+      <tr><td>Has location</td><td>{{if .Signals.HasLocation}}&#10003;{{else}}&#10007;{{end}}</td></tr>
+      <tr><td>Has website</td><td>{{if .Signals.HasWebsite}}&#10003;{{else}}&#10007;{{end}}</td></tr>
+      <tr><td>Org member</td><td>{{if .Signals.OrgMember}}&#10003;{{else}}&#10007;{{end}}</td></tr>
+      <tr><td>Suspended</td><td>{{if .Signals.Suspended}}Yes{{else}}No{{end}}</td></tr>
+      <tr><td>Commits verified</td><td>{{if .Signals.CommitsVerified}}&#10003;{{else}}&#10007;{{end}}</td></tr>
+    </table>
+  </section>
+  {{end}}
+
+  {{if .RepoContext}}
+  <section class="repo-context">
+    <h2>Repo Context: {{.RepoContext.Repo}}</h2>
+    <table class="signal-table">
+      <tr><td>Commits in repo</td><td>{{.RepoContext.Commits}}</td></tr>
+      <tr><td>Total repo commits</td><td>{{.RepoContext.TotalCommits}}</td></tr>
+      <tr><td>Contributors</td><td>{{.RepoContext.TotalContributors}}</td></tr>
+      <tr><td>Org member</td><td>{{if .RepoContext.OrgMember}}&#10003;{{else}}&#10007;{{end}}</td></tr>
+      <tr><td>Association</td><td>{{.RepoContext.AuthorAssociation}}</td></tr>
+    </table>
+  </section>
+  {{end}}
+
+  <section class="trend">
+    <h2>Score Trend</h2>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <canvas id="trend-chart" data-username="{{.Username}}" height="200"></canvas>
+  </section>
+
+  {{if .Detail}}
+  <section class="signup-cta">
+    <p>{{.Detail}}</p>
+    <a href="/auth/github" class="btn btn-primary">Sign in with GitHub</a>
+  </section>
+  {{end}}
+</div>
+{{end}}
