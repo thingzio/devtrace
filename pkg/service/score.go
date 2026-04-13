@@ -62,7 +62,7 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string) (
 	// Authenticated callers get categories, signals, and risk summary.
 	resp.Score.Categories = score.Categories(*signals)
 	resp.Signals = signalsFromInput(signals, profile)
-	resp.RiskSummary = generateRiskSummary(signals, value, repo)
+	resp.RiskSummary = generateRiskSummary(signals, value)
 
 	if repo != "" {
 		resp.RepoContext = repoContextFromSignals(signals, repo)
@@ -115,7 +115,7 @@ func repoContextFromSignals(s *score.InputSignals, repo string) *model.RepoConte
 }
 
 // generateRiskSummary produces a human-readable risk assessment.
-func generateRiskSummary(s *score.InputSignals, value float64, repo string) string {
+func generateRiskSummary(s *score.InputSignals, value float64) string {
 	var summary string
 
 	switch {

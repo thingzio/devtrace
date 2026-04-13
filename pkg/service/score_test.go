@@ -176,7 +176,7 @@ func TestScoreContributorWithRepo(t *testing.T) {
 
 func TestRiskSummarySuspended(t *testing.T) {
 	sig := &score.InputSignals{Suspended: true}
-	summary := generateRiskSummary(sig, 0, "")
+	summary := generateRiskSummary(sig, 0)
 	if !strings.Contains(summary, "suspended") {
 		t.Errorf("suspended summary missing keyword: %q", summary)
 	}
@@ -190,7 +190,7 @@ func TestRiskSummaryNewAccount(t *testing.T) {
 		AgeDays:   30,
 		PRsMerged: 1,
 	}
-	summary := generateRiskSummary(sig, 0.2, "")
+	summary := generateRiskSummary(sig, 0.2)
 	if !strings.Contains(summary, "recently") {
 		t.Errorf("new account summary should mention 'recently': %q", summary)
 	}
