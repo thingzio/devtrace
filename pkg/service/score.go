@@ -20,15 +20,23 @@ type ScoreStore interface {
 type ScoreService struct {
 	gh    ghclient.Client
 	store ScoreStore // nil-safe for unit tests without DB
+	cache *scoreCache
 }
 
 // NewScoreService returns a ScoreService wired to the given GitHub client and optional store.
 func NewScoreService(gh ghclient.Client, store ScoreStore) *ScoreService {
-	return &ScoreService{gh: gh, store: store}
+	return &ScoreService{gh: gh, store: store, cache: newScoreCache()}
 }
 
 // Score fetches signals, computes a reputation score, and builds a plan-aware response.
+// Results are cached to avoid redundant GitHub API calls.
 func (s *ScoreService) Score(ctx context.Context, username, repo, plan string) (*model.ScoreResponse, error) {
+	// Check cache first. Cached responses contain the full data;
+	// plan-aware filtering is applied below before returning.
+	if cached := s.cache.get(username, repo); cached != nil {
+		return enrichForPlan(cached, plan), nil
+	}
+
 	signals, err := s.gh.FetchSignals(ctx, username, repo)
 	if err != nil {
 		return nil, fmt.Errorf("fetch signals: %w", err)
@@ -41,40 +49,64 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string) (
 
 	value := score.Compute(*signals)
 	grade := score.Grade(value)
+	now := time.Now().UTC()
 
-	resp := &model.ScoreResponse{
+	// Build the full response (all fields populated).
+	full := &model.ScoreResponse{
 		Username: username,
 		Provider: model.ProviderGitHub,
 		Score: &model.Score{
 			Grade:        grade,
 			Value:        value,
 			ModelVersion: score.ModelVersion,
+			Categories:   score.Categories(*signals),
 		},
-		ScoredAt: time.Now().UTC(),
+		Signals:     signalsFromInput(signals, profile),
+		RiskSummary: generateRiskSummary(signals, value),
+		ScoredAt:    now,
 	}
-
-	// Unauthenticated callers get score only.
-	if plan == "" {
-		resp.Detail = "Sign up for full signal breakdown -> devtrace.thingz.io"
-		return resp, nil
-	}
-
-	// Authenticated callers get categories, signals, and risk summary.
-	resp.Score.Categories = score.Categories(*signals)
-	resp.Signals = signalsFromInput(signals, profile)
-	resp.RiskSummary = generateRiskSummary(signals, value)
 
 	if repo != "" {
-		resp.RepoContext = repoContextFromSignals(signals, repo)
+		full.RepoContext = repoContextFromSignals(signals, repo)
 	}
 
-	// Starter and pro plans get license and AI sensing placeholders.
-	if plan == "starter" || plan == "pro" {
-		resp.License = nil   // placeholder: analyzer not yet built
-		resp.AISensing = nil // placeholder: analyzer not yet built
+	// Cache the full response.
+	s.cache.set(username, repo, full)
+
+	return enrichForPlan(full, plan), nil
+}
+
+// enrichForPlan returns a copy of the response filtered for the caller's plan.
+func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse {
+	// Start with a shallow copy.
+	resp := *full
+
+	switch plan {
+	case "": // unauthenticated — score only
+		resp.Score = &model.Score{
+			Grade:        full.Score.Grade,
+			Value:        full.Score.Value,
+			ModelVersion: full.Score.ModelVersion,
+		}
+		resp.Signals = nil
+		resp.RiskSummary = ""
+		resp.RepoContext = nil
+		resp.License = nil
+		resp.AISensing = nil
+		resp.Detail = "Sign up for full signal breakdown -> devtrace.thingz.io"
+		now := time.Now().UTC()
+		resp.CachedAt = &now
+
+	case "free":
+		// Free gets categories, signals, risk summary — no license/AI sensing.
+		resp.License = nil
+		resp.AISensing = nil
+
+	case "starter", "pro":
+		// Full response. License and AI sensing are nil placeholders until analyzers are built.
 	}
 
-	return resp, nil
+	return &resp
 }
 
 // signalsFromInput maps InputSignals and UserProfile to the response Signals type.
