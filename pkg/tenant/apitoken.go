@@ -1,0 +1,117 @@
+package tenant
+
+import (
+	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"time"
+)
+
+const tokenPrefix = "dt_"
+
+var ErrTokenInvalid = errors.New("invalid or revoked API token")
+
+type APITokenInfo struct {
+	ID        string
+	Name      string
+	Prefix    string // first 8 chars of token hash for display
+	LastUsed  *time.Time
+	CreatedAt time.Time
+}
+
+// CreateAPIToken generates a prefixed API token, stores its hash, and returns
+// the raw token (shown once to the user, never stored).
+func CreateAPIToken(ctx context.Context, db *sql.DB, tenantID, name string) (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("generating api token: %w", err)
+	}
+	rawToken := tokenPrefix + hex.EncodeToString(raw)
+	hashed := HashToken(rawToken)
+
+	var id string
+	err := db.QueryRowContext(ctx,
+		`INSERT INTO api_token (tenant_id, name, token_hash) VALUES ($1, $2, $3) RETURNING id`,
+		tenantID, name, hashed).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("creating api token: %w", err)
+	}
+	return rawToken, nil
+}
+
+// ValidateAPIToken hashes the raw token, looks it up, and returns the owning tenant.
+// It updates last_used_at as a fire-and-forget side effect.
+func ValidateAPIToken(ctx context.Context, db *sql.DB, rawToken string) (*Tenant, error) {
+	hashed := HashToken(rawToken)
+
+	row := db.QueryRowContext(ctx, `
+		SELECT t.id, t.github_id, t.username, COALESCE(t.email,''), COALESCE(t.avatar_url,''),
+		       COALESCE(t.name,''), COALESCE(t.company,''), COALESCE(t.location,''), COALESCE(t.bio,''),
+		       t.plan, t.max_contributors, t.tos_accepted_at, t.created_at, t.updated_at
+		FROM api_token at
+		JOIN tenant t ON t.id = at.tenant_id
+		WHERE at.token_hash = $1`, hashed)
+
+	t, err := scanTenant(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, ErrTokenInvalid
+	}
+	if err != nil {
+		return nil, fmt.Errorf("validating api token: %w", err)
+	}
+
+	// Fire-and-forget: update last_used_at. Uses background context intentionally
+	// so the update completes even if the request context is canceled.
+	go func() { //nolint:gosec // intentional background context for fire-and-forget
+		//nolint:errcheck // best-effort timestamp update, failure is non-critical
+		db.ExecContext(context.Background(),
+			`UPDATE api_token SET last_used_at = NOW() WHERE token_hash = $1`, hashed)
+	}()
+
+	return t, nil
+}
+
+// ListAPITokens returns all tokens for a tenant, ordered by creation time descending.
+func ListAPITokens(ctx context.Context, db *sql.DB, tenantID string) ([]APITokenInfo, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT id, name, LEFT(token_hash, 8) AS prefix, last_used_at, created_at
+		 FROM api_token WHERE tenant_id = $1 ORDER BY created_at DESC`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("listing api tokens: %w", err)
+	}
+	defer rows.Close()
+
+	var tokens []APITokenInfo
+	for rows.Next() {
+		var ti APITokenInfo
+		var lastUsed sql.NullTime
+		if err := rows.Scan(&ti.ID, &ti.Name, &ti.Prefix, &lastUsed, &ti.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scanning api token: %w", err)
+		}
+		if lastUsed.Valid {
+			ti.LastUsed = &lastUsed.Time
+		}
+		tokens = append(tokens, ti)
+	}
+	return tokens, rows.Err()
+}
+
+// RevokeAPIToken deletes a token owned by the given tenant.
+func RevokeAPIToken(ctx context.Context, db *sql.DB, tenantID, tokenID string) error {
+	res, err := db.ExecContext(ctx,
+		`DELETE FROM api_token WHERE id = $1 AND tenant_id = $2`, tokenID, tenantID)
+	if err != nil {
+		return fmt.Errorf("revoking api token: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("token not found or not owned by tenant")
+	}
+	return nil
+}
