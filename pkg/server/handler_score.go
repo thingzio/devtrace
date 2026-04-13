@@ -87,4 +87,3 @@ func scoreHandler(db *sql.DB, svc *service.ScoreService) http.HandlerFunc {
 		}
 	}
 }
-

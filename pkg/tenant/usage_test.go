@@ -25,8 +25,8 @@ func TestRecordAndGetUsage(t *testing.T) {
 	}
 	defer store.Close()
 
-	if err := store.Migrate(ctx); err != nil {
-		t.Fatalf("migrate: %v", err)
+	if merr := store.Migrate(ctx); merr != nil {
+		t.Fatalf("migrate: %v", merr)
 	}
 
 	db := store.DB()
@@ -42,8 +42,8 @@ func TestRecordAndGetUsage(t *testing.T) {
 
 	// Record 3 events: 2 unique users.
 	for _, u := range []string{"alice", "bob", "alice"} {
-		if err := RecordUsage(ctx, db, tn.ID, u, "github", false); err != nil {
-			t.Fatalf("record usage for %s: %v", u, err)
+		if rerr := RecordUsage(ctx, db, tn.ID, u, "github", false); rerr != nil {
+			t.Fatalf("record usage for %s: %v", u, rerr)
 		}
 	}
 
