@@ -31,49 +31,14 @@
   function initSearch() {
     var form = document.getElementById('try-search');
     var input = document.getElementById('try-username');
-    var result = document.getElementById('try-result');
-    if (!form || !input || !result) return;
+    if (!form || !input) return;
 
     form.addEventListener('submit', function(e) {
       e.preventDefault();
       var username = input.value.trim();
       if (!username) return;
-
-      result.innerHTML = '<p class="loading">Scoring...</p>';
-
-      fetch('/api/v1/score/' + encodeURIComponent(username))
-        .then(function(r) {
-          if (r.status === 429) throw new Error('Rate limit exceeded. Try again later.');
-          if (!r.ok) throw new Error('Scoring failed');
-          return r.json();
-        })
-        .then(function(data) {
-          result.innerHTML = renderGradeBadge(data);
-        })
-        .catch(function(err) {
-          result.innerHTML = '<p class="error">' + err.message + '</p>';
-        });
+      window.location.href = '/score/' + encodeURIComponent(username);
     });
-  }
-
-  function renderGradeBadge(data) {
-    var grade = data.score.grade;
-    var value = data.score.value.toFixed(2);
-    var colorClass = gradeColor(grade);
-    return '<div class="grade-card">' +
-      '<span class="grade-badge ' + colorClass + '">' + grade + '</span>' +
-      '<span class="grade-value">' + value + '</span>' +
-      '<p class="grade-detail">' + (data.detail || '') + '</p>' +
-      '<a href="/score/' + data.username + '" class="score-link">View full score card &rarr;</a>' +
-      '</div>';
-  }
-
-  function gradeColor(grade) {
-    if (grade.charAt(0) === 'A') return 'grade-a';
-    if (grade.charAt(0) === 'B') return 'grade-b';
-    if (grade.charAt(0) === 'C') return 'grade-c';
-    if (grade.charAt(0) === 'D') return 'grade-d';
-    return 'grade-f';
   }
 
   function initTokens() {
