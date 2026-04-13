@@ -26,7 +26,7 @@ func TestExtractBearerToken(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 			if tt.header != "" {
 				r.Header.Set("Authorization", tt.header)
 			}
@@ -126,7 +126,7 @@ func TestRequireAPITokenMissingHeader(t *testing.T) {
 		t.Error("handler should not be called")
 	}))
 
-	r := httptest.NewRequest(http.MethodGet, "/api/v1/score", nil)
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/score", nil)
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, r)
 
@@ -157,7 +157,7 @@ func TestRequireAnyAuthNoAuth(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	r := httptest.NewRequest(http.MethodGet, "/api/v1/score", nil)
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/score", nil)
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, r)
 
