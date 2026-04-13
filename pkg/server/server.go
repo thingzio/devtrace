@@ -1,10 +1,13 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"embed"
 	"errors"
 	"fmt"
+	"html/template"
 	"log/slog"
 	"net"
 	"net/http"
@@ -20,6 +23,56 @@ import (
 	"github.com/thingzio/devtrace/pkg/service"
 	"github.com/thingzio/devtrace/pkg/tenant"
 )
+
+//go:embed templates/*.html
+var templateFS embed.FS
+
+//go:embed static/*
+var staticFS embed.FS
+
+var pageTemplates map[string]*template.Template
+
+var templateFuncs = template.FuncMap{
+	"comma": func(n int) string {
+		if n == 0 {
+			return "Unlimited"
+		}
+		if n < 1000 {
+			return fmt.Sprintf("%d", n)
+		}
+		return fmt.Sprintf("%d,%03d", n/1000, n%1000)
+	},
+	"mul": func(a, b float64) float64 { return a * b },
+	"int": func(n int64) int { return int(n) },
+}
+
+func init() {
+	simplePages := []string{"landing.html", "scorecard.html", "tos.html", "settings.html"}
+	pageTemplates = make(map[string]*template.Template, len(simplePages)+1)
+	for _, p := range simplePages {
+		pageTemplates[p] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
+			"templates/layout.html", "templates/"+p))
+	}
+	pageTemplates["home.html"] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
+		"templates/header.html", "templates/home.html", "templates/footer.html"))
+}
+
+func renderTemplate(w http.ResponseWriter, name string, data any) {
+	t, ok := pageTemplates[name]
+	if !ok {
+		slog.Error("template not found", "name", name)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	var buf bytes.Buffer
+	if err := t.ExecuteTemplate(&buf, "layout.html", data); err != nil {
+		slog.Error("render template", "name", name, "error", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = buf.WriteTo(w)
+}
 
 // Options holds server configuration passed from the entry point.
 type Options struct {
@@ -128,6 +181,9 @@ func makeRouter(db *sql.DB, scoreSvc *service.ScoreService, oauthCfg *oauth.Conf
 	requireSession := middleware.RequireAuth(db, "/auth/github")
 
 	mux := http.NewServeMux()
+
+	// Static assets
+	mux.Handle("GET /static/", http.FileServer(http.FS(staticFS)))
 
 	// Public
 	mux.HandleFunc("GET /health", health.Handler())

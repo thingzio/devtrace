@@ -1,0 +1,29 @@
+{{define "header"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard - DevTrace</title>
+<link rel="icon" href="/static/img/favicon.ico">
+<link rel="stylesheet" href="/static/css/app.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<nav class="dashboard-nav">
+  <div class="nav-left">
+    <a href="/dashboard" class="nav-logo">DevTrace</a>
+  </div>
+  <div class="nav-right">
+    <a href="/settings" class="nav-link">Settings</a>
+    <span class="nav-user">
+      <img src="{{.avatar_url}}" alt="" class="nav-avatar" width="24" height="24">
+      {{.username}}
+    </span>
+    <form action="/auth/signout" method="POST" class="nav-signout">
+      <button type="submit" class="nav-link">Sign out</button>
+    </form>
+  </div>
+</nav>
+<main class="dashboard-main">
+{{end}}
