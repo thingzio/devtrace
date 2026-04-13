@@ -126,6 +126,12 @@ func makeRouter(db *sql.DB, scoreSvc *service.ScoreService, oauthCfg *oauth.Conf
 	// Session
 	mux.Handle("POST /auth/signout", requireSession(signoutHandler(db)))
 
+	// GitHub App webhook
+	webhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
+	if webhookSecret != "" {
+		mux.HandleFunc("POST /webhook/github", webhookHandler(db, webhookSecret))
+	}
+
 	return mux
 }
 
