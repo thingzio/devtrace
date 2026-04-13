@@ -261,6 +261,7 @@ rm -f devtrace-site
 | `PORT` | No | `8080` | HTTP server port |
 | `DATABASE_URL` | No | `postgres://devtrace:devtrace@localhost:5432/devtrace?sslmode=disable` | Postgres connection |
 | `DEVTRACE_DEBUG` | No | `false` | Enable debug logging |
+| `SCORE_CACHE_TTL_SEC` | No | `300` | Score cache TTL in seconds (5 min default) |
 | `SCORE_RATE_LIMIT` | No | `60` | Requests per hour (unauth) |
 | `OAUTH_RATE_LIMIT` | No | `20` | OAuth starts per minute per IP |
 | `BASE_URL` | No | `http://localhost:8080` | Public URL (affects cookie security) |
