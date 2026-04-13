@@ -126,6 +126,10 @@ db-down: ## Stops local Postgres
 db-connect: ## Opens psql shell to local Postgres
 	psql "$(DEV_DB)"
 
+.PHONY: seed
+seed: ## Seeds a test tenant and prints an API token
+	go run ./tools/seed-tenant/
+
 # =============================================================================
 # Build & Release
 # =============================================================================

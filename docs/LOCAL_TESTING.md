@@ -96,118 +96,25 @@ SCORE_RATE_LIMIT=1000 GITHUB_TOKEN=ghp_... go run ./cmd/devtrace-site/
 
 ## 6. Seed a Test Tenant + API Token
 
-Connect to the local database:
 ```bash
-make db-connect
+make seed
 ```
 
-Or directly:
-```bash
-docker compose exec db psql -U devtrace -d devtrace
+This creates a test tenant with the `free` plan, accepts ToS, mints an API token, and prints it:
+
+```
+Tenant ID:  a1b2c3d4-...
+Username:   test-user
+Plan:       free
+API Token:  dt_8f3a...
+
+Test with:
+  curl -s -H 'Authorization: Bearer dt_8f3a...' http://localhost:8080/api/v1/score/octocat | jq .
 ```
 
-Create a test tenant:
-```sql
-INSERT INTO tenant (id, github_id, username, email, plan, max_contributors, tos_accepted_at)
-VALUES (
-  'a0000000-0000-0000-0000-000000000001',
-  12345,
-  'test-user',
-  'test@example.com',
-  'starter',
-  200,
-  NOW()
-);
-```
+**Note:** The raw token is only shown once. Save it. The database stores only the SHA-256 hash — the raw token cannot be recovered.
 
-Create an API token (you'll need to hash it):
-```sql
--- Token: dt_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
--- SHA-256 of that token:
-INSERT INTO api_token (tenant_id, name, token_hash)
-VALUES (
-  'a0000000-0000-0000-0000-000000000001',
-  'test-token',
-  -- Generate hash: echo -n "dt_0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" | shasum -a 256
-  'REPLACE_WITH_ACTUAL_HASH'
-);
-```
-
-Easier approach — use a Go one-liner to generate a proper token:
-```bash
-go run -mod=mod -exec '' <<'EOF'
-package main
-
-import (
-	"context"
-	"database/sql"
-	"fmt"
-	_ "github.com/lib/pq"
-	"github.com/thingzio/devtrace/pkg/tenant"
-)
-
-func main() {
-	db, _ := sql.Open("postgres", "postgres://devtrace:devtrace@localhost:5432/devtrace?sslmode=disable")
-	token, err := tenant.CreateAPIToken(context.Background(), db, "a0000000-0000-0000-0000-000000000001", "test-token")
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("API Token (save this, shown once):")
-	fmt.Println(token)
-}
-EOF
-```
-
-Or write a small seed script (recommended):
-```bash
-cat > /tmp/seed.go << 'SEED'
-package main
-
-import (
-	"context"
-	"database/sql"
-	"fmt"
-	"os"
-
-	_ "github.com/lib/pq"
-	"github.com/thingzio/devtrace/pkg/tenant"
-)
-
-func main() {
-	dsn := "postgres://devtrace:devtrace@localhost:5432/devtrace?sslmode=disable"
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "connect: %v\n", err)
-		os.Exit(1)
-	}
-	defer db.Close()
-
-	ctx := context.Background()
-
-	// Create tenant
-	tn, err := tenant.UpsertTenant(ctx, db, 12345, "test-user", "test@example.com", "", "Test User", "", "", "")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "upsert tenant: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Accept ToS
-	_ = tenant.AcceptToS(ctx, db, tn.ID)
-
-	// Create API token
-	token, err := tenant.CreateAPIToken(ctx, db, tn.ID, "local-test")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "create token: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Tenant ID:  %s\n", tn.ID)
-	fmt.Printf("Plan:       %s\n", tn.Plan)
-	fmt.Printf("API Token:  %s\n", token)
-	fmt.Println("\nUse with: curl -H 'Authorization: Bearer <token>' http://localhost:8080/api/v1/score/<username>")
-}
-SEED
-```
+Running `make seed` again creates another tenant/token (idempotent on tenant, new token each time).
 
 ## 7. Test Authenticated Scoring
 
