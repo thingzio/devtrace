@@ -1,30 +1,85 @@
 variable "project_id" {
-  type    = string
-  default = "devpulseio"
+  description = "GCP project ID for the SaaS deployment"
+  type        = string
+  default     = "thingzio"
 }
 
 variable "region" {
-  type    = string
-  default = "us-west1"
-}
-
-variable "cloud_sql_instance_name" {
+  description = "GCP region for Cloud Run and Cloud SQL"
   type        = string
-  description = "Shared Cloud SQL instance name"
+  default     = "us-west1"
 }
 
-variable "db_password" {
-  type      = string
-  sensitive = true
+variable "prefix" {
+  description = "Unique deployment identifier"
+  type        = string
+  default     = "devtrace-saas"
 }
 
 variable "domain" {
-  type    = string
-  default = "devtrace.thingz.io"
+  description = "Public domain for the SaaS service"
+  type        = string
+  default     = "devtrace.thingz.io"
+}
+
+variable "git_repo" {
+  description = "GitHub repository for federated identity"
+  type        = string
+  default     = "thingzio/devtrace"
+}
+
+variable "github_oauth_client_id" {
+  description = "GitHub OAuth App client ID (public, not a secret)"
+  type        = string
+  default     = ""
+}
+
+variable "github_app_id" {
+  description = "GitHub App ID for installation token minting"
+  type        = string
+  default     = ""
+}
+
+variable "admin_invoker_emails" {
+  description = "GCP identities allowed to invoke the admin service"
+  type        = list(string)
+  default     = ["mark@chmarny.com"]
 }
 
 variable "image_tag" {
-  type        = string
   description = "Container image tag to deploy"
+  type        = string
   default     = "latest"
+}
+
+# --- Shared infrastructure (from thingzio/infra) ---
+
+variable "vpc_id" {
+  description = "Shared VPC network ID"
+  type        = string
+  default     = "projects/thingzio/global/networks/thingzio-vpc"
+}
+
+variable "subnet_id" {
+  description = "Shared VPC subnet ID"
+  type        = string
+  default     = "projects/thingzio/regions/us-west1/subnetworks/thingzio-subnet"
+}
+
+variable "db_instance_name" {
+  description = "Shared Cloud SQL instance name"
+  type        = string
+  default     = "thingzio-pg"
+}
+
+variable "db_connection_name" {
+  description = "Shared Cloud SQL connection string (project:region:instance)"
+  type        = string
+  default     = "thingzio:us-west1:thingzio-pg"
+}
+
+variable "db_name" {
+  description = "Database name within the shared Cloud SQL instance"
+  type        = string
+  default     = "thingz"
 }

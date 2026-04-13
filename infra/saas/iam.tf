@@ -1,37 +1,40 @@
-# ---------------------------------------------------------------------------
-# Service account for Cloud Run
-# ---------------------------------------------------------------------------
-
 resource "google_service_account" "run" {
-  account_id   = "devtrace-saas-run"
-  display_name = "DevTrace Cloud Run runtime"
+  account_id   = "${var.prefix}-run"
+  display_name = "DevTrace SaaS Cloud Run service"
+  project      = var.project_id
 }
 
-resource "google_project_iam_member" "run_secret_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.run.email}"
+locals {
+  run_roles = [
+    "roles/artifactregistry.reader",
+    "roles/cloudsql.client",
+    "roles/cloudsql.instanceUser",
+    "roles/logging.logWriter",
+    "roles/monitoring.metricWriter",
+    "roles/monitoring.viewer",
+  ]
 }
 
-resource "google_project_iam_member" "run_sql_client" {
-  project = var.project_id
-  role    = "roles/cloudsql.client"
-  member  = "serviceAccount:${google_service_account.run.email}"
+resource "google_project_iam_member" "run" {
+  for_each = toset(local.run_roles)
+  project  = var.project_id
+  role     = each.value
+  member   = "serviceAccount:${google_service_account.run.email}"
 }
 
-# ---------------------------------------------------------------------------
-# Workload Identity Federation — GitHub Actions
-# The pool "github-actions" already exists; create a DevTrace-specific provider.
-# ---------------------------------------------------------------------------
+# GitHub Actions federated identity for deployments
+resource "google_iam_workload_identity_pool" "github" {
+  workload_identity_pool_id = "gh-pool-${var.prefix}"
+  display_name              = "GH Actions ${var.prefix}"
+  project                   = var.project_id
 
-data "google_iam_workload_identity_pool" "github" {
-  workload_identity_pool_id = "github-actions"
+  depends_on = [google_project_service.default]
 }
 
-resource "google_iam_workload_identity_pool_provider" "devtrace" {
-  workload_identity_pool_id          = data.google_iam_workload_identity_pool.github.workload_identity_pool_id
-  workload_identity_pool_provider_id = "devtrace-saas"
-  display_name                       = "DevTrace GitHub Actions"
+resource "google_iam_workload_identity_pool_provider" "github" {
+  workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
+  workload_identity_pool_provider_id = "gh-provider-${var.prefix}"
+  display_name                       = "GH Provider ${var.prefix}"
 
   attribute_mapping = {
     "google.subject"       = "assertion.sub"
@@ -39,15 +42,42 @@ resource "google_iam_workload_identity_pool_provider" "devtrace" {
     "attribute.repository" = "assertion.repository"
   }
 
+  attribute_condition = "assertion.repository == '${var.git_repo}'"
+
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
   }
-
-  attribute_condition = "assertion.repository_owner == 'thingzio'"
 }
 
-resource "google_service_account_iam_member" "wif_run" {
-  service_account_id = google_service_account.run.name
+resource "google_service_account" "deployer" {
+  account_id   = "github-actions-${var.prefix}"
+  display_name = "GitHub Actions deployer (${var.prefix})"
+  project      = var.project_id
+}
+
+resource "google_service_account_iam_member" "deployer_wif" {
+  service_account_id = google_service_account.deployer.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${data.google_iam_workload_identity_pool.github.name}/attribute.repository/thingzio/devtrace"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.git_repo}"
+}
+
+locals {
+  deployer_roles = [
+    "roles/artifactregistry.writer",
+    "roles/run.admin",
+  ]
+}
+
+resource "google_project_iam_member" "deployer" {
+  for_each = toset(local.deployer_roles)
+  project  = var.project_id
+  role     = each.value
+  member   = "serviceAccount:${google_service_account.deployer.email}"
+}
+
+# Grant serviceAccountUser at service-account level (not project level)
+resource "google_service_account_iam_member" "deployer_run_sa" {
+  service_account_id = google_service_account.run.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deployer.email}"
 }

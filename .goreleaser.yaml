@@ -32,7 +32,7 @@ kos:
   - id: devtrace-site
     build: devtrace-site
     repositories:
-      - us-west1-docker.pkg.dev/devpulseio/devtrace-saas-images/devtrace-site
+      - us-west1-docker.pkg.dev/thingzio/devtrace-saas-images/devtrace-site
     platforms:
       - linux/amd64
     tags:
