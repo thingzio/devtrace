@@ -1893,6 +1893,16 @@ a.link {
   color: var(--fgColor-muted, #6a737d);
   margin-left: 0.5rem;
 }
+.grade-score {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--medium-color, #6a737d);
+  line-height: 1.2;
+}
+.grade-model-label {
+  font-size: 0.8rem;
+  color: var(--page-content-txtColor, #24292e);
+}
 .grade-detail {
   margin-top: 0.5rem;
   color: var(--fgColor-muted, #6a737d);

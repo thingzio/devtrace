@@ -13,8 +13,10 @@
     <h1>{{.Username}}</h1>
     <div class="grade-display">
       <span class="grade-badge {{.GradeClass}}">{{.Grade}}</span>
-      <span class="grade-value">{{printf "%.2f" .Value}}</span>
-      <span class="grade-model">model v{{.ModelVersion}}</span>
+      <div style="display:flex;flex-direction:column;margin-left:0.75rem;">
+        <span class="grade-score">{{printf "%.2f" .Value}}</span>
+        <span class="grade-model-label">model v{{.ModelVersion}}</span>
+      </div>
     </div>
   </div>
 
