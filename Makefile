@@ -65,7 +65,7 @@ export TF_CLI_CONFIG_FILE := $(TF_DIR)/terraformrc
 
 .PHONY: lint-tf
 lint-tf: ## Scans Terraform for security misconfigurations
-	tfsec $(TF_DIR)
+	@if [ -d "$(TF_DIR)" ]; then tfsec $(TF_DIR); else echo "Skipping tfsec: $(TF_DIR) not found"; fi
 
 .PHONY: tf-init
 tf-init: ## Initializes Terraform

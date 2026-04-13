@@ -2,4 +2,5 @@
 *.exe
 /vendor/
 dist/
-coverage.out
+cover.out
+cover-filtered.out
