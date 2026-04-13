@@ -59,6 +59,19 @@ Everything is a client of the REST API:
 3. **API access:** DevTrace mints its own opaque API tokens for users — map internally to tenant + GitHub App installation
 4. **No stored credentials:** OAuth identifies users, GitHub App tokens are server-managed and short-lived, DevTrace API tokens are the service's own domain
 
+### Shared Database
+
+Same Cloud SQL instance as DevPulse, own database and DB user (`devtrace`):
+
+- **DevTrace-owned tables:** contributor, reputation, license_profile, ai_signal, tenant, api_token, session, usage_record
+- **Read access to DevPulse tables:** `developer` (existing reputation scores + `reputation_signals` JSONB), `event`, `repo_meta` — reuse deep reputation state already collected by DevPulse's import pipeline
+- **Write boundary:** DevTrace NEVER writes to DevPulse tables
+- **Infra ownership:** VPC, Cloud SQL, and private networking are owned by DevPulse's Terraform. DevTrace references them via `data` sources. Ideally these would live in a shared infra repo, but we reuse DevPulse's as-is.
+
+### Service Identity
+
+DevTrace gets its own GCP service account (`devtrace-saas-run`), Cloud Run services, secrets, Artifact Registry repo, and WIF provider. Clean separation from DevPulse at the identity/IAM level despite shared infrastructure.
+
 ### GitHub Client Interface
 
 Abstracted behind an interface to support development and production modes:
