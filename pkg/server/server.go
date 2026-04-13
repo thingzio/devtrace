@@ -119,15 +119,13 @@ func Run(ctx context.Context, opts Options) error {
 
 	scoreSvc := service.NewScoreService(ghClient, nil)
 
-	db := store.DB()
-
 	oauthCfg := &oauth.Config{
 		ClientID:     os.Getenv("GITHUB_OAUTH_CLIENT_ID"),
 		ClientSecret: os.Getenv("GITHUB_OAUTH_CLIENT_SECRET"),
 		RedirectURL:  config.GetEnv("BASE_URL", "http://localhost:8080") + "/auth/github/callback",
 	}
 
-	mux := makeRouter(db, scoreSvc, oauthCfg, opts)
+	mux := makeRouter(store, scoreSvc, oauthCfg, opts)
 
 	port := config.GetEnv("PORT", "8080")
 	srv := &http.Server{
@@ -167,7 +165,11 @@ func Run(ctx context.Context, opts Options) error {
 	return nil
 }
 
-func makeRouter(db *sql.DB, scoreSvc *service.ScoreService, oauthCfg *oauth.Config, opts Options) *http.ServeMux {
+func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg *oauth.Config, opts Options) *http.ServeMux {
+	var db *sql.DB
+	if store != nil {
+		db = store.DB()
+	}
 	scoreRL := newIPRateLimiter(
 		config.GetEnvAsInt("SCORE_RATE_LIMIT", 60),
 		3600, // 1 hour window
@@ -195,7 +197,10 @@ func makeRouter(db *sql.DB, scoreSvc *service.ScoreService, oauthCfg *oauth.Conf
 	mux.Handle("GET /score/{username}", requireAny(scorecardHandler(scoreSvc)))
 
 	// Score API — accepts any auth (token, session, or none)
-	mux.Handle("GET /api/v1/score/{username}", scoreRL.wrap(requireAny(scoreHandler(db, scoreSvc))))
+	mux.Handle("GET /api/v1/score/{username}", scoreRL.wrap(requireAny(scoreHandler(db, store, scoreSvc))))
+
+	// Score history API (trend chart data)
+	mux.Handle("GET /api/v1/score/{username}/history", requireAny(historyHandler(store)))
 
 	// Token management — requires session auth (UI only)
 	mux.Handle("POST /api/v1/token", requireSession(createTokenHandler(db)))

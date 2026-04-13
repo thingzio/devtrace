@@ -1,19 +1,21 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
 
+	"github.com/thingzio/devtrace/pkg/data/postgres"
 	"github.com/thingzio/devtrace/pkg/middleware"
 	"github.com/thingzio/devtrace/pkg/plan"
 	"github.com/thingzio/devtrace/pkg/service"
 	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
-func scoreHandler(db *sql.DB, svc *service.ScoreService) http.HandlerFunc {
+func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := r.PathValue("username")
 		repo := r.URL.Query().Get("repo")
@@ -79,6 +81,20 @@ func scoreHandler(db *sql.DB, svc *service.ScoreService) http.HandlerFunc {
 			if err := tenant.RecordUsage(r.Context(), db, tn.ID, username, provider, false); err != nil {
 				slog.Error("record usage failed", "tenant", tn.ID, "error", err)
 			}
+		}
+
+		// Fire-and-forget: persist score history for trend charts.
+		if store != nil {
+			go func() {
+				ctx := context.Background()
+				if err := store.UpsertContributor(ctx, username, "github"); err != nil {
+					slog.Error("upsert contributor", "username", username, "error", err)
+					return
+				}
+				if err := store.SaveScoreHistory(ctx, username, "github", resp.Score.Value, resp.Score.Grade, false); err != nil {
+					slog.Error("save score history", "username", username, "error", err)
+				}
+			}()
 		}
 
 		w.Header().Set("Content-Type", "application/json")
