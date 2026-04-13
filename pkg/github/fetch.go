@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -23,7 +24,7 @@ func fetchUser(ctx context.Context, api *gh.Client, username string) (*UserProfi
 
 // fetchSignals retrieves scoring signals for the given user, optionally scoped to a repo.
 //
-//nolint:funlen // concurrent API calls make this naturally long; splitting hurts readability
+//nolint:funlen,gocyclo // concurrent API calls inflate length and cyclomatic complexity; splitting hurts readability
 func fetchSignals(ctx context.Context, api *gh.Client, username, repo string) (*score.InputSignals, error) {
 	u, _, err := api.Users.Get(ctx, username)
 	if err != nil {
@@ -54,13 +55,18 @@ func fetchSignals(ctx context.Context, api *gh.Client, username, repo string) (*
 	}
 
 	var (
-		mu          sync.Mutex
-		mergedPRs   int64
-		closedPRs   int64
-		recentRepos int64
-		forkedRepos int64
-		orgMember   bool
-		assoc       string
+		mu             sync.Mutex
+		mergedPRs      int64
+		closedPRs      int64
+		recentRepos    int64
+		forkedRepos    int64
+		orgMember      bool
+		assoc          string
+		repoCommits    int64
+		repoTotal      int64
+		repoContribs   int
+		repoLastDays   int64
+		repoUnverified int64
 	)
 
 	var wg sync.WaitGroup
@@ -193,6 +199,59 @@ func fetchSignals(ctx context.Context, api *gh.Client, username, repo string) (*
 					mu.Unlock()
 				}
 			}()
+
+			// Contributor stats for this repo (commits, total, recency).
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				stats, resp, e := api.Repositories.ListContributorsStats(ctx, org, parts[1])
+				if e != nil {
+					results <- result{"repo_stats", e}
+					return
+				}
+				// GitHub returns 202 when stats are being computed. Retry once.
+				if resp.StatusCode == http.StatusAccepted {
+					time.Sleep(2 * time.Second)
+					stats, _, e = api.Repositories.ListContributorsStats(ctx, org, parts[1])
+					if e != nil {
+						results <- result{"repo_stats_retry", e}
+						return
+					}
+				}
+
+				var total int64
+				var userCommits int64
+				var userLastWeek int64
+				var unverified int64
+
+				for _, cs := range stats {
+					if cs.Author == nil {
+						continue
+					}
+					authorTotal := int64(cs.GetTotal())
+					total += authorTotal
+					if strings.EqualFold(cs.Author.GetLogin(), username) {
+						userCommits = authorTotal
+						// Find last active week (most recent non-zero week).
+						for i := len(cs.Weeks) - 1; i >= 0; i-- {
+							if cs.Weeks[i].GetCommits() > 0 {
+								userLastWeek = cs.Weeks[i].GetWeek().Unix()
+								break
+							}
+						}
+					}
+				}
+
+				mu.Lock()
+				repoCommits = userCommits
+				repoTotal = total
+				repoContribs = len(stats)
+				repoUnverified = unverified
+				if userLastWeek > 0 {
+					repoLastDays = int64(time.Since(time.Unix(userLastWeek, 0)).Hours() / 24)
+				}
+				mu.Unlock()
+			}()
 		}
 	}
 
@@ -216,6 +275,15 @@ func fetchSignals(ctx context.Context, api *gh.Client, username, repo string) (*
 	signals.ForkedRepos = forkedRepos
 	signals.OrgMember = orgMember
 	signals.AuthorAssociation = assoc
+
+	// Repo-contextual stats (only populated when repo is provided).
+	if repoCommits > 0 || repoTotal > 0 {
+		signals.Commits = repoCommits
+		signals.TotalCommits = repoTotal
+		signals.TotalContributors = repoContribs
+		signals.LastCommitDays = repoLastDays
+		signals.UnverifiedCommits = repoUnverified
+	}
 
 	return signals, nil
 }
