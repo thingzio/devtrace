@@ -135,7 +135,7 @@ func makeRouter(db *sql.DB, scoreSvc *service.ScoreService, oauthCfg *oauth.Conf
 	mux.HandleFunc("GET /auth/github/callback", oauthCallbackHandler(db, oauthCfg))
 
 	// Score — accepts any auth (token, session, or none)
-	mux.Handle("GET /api/v1/score/{username}", scoreRL.wrap(requireAny(scoreHandler(scoreSvc))))
+	mux.Handle("GET /api/v1/score/{username}", scoreRL.wrap(requireAny(scoreHandler(db, scoreSvc))))
 
 	// Token management — requires session auth (UI only)
 	mux.Handle("POST /api/v1/token", requireSession(createTokenHandler(db)))

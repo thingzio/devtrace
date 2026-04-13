@@ -49,7 +49,7 @@ func TestScoreHandler(t *testing.T) {
 	svc := service.NewScoreService(mock, nil)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/v1/score/{username}", scoreHandler(svc))
+	mux.HandleFunc("GET /api/v1/score/{username}", scoreHandler(nil, svc))
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/score/testuser", nil)
 	rec := httptest.NewRecorder()
