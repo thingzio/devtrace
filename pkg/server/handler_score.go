@@ -84,8 +84,9 @@ func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) 
 		}
 
 		// Fire-and-forget: persist score history for trend charts.
+		// Uses background context intentionally — request may complete before save finishes.
 		if store != nil {
-			go func() {
+			go func() { //nolint:gosec // intentional: background ctx outlives request
 				ctx := context.Background()
 				if err := store.UpsertContributor(ctx, username, "github"); err != nil {
 					slog.Error("upsert contributor", "username", username, "error", err)
