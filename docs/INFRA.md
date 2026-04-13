@@ -206,3 +206,54 @@ These are DevTrace-specific and have no DevPulse equivalent.
 - **Tenant dashboard** — plan status, quota consumption, API key management
 - **Contributor search** — query any contributor, view score/license/AI signals
 - **Alert configuration** — set reputation thresholds for notifications
+
+---
+
+## Shared Infrastructure Migration Plan
+
+### Problem
+
+DevPulse's Terraform currently owns project-wide shared resources (VPC, Cloud SQL, private networking). Any change to DevPulse infra could inadvertently break DevTrace or future services. The resource names (`devpulse-saas-vpc`, `devpulse-saas-pg`) reinforce the false impression that these are DevPulse-specific.
+
+### Decision
+
+Extract shared infrastructure ownership into a new `thingzio/infra` repo. Leave resource names as-is — GCP does not support renaming VPCs or Cloud SQL instances, and recreating them carries significant downtime risk for DevPulse in production.
+
+### What moves to `thingzio/infra`
+
+| Resource | Current Name | Current Owner |
+|----------|-------------|---------------|
+| VPC | `devpulse-saas-vpc` | `thingzio/devpulse` infra/saas/ |
+| Subnet | `devpulse-saas-subnet` | `thingzio/devpulse` infra/saas/ |
+| Cloud SQL instance | `devpulse-saas-pg` | `thingzio/devpulse` infra/saas/ |
+| Private service networking | VPC peering to Cloud SQL | `thingzio/devpulse` infra/saas/ |
+
+### What stays in each service repo
+
+| Resource | Owner |
+|----------|-------|
+| Cloud Run services, service accounts, secrets, scheduler, monitoring | Each service's own repo |
+| Artifact Registry repos | Each service's own repo |
+| WIF providers | Each service's own repo |
+| DNS records | Each service's own repo |
+| DB users, schemas, grants | Each service's own repo |
+
+### Migration Steps
+
+1. **Create `thingzio/infra` repo** with Terraform config for shared resources
+2. **`terraform import`** existing VPC, subnet, Cloud SQL, and private networking into the new state — no resource recreation, just ownership transfer
+3. **Remove** these resource definitions from `thingzio/devpulse` infra/saas/, replace with `data` sources referencing the resources (same as DevTrace already does)
+4. **Configure remote state** — both DevPulse and DevTrace read shared infra outputs (VPC ID, subnet ID, Cloud SQL instance name, connection name) from `thingzio/infra`'s Terraform remote state
+5. **Verify** `terraform plan` in all three repos shows no changes (pure ownership transfer)
+6. **Add CI protection** — `thingzio/infra` gets its own PR review workflow; changes to shared resources require explicit approval
+
+### Timing
+
+Execute before Phase 2 (auth + registration) deploys DevTrace to production. During Phase 1, DevTrace is local-only so there is no production dependency. This is the ideal window — DevPulse is the only consumer, making the migration low-risk.
+
+### Why not rename resources?
+
+- GCP does not support renaming VPCs or Cloud SQL instances
+- Recreation requires: new resource → data migration → connection string updates → cutover → delete old
+- DevPulse is in production — downtime and migration risk are not justified for a cosmetic change
+- The resource names are just labels; Terraform ownership in `thingzio/infra` is what provides the safety boundary
