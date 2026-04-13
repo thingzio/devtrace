@@ -271,6 +271,11 @@ rm -f devtrace-site
 | `GITHUB_APP_KEY_PATH` | No | — | Path to GitHub App private key PEM |
 | `GITHUB_APP_INSTALLATION_ID` | No | — | Default installation ID (prod) |
 | `GITHUB_WEBHOOK_SECRET` | No | — | Webhook HMAC secret |
+| `ENABLE_BACKGROUND_OPS` | No | `false` | Enable sync + scorer background routines |
+| `DEVPULSE_SYNC_INTERVAL_SEC` | No | `1800` | DevPulse sync interval (30 min default) |
+| `SCORER_INTERVAL_SEC` | No | `3600` | Background scorer interval (1 hour default) |
+| `SCORER_LOW_STALE_DAYS` | No | `7` | Rescore low-score contributors after N days |
+| `SCORER_HIGH_STALE_DAYS` | No | `30` | Rescore high-score contributors after N days |
 | `SERVER_SHUTDOWN_TIMEOUT_SEC` | No | `5` | Graceful shutdown timeout |
 | `DB_MAX_OPEN_CONNS` | No | `10` | Postgres pool max open |
 | `DB_MAX_IDLE_CONNS` | No | `5` | Postgres pool max idle |

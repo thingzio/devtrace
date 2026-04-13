@@ -14,6 +14,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/thingzio/devtrace/pkg/background"
 	"github.com/thingzio/devtrace/pkg/config"
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
@@ -115,6 +116,15 @@ func Run(ctx context.Context, opts Options) error {
 		}
 		ghClient = ghclient.NewPATClient(ctx, token)
 		slog.Info("using PAT GitHub client")
+	}
+
+	// Start background operations (disabled by default for local dev).
+	if config.GetEnvBool("ENABLE_BACKGROUND_OPS") {
+		syncStop := background.StartDevPulseSync(ctx, store)
+		defer syncStop()
+
+		scorerStop := background.StartBackgroundScorer(ctx, store, ghClient)
+		defer scorerStop()
 	}
 
 	scoreSvc := service.NewScoreService(ghClient, nil)
