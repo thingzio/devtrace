@@ -190,6 +190,8 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 	// Public
 	mux.HandleFunc("GET /{$}", landingHandler(opts))
 	mux.HandleFunc("GET /health", health.Handler())
+	mux.HandleFunc("GET /changelog", stubPageHandler("Changelog"))
+	mux.HandleFunc("GET /help", stubPageHandler("Help"))
 	mux.Handle("GET /auth/github", oauthRL.wrap(oauthStartHandler(oauthCfg)))
 	mux.HandleFunc("GET /auth/github/callback", oauthCallbackHandler(db, oauthCfg))
 
