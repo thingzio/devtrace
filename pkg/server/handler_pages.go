@@ -126,6 +126,56 @@ func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 	}
 }
 
+func settingsHandler(store *postgres.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tn := middleware.TenantFromContext(r.Context())
+		if tn == nil {
+			http.Redirect(w, r, "/auth/github", http.StatusFound)
+			return
+		}
+		db := store.DB()
+		limits, _ := plan.Get(tn.Plan)
+		lastSignIn := tenant.GetLastSignIn(r.Context(), db, tn.ID)
+		lastLogin := "never"
+		if lastSignIn != nil {
+			lastLogin = lastSignIn.Format("2006-01-02")
+		}
+
+		renderTemplate(w, "settings.html", map[string]any{
+			"Title":            "Settings",
+			"username":         tn.Username,
+			"email":            tn.Email,
+			"plan":             tn.Plan,
+			"max_contributors": limits.MaxContributors,
+			"rate_limit":       limits.RateLimitPerHour,
+			"created_at":       tn.CreatedAt.Format("2006-01-02"),
+			"last_login":       lastLogin,
+		})
+	}
+}
+
+func tosPageHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		renderTemplate(w, "tos.html", pageData{Title: "Terms of Service"})
+	}
+}
+
+func tosAcceptHandler(store *postgres.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tn := middleware.TenantFromContext(r.Context())
+		if tn == nil {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if err := tenant.AcceptToS(r.Context(), store.DB(), tn.ID); err != nil {
+			slog.Error("accept tos", "error", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, "/dashboard", http.StatusFound)
+	}
+}
+
 func landingHandler(opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var errMsg string

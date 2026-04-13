@@ -1,1 +1,17 @@
-{{define "content"}}TODO{{end}}
+{{define "content"}}
+<div class="tos">
+  <h1>Terms of Service</h1>
+  <div class="tos-content">
+    <p>By using DevTrace, you agree to the following terms:</p>
+    <ul>
+      <li>DevTrace accesses public GitHub data to compute reputation scores.</li>
+      <li>Scores are informational and should not be the sole basis for trust decisions.</li>
+      <li>API tokens are your responsibility. Do not share them.</li>
+      <li>We reserve the right to rate-limit or suspend accounts that abuse the service.</li>
+    </ul>
+  </div>
+  <form action="/tos/accept" method="POST">
+    <button type="submit" class="btn btn-primary">I Accept</button>
+  </form>
+</div>
+{{end}}

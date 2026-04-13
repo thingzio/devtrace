@@ -1,1 +1,34 @@
-{{define "content"}}TODO{{end}}
+{{define "content"}}
+<div class="settings">
+  <a href="/dashboard" class="back-link">&larr; Dashboard</a>
+  <h1>Settings</h1>
+
+  <section class="settings-section">
+    <h2>Profile</h2>
+    <dl>
+      <dt>Username</dt><dd>{{.username}}</dd>
+      <dt>Email</dt><dd>{{.email}}</dd>
+      <dt>Member since</dt><dd>{{.created_at}}</dd>
+      <dt>Last sign-in</dt><dd>{{.last_login}}</dd>
+    </dl>
+  </section>
+
+  <section class="settings-section">
+    <h2>Plan</h2>
+    <dl>
+      <dt>Current plan</dt><dd>{{.plan}}</dd>
+      <dt>Contributors/month</dt><dd>{{comma .max_contributors}}</dd>
+      <dt>Rate limit</dt><dd>{{comma .rate_limit}}/hour</dd>
+    </dl>
+  </section>
+
+  <section class="settings-section">
+    <h2>Appearance</h2>
+    <div class="theme-toggle">
+      <button onclick="DevTrace.setTheme('light')" class="btn btn-small">Light</button>
+      <button onclick="DevTrace.setTheme('dark')" class="btn btn-small">Dark</button>
+      <button onclick="DevTrace.setTheme('system')" class="btn btn-small">System</button>
+    </div>
+  </section>
+</div>
+{{end}}

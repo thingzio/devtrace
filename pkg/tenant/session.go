@@ -62,6 +62,16 @@ func DestroySession(ctx context.Context, db *sql.DB, rawToken string) error {
 	return nil
 }
 
+// GetLastSignIn returns the most recent session creation time for a tenant, or nil.
+func GetLastSignIn(ctx context.Context, db *sql.DB, tenantID string) *time.Time {
+	var t sql.NullTime
+	if err := db.QueryRowContext(ctx,
+		`SELECT MAX(created_at) FROM session WHERE tenant_id = $1`, tenantID).Scan(&t); err != nil || !t.Valid {
+		return nil
+	}
+	return &t.Time
+}
+
 // HashToken returns the hex-encoded SHA-256 hash of a raw token.
 func HashToken(raw string) string {
 	h := sha256.Sum256([]byte(raw))
