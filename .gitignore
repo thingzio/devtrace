@@ -4,3 +4,6 @@
 dist/
 cover.out
 cover-filtered.out
+devtrace-site
+devtrace-scorer
+devtrace-admin
