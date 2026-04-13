@@ -13,8 +13,7 @@ import (
 
 func stubPageHandler(title string) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>` + title + ` - DevTrace</title><link rel="stylesheet" href="/static/css/app.css"></head><body><div style="max-width:600px;margin:4rem auto;text-align:center;"><h1>` + title + `</h1><p class="muted">Coming soon.</p><p><a href="/">&larr; Back to home</a></p></div><script src="/static/js/app.js"></script></body></html>`))
+		renderTemplate(w, "stub.html", pageData{Title: title})
 	}
 }
 

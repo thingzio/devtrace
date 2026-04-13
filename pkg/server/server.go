@@ -48,7 +48,7 @@ var templateFuncs = template.FuncMap{
 }
 
 func init() {
-	simplePages := []string{"landing.html", "scorecard.html", "tos.html", "settings.html"}
+	simplePages := []string{"landing.html", "scorecard.html", "tos.html", "settings.html", "stub.html"}
 	pageTemplates = make(map[string]*template.Template, len(simplePages)+1)
 	for _, p := range simplePages {
 		pageTemplates[p] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
