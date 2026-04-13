@@ -81,19 +81,23 @@
   </section>
   {{end}}
 
-  <section class="trend">
-    <h2>Score Trend</h2>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-    <div style="max-height: 200px;">
-      <canvas id="trend-chart" data-username="{{.Username}}"></canvas>
-    </div>
-  </section>
+  <div id="trend-section" style="display:none;">
+    <section class="trend">
+      <h2>Score Trend</h2>
+      <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+      <div style="max-height: 200px;">
+        <canvas id="trend-chart" data-username="{{.Username}}"></canvas>
+      </div>
+    </section>
+  </div>
 
   {{if .ShowSignUp}}
-  <section class="signup-cta">
-    <p>Sign up to track contributors, manage API tokens, and integrate with CI/CD.</p>
+  <hr style="border:none;border-top:1px solid var(--border-color,#e1e4e8);margin:2rem 0;">
+  <div style="text-align:center;">
+    <p style="margin-bottom:1rem;">Sign up to track contributors, manage API tokens, and integrate with CI/CD.</p>
     <a href="/auth/github" class="btn btn-primary">Sign in with GitHub</a>
-  </section>
+    <p class="muted" style="margin-top:0.5rem;font-size:0.85rem;">Takes 1 minute: GitHub login + a one-click app install.</p>
+  </div>
   {{end}}
 </div>
 {{end}}

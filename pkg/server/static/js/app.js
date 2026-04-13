@@ -84,10 +84,11 @@
     fetch('/api/v1/score/' + encodeURIComponent(username) + '/history')
       .then(function(r) { return r.ok ? r.json() : []; })
       .then(function(data) {
-        if (!data || data.length === 0) {
-          canvas.parentElement.innerHTML = '<p class="muted">No trend data yet</p>';
-          return;
+        if (!data || data.length < 2) {
+          return; // trend section stays hidden
         }
+        var section = document.getElementById('trend-section');
+        if (section) section.style.display = 'block';
         new Chart(canvas, {
           type: 'line',
           data: {
