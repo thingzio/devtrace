@@ -2120,13 +2120,15 @@ a.link {
   justify-content: space-between;
   align-items: center;
   padding: 0.75rem 1.5rem;
-  border-bottom: 1px solid var(--borderColor-default, #e1e4e8);
-  background: var(--bgColor-default, #fff);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--page-header-bgColor);
+  color: var(--page-header-txtColor);
 }
 .dashboard-main {
   max-width: 900px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 2rem 1rem;
+  color: var(--page-content-txtColor);
 }
 .nav-left, .nav-right {
   display: flex;
@@ -2137,15 +2139,18 @@ a.link {
   font-weight: 700;
   font-size: 1.1rem;
   text-decoration: none;
-  color: var(--fgColor-default, #24292e);
+  color: var(--page-header-txtColor);
 }
 .nav-link {
-  color: var(--fgColor-muted, #6a737d);
+  color: var(--gray);
   text-decoration: none;
   background: none;
   border: none;
   cursor: pointer;
   font-size: 0.9rem;
+}
+.nav-link:hover {
+  color: var(--page-header-txtColor);
 }
 .nav-avatar {
   border-radius: 50%;
@@ -2153,6 +2158,7 @@ a.link {
 }
 .nav-user {
   font-size: 0.9rem;
+  color: var(--page-header-txtColor);
 }
 .nav-signout {
   display: inline;
@@ -2176,9 +2182,10 @@ a.link {
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
-  background: var(--bgColor-muted, #f6f8fa);
+  background: var(--border-color);
   border-radius: 4px;
-  color: var(--fgColor-muted, #6a737d);
+  color: var(--page-content-txtColor);
+  letter-spacing: 0.05em;
 }
 
 /* Quota bar */
@@ -2288,4 +2295,149 @@ section h2 {
   background: var(--page-content-blockColor, #f6f8fa);
   color: var(--page-content-txtColor, #24292e);
   border-radius: 8px;
+}
+
+/* Dashboard sections */
+.dashboard-section {
+  margin-bottom: 2rem;
+}
+.dashboard-section h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--page-content-txtColor);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+.dashboard-section p {
+  color: var(--gray);
+  font-size: 0.9rem;
+}
+
+/* Welcome header (dashboard profile) */
+.welcome-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: var(--page-content-blockColor);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+}
+.welcome-header .welcome-avatar {
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
+}
+.welcome-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: var(--page-content-txtColor);
+}
+
+/* Quota bar (dashboard) */
+.quota-bar-container {
+  height: 12px;
+  background: var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 0.5rem 0;
+}
+.quota-bar-container .quota-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 6px;
+  transition: width 0.3s;
+}
+.quota-label {
+  font-size: 0.85rem;
+  color: var(--gray);
+}
+
+/* Data tables (dashboard) */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+}
+.data-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--page-content-blockColor);
+  color: var(--gray);
+}
+.data-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--page-content-txtColor);
+}
+.data-table a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+.data-table a:hover {
+  text-decoration: underline;
+}
+.data-table code {
+  font-size: 0.85em;
+  color: var(--gray);
+}
+.btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8rem;
+}
+
+/* Dashboard + Settings footer */
+.app-footer {
+  text-align: center;
+  padding: 2rem 1rem 1.5rem;
+  font-size: 0.8rem;
+  color: var(--gray);
+  border-top: 1px solid var(--border-color);
+  margin-top: 2rem;
+}
+.app-footer a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+.app-footer a:hover {
+  text-decoration: underline;
+}
+
+/* Settings page dark-theme fixes */
+.settings h1 {
+  color: var(--page-content-txtColor);
+}
+.settings .back-link {
+  color: var(--gray);
+}
+.settings .back-link:hover {
+  color: var(--page-content-txtColor);
+}
+.settings-section h2 {
+  color: var(--page-content-txtColor);
+  border-bottom-color: var(--border-color);
+}
+.settings-section dt {
+  color: var(--gray);
+}
+.settings-section dd {
+  color: var(--page-content-txtColor);
+}
+.settings-section dl {
+  border-bottom-color: var(--border-color);
+}
+.settings-section {
+  border-bottom-color: var(--border-color);
+}
+.theme-toggle .btn {
+  color: var(--page-content-txtColor);
+  border-color: var(--border-color);
+  background: var(--page-content-blockColor);
+}
+.theme-toggle .btn:hover {
+  background: var(--page-header-bgColor-hover);
 }

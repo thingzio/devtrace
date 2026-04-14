@@ -73,6 +73,11 @@ resource "google_cloud_run_v2_service" "serve" {
       }
 
       env {
+        name  = "TRUST_PROXY"
+        value = "true"
+      }
+
+      env {
         name  = "GITHUB_APP_ID"
         value = var.github_app_id
       }

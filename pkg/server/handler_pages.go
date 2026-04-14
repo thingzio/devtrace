@@ -163,6 +163,10 @@ func settingsHandler(store *postgres.Store) http.HandlerFunc {
 		if lastSignIn != nil {
 			lastLogin = lastSignIn.Format("2006-01-02")
 		}
+		tokens, err := tenant.ListAPITokens(r.Context(), db, tn.ID)
+		if err != nil {
+			slog.Error("settings: list api tokens", "tenant", tn.ID, "error", err)
+		}
 
 		renderTemplate(w, "settings.html", map[string]any{
 			"Title":            "Settings",
@@ -173,6 +177,7 @@ func settingsHandler(store *postgres.Store) http.HandlerFunc {
 			"rate_limit":       limits.RateLimitPerHour,
 			"created_at":       tn.CreatedAt.Format("2006-01-02"),
 			"last_login":       lastLogin,
+			"tokens":           tokens,
 		})
 	}
 }

@@ -1,4 +1,17 @@
 {{define "content"}}
+<nav class="dashboard-nav">
+  <div class="nav-left">
+    <a href="/dashboard" class="nav-logo">DevTrace</a>
+  </div>
+  <div class="nav-right">
+    <a href="/dashboard" class="nav-link">Dashboard</a>
+    <a href="/settings" class="nav-link">Settings</a>
+    <form action="/auth/signout" method="POST" class="nav-signout">
+      <button type="submit" class="nav-link">Sign out</button>
+    </form>
+  </div>
+</nav>
+<main class="dashboard-main">
 <div class="settings">
   <a href="/dashboard" class="back-link">&larr; Dashboard</a>
   <h1>Settings</h1>
@@ -16,10 +29,41 @@
   <section class="settings-section">
     <h2>Plan</h2>
     <dl>
-      <dt>Current plan</dt><dd>{{.plan}}</dd>
+      <dt>Current plan</dt><dd><span class="plan-badge">{{.plan}}</span></dd>
       <dt>Contributors/month</dt><dd>{{comma .max_contributors}}</dd>
       <dt>Rate limit</dt><dd>{{comma .rate_limit}}/hour</dd>
     </dl>
+  </section>
+
+  <section class="settings-section">
+    <h2>API Tokens</h2>
+    {{if .tokens}}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Prefix</th>
+          <th>Last Used</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .tokens}}
+        <tr>
+          <td>{{.Name}}</td>
+          <td><code>{{.Prefix}}…</code></td>
+          <td>{{if .LastUsed}}{{.LastUsed.Format "2006-01-02 15:04"}}{{else}}Never{{end}}</td>
+          <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+          <td><button class="btn btn-sm btn-danger" onclick="revokeToken('{{.ID}}')">Revoke</button></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p>No API tokens yet.</p>
+    {{end}}
+    <button class="btn btn-primary" onclick="generateToken()">Generate Token</button>
   </section>
 
   <section class="settings-section">
@@ -31,4 +75,8 @@
     </div>
   </section>
 </div>
+</main>
+<footer class="app-footer">
+  DevTrace &middot; 2026
+</footer>
 {{end}}

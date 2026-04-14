@@ -259,13 +259,13 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 	mux.Handle("POST /tos/accept", requireSession(tosAcceptHandler(store)))
 
 	// Score card page — accepts any auth
-	mux.Handle("GET /score/{username}", requireAny(scorecardHandler(scoreSvc)))
+	mux.Handle("GET /score/{username}", scoreRL.wrap(requireAny(scorecardHandler(scoreSvc))))
 
 	// Score API — accepts any auth (token, session, or none)
 	mux.Handle("GET /api/v1/score/{username}", scoreRL.wrap(requireAny(scoreHandler(db, store, scoreSvc))))
 
 	// Score history API (trend chart data)
-	mux.Handle("GET /api/v1/score/{username}/history", requireAny(historyHandler(store)))
+	mux.Handle("GET /api/v1/score/{username}/history", scoreRL.wrap(requireAny(historyHandler(store))))
 
 	// Token management — requires session auth (UI only)
 	mux.Handle("POST /api/v1/token", requireSession(createTokenHandler(db)))
