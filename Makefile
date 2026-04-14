@@ -99,7 +99,7 @@ vulncheck: ## Scans for known vulnerabilities with govulncheck
 	GOFLAGS="-mod=vendor" govulncheck -test ./...
 
 .PHONY: qualify
-qualify: test-coverage lint vulncheck ## Qualifies the codebase (test, lint, vulncheck)
+qualify: test-coverage lint vulncheck e2e ## Qualifies the codebase (test, lint, vulncheck, e2e)
 	@echo "Codebase qualification completed"
 
 .PHONY: e2e
