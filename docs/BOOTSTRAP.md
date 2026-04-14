@@ -64,32 +64,25 @@ After creating: note the **App ID**, download the **private key** (.pem), note t
 export GITHUB_APP_ID="your-app-id"
 ```
 
-## 5. Push Bootstrap Images
+## 5. First Terraform Apply (creates infra — Cloud Run will fail)
 
-Terraform needs images to exist before creating Cloud Run resources. Push manually (one-time):
+Cloud Run needs images + secrets to start, but the Artifact Registry and Secret Manager resources don't exist yet. Run Terraform once to create the infra — Cloud Run will error, that's expected.
 
 ```shell
-# Authenticate to Artifact Registry
-gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
-
-# Set the AR registry path
-AR_REGISTRY=$REGION-docker.pkg.dev/$PROJECT_ID/devtrace-saas-images
-
-# Build and push
-KO_DOCKER_REPO=${AR_REGISTRY}/devtrace-site ko build ./cmd/devtrace-site/ --bare --tags latest
-KO_DOCKER_REPO=${AR_REGISTRY}/devtrace-ingest ko build ./cmd/devtrace-ingest/ --bare --tags latest
+cd infra/saas
+terraform init
+terraform apply \
+  -var="github_oauth_client_id=$GITHUB_OAUTH_CLIENT_ID" \
+  -var="github_app_id=$GITHUB_APP_ID"
 ```
 
-## 6. Create Secrets (Empty)
+This creates: DB user, Secret Manager secrets (empty), service accounts, Artifact Registry repo, WIF, Cloud Scheduler. Cloud Run service and job will error because images and secret values don't exist yet — that's fine, we fix it in the next steps.
 
-Terraform creates Secret Manager resources, but Cloud Run fails if secrets have no versions. Create initial versions **before** `terraform apply`:
+## 6. Store Secret Values
+
+Secret Manager resources now exist. Add the actual values:
 
 ```shell
-# Terraform must run first to create the secret containers.
-# If bootstrapping fresh, run terraform apply once (it will fail on Cloud Run),
-# then add secret versions, then apply again.
-# If the secrets already exist (e.g. from a previous deploy), add versions directly.
-
 # GitHub OAuth client secret
 echo -n "YOUR_OAUTH_CLIENT_SECRET" | \
 gcloud secrets versions add devtrace-saas-oauth-client-secret \
@@ -110,37 +103,42 @@ gcloud secrets versions add devtrace-saas-anthropic-api-key \
     --project=$PROJECT_ID --data-file=-
 ```
 
-> **Note:** Secret Manager resources are created by Terraform, but you must add versions (values) manually. Terraform creates empty secret containers — Cloud Run fails if it references a secret with no versions.
+## 7. Push Bootstrap Images
 
-## 7. Run Terraform
+Artifact Registry now exists. Push initial images:
+
+```shell
+gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
+
+AR_REGISTRY=$REGION-docker.pkg.dev/$PROJECT_ID/devtrace-saas-images
+
+KO_DOCKER_REPO=${AR_REGISTRY}/devtrace-site ko build ./cmd/devtrace-site/ --bare --tags latest
+KO_DOCKER_REPO=${AR_REGISTRY}/devtrace-ingest ko build ./cmd/devtrace-ingest/ --bare --tags latest
+```
+
+## 8. Second Terraform Apply (completes Cloud Run)
+
+Now that images and secrets exist, apply again:
 
 ```shell
 cd infra/saas
-terraform init
 terraform apply \
   -var="github_oauth_client_id=$GITHUB_OAUTH_CLIENT_ID" \
   -var="github_app_id=$GITHUB_APP_ID"
 ```
 
-This creates:
-- DB user (`devtrace`) in shared Cloud SQL instance
-- Secret Manager secrets (4: oauth, webhook, app key, anthropic)
-- Service accounts (runtime, scheduler invoker, deployer)
-- Artifact Registry standard repo (`devtrace-saas-images`)
-- Cloud Run service (`devtrace-saas-serve`) + job (`devtrace-saas-ingest`)
-- Cloud Scheduler (hourly at :20)
-- WIF for GitHub Actions
+This creates the remaining resources:
+- Cloud Run service (`devtrace-saas-serve`)
+- Cloud Run job (`devtrace-saas-ingest`)
 
-VPC, Cloud SQL instance, and networking are owned by `thingzio/infra`.
-
-> **First apply note:** `deletion_protection = false` is set in `cloudrun.tf`. Set to `true` after successful deploy.
+> `deletion_protection = false` during initial setup. Set to `true` after successful verification.
 
 Note the outputs:
 ```shell
 terraform output
 ```
 
-## 8. Configure GitHub Actions
+## 9. Configure GitHub Actions
 
 Populate the `saas` environment variables from Terraform outputs:
 
@@ -152,7 +150,7 @@ cd ../..  # back to repo root
 This creates 7 variables in the GitHub `saas` environment:
 `WIF_PROVIDER`, `DEPLOYER_SA`, `SERVICE_NAME`, `JOB_NAME`, `REGION`, `PROJECT_ID`, `AR_REPO`
 
-## 9. Configure DNS
+## 10. Configure DNS
 
 Add a CNAME record for `devtrace` pointing to `ghs.googlehosted.com.` and create a Cloud Run domain mapping:
 
@@ -164,7 +162,7 @@ gcloud beta run domain-mappings create \
     --region=$REGION
 ```
 
-## 10. First Release
+## 11. First Release
 
 ```shell
 make bump-minor
@@ -177,7 +175,7 @@ This triggers the release pipeline:
 4. Deploys to Cloud Run (service + ingest job)
 5. Publishes GitHub release
 
-## 11. Verify
+## 12. Verify
 
 ```shell
 # Check service URL
