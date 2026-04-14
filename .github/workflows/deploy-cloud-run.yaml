@@ -39,4 +39,6 @@ jobs:
           echo "Deploying ${TAG} via ${AR}..."
           gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region=${{ vars.REGION }} \
-            --image="${AR}/devtrace-site:${TAG}"
+            --image="${AR}/devtrace-site:${TAG}" \
+            --min-instances=1 \
+            --max-instances=1
