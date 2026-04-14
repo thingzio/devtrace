@@ -1,10 +1,53 @@
+# Mac 
 .DS_Store
-*.exe
-/vendor/
-dist/
-cover.out
-cover-filtered.out
+
+# Test binaries
+*.test
+tmp
+
+# Coverage
+*.out
+
+# Binaries
+bin
+dist
+
+# Build output binaries (not source directories)
 /devtrace-site
 /devtrace-scorer
 /devtrace-admin
 /devtrace-ingest
+
+# Keys
+*.pem
+
+# GCP credentials (created by google-github-actions/auth)
+gha-creds-*.json
+
+
+# Configs
+pkg/config/config.yaml
+
+.claude/settings.local.json
+
+# Worktrees
+.worktrees
+
+
+# =============================================================================
+# Terraform
+# =============================================================================
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
