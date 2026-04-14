@@ -21,6 +21,7 @@ import (
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/health"
+	"github.com/thingzio/devtrace/pkg/ingest"
 	"github.com/thingzio/devtrace/pkg/middleware"
 	"github.com/thingzio/devtrace/pkg/oauth"
 	"github.com/thingzio/devtrace/pkg/service"
@@ -110,6 +111,11 @@ func Run(ctx context.Context, opts Options) error {
 
 		scorerStop := background.StartBackgroundScorer(ctx, store, ghClient, opts.Version)
 		defer scorerStop()
+
+		ingestStop := background.StartIngestLoop(ctx, func(ctx context.Context) error {
+			return ingest.Run(ctx, store)
+		}, 0)
+		defer ingestStop()
 	}
 
 	scoreSvc := service.NewScoreService(ghClient, nil, opts.Version)
