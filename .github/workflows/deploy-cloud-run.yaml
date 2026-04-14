@@ -40,6 +40,3 @@ jobs:
           gcloud run services update ${{ vars.SERVICE_NAME }} \
             --region=${{ vars.REGION }} \
             --image="${AR}/devtrace-site:${TAG}"
-          gcloud run jobs update ${{ vars.JOB_NAME }} \
-            --region=${{ vars.REGION }} \
-            --image="${AR}/devtrace-ingest:${TAG}"
