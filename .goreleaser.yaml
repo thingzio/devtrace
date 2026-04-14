@@ -21,6 +21,24 @@ builds:
       - amd64
       - arm64
 
+  - id: devtrace-ingest
+    binary: devtrace-ingest
+    dir: ./cmd/devtrace-ingest
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+        -X main.version={{.Version}}
+        -X main.commit={{.ShortCommit}}
+        -X main.date={{.CommitDate}}
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
 release:
   github:
     owner: thingzio
@@ -33,6 +51,18 @@ kos:
     build: devtrace-site
     repositories:
       - us-west1-docker.pkg.dev/thingzio/devtrace-saas-images/devtrace-site
+    platforms:
+      - linux/amd64
+    tags:
+      - latest
+      - "{{.Tag}}"
+    preserve_import_paths: false
+    bare: true
+
+  - id: devtrace-ingest
+    build: devtrace-ingest
+    repositories:
+      - us-west1-docker.pkg.dev/thingzio/devtrace-saas-images/devtrace-ingest
     platforms:
       - linux/amd64
     tags:

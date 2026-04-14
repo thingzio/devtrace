@@ -4,6 +4,7 @@
 dist/
 cover.out
 cover-filtered.out
-devtrace-site
-devtrace-scorer
-devtrace-admin
+/devtrace-site
+/devtrace-scorer
+/devtrace-admin
+/devtrace-ingest
