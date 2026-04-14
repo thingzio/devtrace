@@ -78,15 +78,25 @@ type InputSignals struct {
 }
 
 // Compute returns a reputation score in [0.0, 1.0] using the v3 weighted model.
-func Compute(s InputSignals) float64 {
+// When hasRepo is false, repo-dependent signal weights are redistributed across
+// available signals so the score reflects what can actually be evaluated.
+func Compute(s InputSignals, hasRepo bool) float64 {
 	if s.Suspended {
 		return 0
 	}
 
+	// Weight scaling factor: without repo context, repo-dependent weights
+	// (provenance, proportion, recency, association) are redistributed.
+	// Available weight without repo: 0.60 of 1.00. Scale = 1/0.60 ≈ 1.667.
+	scale := 1.0
+	if !hasRepo {
+		scale = 1.0 / 0.60
+	}
+
 	var rep float64
 
-	// --- Category 1: Code Provenance (0.15) ---
-	if s.Commits > 0 && s.TotalCommits > 0 {
+	// --- Category 1: Code Provenance (0.15) — repo-dependent ---
+	if hasRepo && s.Commits > 0 && s.TotalCommits > 0 {
 		verifiedRatio := float64(s.Commits-s.UnverifiedCommits) / float64(s.Commits)
 		maturity := logCurve(float64(s.AgeDays), verificationMaturityCeil)
 		rep += verifiedRatio * maturity * provenanceWeight
@@ -94,47 +104,19 @@ func Compute(s InputSignals) float64 {
 
 	// --- Category 2: Identity (0.25) ---
 	rep += logCurve(float64(s.AgeDays), ageCeilDays) * ageWeight
-	rep += associationScore(s.AuthorAssociation, s.OrgMember, s.TrustedOrgMember) * associationWeight
 
-	profileCount := 0
-	if s.HasBio {
-		profileCount++
+	// Association is repo-dependent (needs org membership context).
+	if hasRepo {
+		rep += associationScore(s.AuthorAssociation, s.OrgMember, s.TrustedOrgMember) * associationWeight
 	}
-	if s.HasCompany {
-		profileCount++
-	}
-	if s.HasLocation {
-		profileCount++
-	}
-	if s.HasWebsite {
-		profileCount++
-	}
-	if s.HasPublicEmail {
-		profileCount++
-	}
-	rep += float64(profileCount) / 5.0 * profileWeight
+
+	rep += profileScore(s) * profileWeight
 
 	// --- Category 3: Engagement (0.25) ---
-	if s.Commits > 0 && s.TotalCommits > 0 {
-		proportion := float64(s.Commits) / float64(s.TotalCommits)
-		propCeil := math.Max(1.0/float64(max(s.TotalContributors, 1)), minProportionCeil)
-
-		confThreshold := float64(max(
-			int64(s.TotalContributors)*int64(confCommitsPerContrib),
-			int64(minConfidenceCommits),
-		))
-		confidence := math.Min(float64(s.TotalCommits)/confThreshold, 1.0)
-
-		rep += clampedRatio(proportion, propCeil) * confidence * proportionWeight
+	// Proportion and recency are repo-dependent.
+	if hasRepo {
+		rep += repoEngagementScore(s)
 	}
-
-	numContrib := max(s.TotalContributors, 1)
-	halfLifeMult := math.Max(1.0/math.Log(1+float64(numContrib)), minHalfLifeMultiple)
-	if halfLifeMult > 1.0 {
-		halfLifeMult = 1.0
-	}
-	halfLife := baseHalfLifeDays * halfLifeMult
-	rep += expDecay(float64(s.LastCommitDays), halfLife) * recencyWeight
 
 	totalTerminalPRs := s.PRsMerged + s.PRsClosed
 	if totalTerminalPRs > 0 {
@@ -166,80 +148,70 @@ func Compute(s InputSignals) float64 {
 		rep += clampedRatio(originalRepos, forkOriginalCeil) * forkOnlyWeight
 	}
 
+	// Scale up when repo-dependent weights were excluded.
+	rep *= scale
+	if rep > 1.0 {
+		rep = 1.0
+	}
+
 	return toFixed(rep, 2)
 }
 
 // Categories returns per-category scores for the given signals.
-func Categories(s InputSignals) map[string]float64 {
+// When hasRepo is false, repo-dependent categories are omitted (not zero).
+func Categories(s InputSignals, hasRepo bool) map[string]float64 {
 	if s.Suspended {
-		return map[string]float64{
-			"code_provenance": 0,
-			"identity":        0,
-			"engagement":      0,
-			"community":       0,
-			"behavioral":      0,
+		cats := map[string]float64{
+			"identity":   0,
+			"engagement": 0,
+			"community":  0,
+			"behavioral": 0,
 		}
+		if hasRepo {
+			cats["code_provenance"] = 0
+		}
+		return cats
+	}
+
+	scale := 1.0
+	if !hasRepo {
+		scale = 1.0 / 0.60
 	}
 
 	cats := make(map[string]float64, 5)
 
-	// Code Provenance
-	var prov float64
-	if s.Commits > 0 && s.TotalCommits > 0 {
-		verifiedRatio := float64(s.Commits-s.UnverifiedCommits) / float64(s.Commits)
-		maturity := logCurve(float64(s.AgeDays), verificationMaturityCeil)
-		prov = verifiedRatio * maturity * provenanceWeight
+	// Code Provenance — repo-dependent
+	if hasRepo {
+		var prov float64
+		if s.Commits > 0 && s.TotalCommits > 0 {
+			verifiedRatio := float64(s.Commits-s.UnverifiedCommits) / float64(s.Commits)
+			maturity := logCurve(float64(s.AgeDays), verificationMaturityCeil)
+			prov = verifiedRatio * maturity * provenanceWeight
+		}
+		cats["code_provenance"] = toFixed(prov, 4)
 	}
-	cats["code_provenance"] = toFixed(prov, 4)
 
 	// Identity
 	identity := logCurve(float64(s.AgeDays), ageCeilDays) * ageWeight
-	identity += associationScore(s.AuthorAssociation, s.OrgMember, s.TrustedOrgMember) * associationWeight
-	profileCount := 0
-	if s.HasBio {
-		profileCount++
+	if hasRepo {
+		identity += associationScore(s.AuthorAssociation, s.OrgMember, s.TrustedOrgMember) * associationWeight
 	}
-	if s.HasCompany {
-		profileCount++
-	}
-	if s.HasLocation {
-		profileCount++
-	}
-	if s.HasWebsite {
-		profileCount++
-	}
-	if s.HasPublicEmail {
-		profileCount++
-	}
-	identity += float64(profileCount) / 5.0 * profileWeight
-	cats["identity"] = toFixed(identity, 4)
+	identity += profileScore(s) * profileWeight
+	cats["identity"] = toFixed(identity*scale, 4)
 
-	// Engagement
+	// Engagement — proportion and recency are repo-dependent
 	var engagement float64
-	if s.Commits > 0 && s.TotalCommits > 0 {
-		proportion := float64(s.Commits) / float64(s.TotalCommits)
-		propCeil := math.Max(1.0/float64(max(s.TotalContributors, 1)), minProportionCeil)
-		confThreshold := float64(max(
-			int64(s.TotalContributors)*int64(confCommitsPerContrib),
-			int64(minConfidenceCommits),
-		))
-		confidence := math.Min(float64(s.TotalCommits)/confThreshold, 1.0)
-		engagement += clampedRatio(proportion, propCeil) * confidence * proportionWeight
+	if hasRepo {
+		engagement += repoEngagementScore(s)
 	}
-	numContrib := max(s.TotalContributors, 1)
-	halfLifeMult := math.Max(1.0/math.Log(1+float64(numContrib)), minHalfLifeMultiple)
-	if halfLifeMult > 1.0 {
-		halfLifeMult = 1.0
-	}
-	halfLife := baseHalfLifeDays * halfLifeMult
-	engagement += expDecay(float64(s.LastCommitDays), halfLife) * recencyWeight
+	// PR accept rate is global (not repo-dependent).
 	totalTerminalPRs := s.PRsMerged + s.PRsClosed
 	if totalTerminalPRs > 0 {
 		mergeRate := float64(s.PRsMerged) / float64(totalTerminalPRs)
 		confidence := logCurve(float64(totalTerminalPRs), prCountCeil)
 		engagement += mergeRate * confidence * prAcceptWeight
 	}
-	cats["engagement"] = toFixed(engagement, 4)
+	cats["engagement"] = toFixed(engagement*scale, 4)
 
 	// Community
 	var community float64
@@ -248,7 +220,7 @@ func Categories(s InputSignals) map[string]float64 {
 		community += logCurve(ratio, followerRatioCeil) * followerWeight
 	}
 	community += logCurve(float64(s.PublicRepos), repoCountCeil) * repoCountWeight
-	cats["community"] = toFixed(community, 4)
+	cats["community"] = toFixed(community*scale, 4)
 
 	// Behavioral
 	var behavioral float64
@@ -264,9 +236,54 @@ func Categories(s InputSignals) map[string]float64 {
 		originalRepos := float64(totalOwnedRepos - s.ForkedRepos)
 		behavioral += clampedRatio(originalRepos, forkOriginalCeil) * forkOnlyWeight
 	}
-	cats["behavioral"] = toFixed(behavioral, 4)
+	cats["behavioral"] = toFixed(behavioral*scale, 4)
 
 	return cats
+}
+
+// repoEngagementScore returns the repo-dependent portion of the engagement score
+// (proportion + recency). Returns 0 when repo context is not available.
+func repoEngagementScore(s InputSignals) float64 {
+	var score float64
+	if s.Commits > 0 && s.TotalCommits > 0 {
+		proportion := float64(s.Commits) / float64(s.TotalCommits)
+		propCeil := math.Max(1.0/float64(max(s.TotalContributors, 1)), minProportionCeil)
+		confThreshold := float64(max(
+			int64(s.TotalContributors)*int64(confCommitsPerContrib),
+			int64(minConfidenceCommits),
+		))
+		confidence := math.Min(float64(s.TotalCommits)/confThreshold, 1.0)
+		score += clampedRatio(proportion, propCeil) * confidence * proportionWeight
+	}
+	numContrib := max(s.TotalContributors, 1)
+	halfLifeMult := math.Max(1.0/math.Log(1+float64(numContrib)), minHalfLifeMultiple)
+	if halfLifeMult > 1.0 {
+		halfLifeMult = 1.0
+	}
+	halfLife := baseHalfLifeDays * halfLifeMult
+	score += expDecay(float64(s.LastCommitDays), halfLife) * recencyWeight
+	return score
+}
+
+// profileScore returns a [0, 1] score based on profile completeness.
+func profileScore(s InputSignals) float64 {
+	count := 0
+	if s.HasBio {
+		count++
+	}
+	if s.HasCompany {
+		count++
+	}
+	if s.HasLocation {
+		count++
+	}
+	if s.HasWebsite {
+		count++
+	}
+	if s.HasPublicEmail {
+		count++
+	}
+	return float64(count) / 5.0
 }
 
 // associationScore maps GitHub's author_association to a [0, 1] score.

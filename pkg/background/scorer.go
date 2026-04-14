@@ -123,7 +123,7 @@ func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client
 		return fmt.Errorf("fetch signals: %w", err)
 	}
 
-	value := score.Compute(*signals)
+	value := score.Compute(*signals, false) // background scoring has no repo context
 	grade := score.Grade(value)
 
 	_ = store.UpsertContributor(ctx, username, provider)

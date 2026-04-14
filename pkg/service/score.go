@@ -96,7 +96,8 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 		signals.TrustedOrgMember = s.checkTrustedOrgs(ctx, username, trustedOrgs)
 	}
 
-	value := score.Compute(*signals)
+	hasRepo := repo != ""
+	value := score.Compute(*signals, hasRepo)
 	grade := score.Grade(value)
 	now := time.Now().UTC()
 
@@ -108,10 +109,11 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 		Score: &model.Score{
 			Grade:      grade,
 			Value:      value,
-			Categories: score.Categories(*signals),
+			Categories: score.Categories(*signals, hasRepo),
 		},
 		Signals:     signalsFromInput(signals, profile),
 		RiskSummary: generateRiskSummary(signals, value, repo != ""),
+		ScoringMode: scoringMode(hasRepo),
 		ScoredAt:    now,
 	}
 
@@ -122,17 +124,18 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 	// Try Claude for richer risk narrative (best-effort, falls back to template).
 	if s.claude != nil {
 		input := claude.RiskInput{
-			Username:    username,
-			Score:       value,
-			Grade:       grade,
-			Categories:  score.Categories(*signals),
-			AccountAge:  signals.AgeDays,
-			PRsMerged:   signals.PRsMerged,
-			PRsClosed:   signals.PRsClosed,
-			Followers:   signals.Followers,
-			PublicRepos: signals.PublicRepos,
-			Suspended:   signals.Suspended,
-			RepoContext: repo,
+			Username:       username,
+			Score:          value,
+			Grade:          grade,
+			Categories:     score.Categories(*signals, hasRepo),
+			AccountAge:     signals.AgeDays,
+			PRsMerged:      signals.PRsMerged,
+			PRsClosed:      signals.PRsClosed,
+			Followers:      signals.Followers,
+			PublicRepos:    signals.PublicRepos,
+			Suspended:      signals.Suspended,
+			HasRepoContext: repo != "",
+			RepoContext:    repo,
 		}
 		if narrative, err := s.claude.GenerateRiskNarrative(ctx, input); err == nil && narrative != "" {
 			full.RiskSummary = narrative
@@ -206,6 +209,13 @@ func (s *ScoreService) checkTrustedOrgs(ctx context.Context, username string, or
 	return false
 }
 
+func scoringMode(hasRepo bool) string {
+	if hasRepo {
+		return "repo"
+	}
+	return "global"
+}
+
 // signalsFromInput maps InputSignals and UserProfile to global response signals.
 func signalsFromInput(s *score.InputSignals, p *ghclient.UserProfile) *model.Signals {
 	return &model.Signals{
@@ -253,6 +263,7 @@ func (s *ScoreService) botResponse(username string) *model.ScoreResponse {
 			Value: 0,
 		},
 		RiskSummary: "Bot account detected. Scoring is not applicable.",
+		ScoringMode: "bot",
 		ScoredAt:    time.Now().UTC(),
 	}
 }

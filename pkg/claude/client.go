@@ -61,17 +61,18 @@ func New() *Client {
 
 // RiskInput contains the data for risk narrative generation.
 type RiskInput struct {
-	Username    string             `json:"username"`
-	Score       float64            `json:"score"`
-	Grade       string             `json:"grade"`
-	Categories  map[string]float64 `json:"categories"`
-	AccountAge  int64              `json:"account_age_days"`
-	PRsMerged   int64              `json:"prs_merged"`
-	PRsClosed   int64              `json:"prs_closed"`
-	Followers   int64              `json:"followers"`
-	PublicRepos int64              `json:"public_repos"`
-	Suspended   bool               `json:"suspended"`
-	RepoContext string             `json:"repo_context,omitempty"`
+	Username       string             `json:"username"`
+	Score          float64            `json:"score"`
+	Grade          string             `json:"grade"`
+	Categories     map[string]float64 `json:"categories"`
+	AccountAge     int64              `json:"account_age_days"`
+	PRsMerged      int64              `json:"prs_merged"`
+	PRsClosed      int64              `json:"prs_closed"`
+	Followers      int64              `json:"followers"`
+	PublicRepos    int64              `json:"public_repos"`
+	Suspended      bool               `json:"suspended"`
+	HasRepoContext bool               `json:"has_repo_context"`
+	RepoContext    string             `json:"repo_context,omitempty"`
 }
 
 // AuthenticityResult is the classification result for PR descriptions.
@@ -82,10 +83,17 @@ type AuthenticityResult struct {
 }
 
 const riskSystemPrompt = `You are a security analyst assessing open source contributor reputation.
-Given a contributor's scoring signals, produce a 1-2 sentence risk assessment.
-Focus on actionable insight: what should a maintainer do with this PR?
-Be specific about which signals drive your assessment.
-Do not use jargon. Do not hedge excessively. Do not use markdown formatting.`
+Given a contributor's scoring signals, produce a 1-2 sentence factual assessment.
+
+Category scores are WEIGHTED CONTRIBUTIONS to the total (not percentages).
+Maximum possible per category: code_provenance=0.15, identity=0.25, engagement=0.25, community=0.15, behavioral=0.20.
+A category score near its max is STRONG, not weak. Example: behavioral=0.20 means perfect behavioral score.
+
+Categories showing 0.00 without repo_context means data was NOT AVAILABLE (no repo to evaluate), not a negative signal. Do not treat missing data as concerning.
+
+When repo_context is empty, focus on the contributor's global reputation (account age, PRs, community standing). Do not use PR review language like "review this PR" or "before merging".
+
+Be factual and constructive. Highlight genuine strengths. Only flag actual concerns backed by specific signal values. Do not speculate or assume negative intent. Do not use markdown formatting.`
 
 const authenticitySystemPrompt = `Classify the following PR descriptions as: human, ai_assisted, ai_generated, or uncertain.
 AI-generated descriptions tend to: use bullet points exhaustively, explain "what" but omit "why",

@@ -83,6 +83,7 @@ func scorecardHandler(svc *service.ScoreService) http.HandlerFunc {
 			"Grade":       resp.Score.Grade,
 			"Value":       resp.Score.Value,
 			"Version":     resp.Version,
+			"ScoringMode": resp.ScoringMode,
 			"GradeClass":  gradeClass,
 			"Categories":  resp.Score.Categories,
 			"Signals":     resp.Signals,

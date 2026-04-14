@@ -20,6 +20,7 @@ type ScoreResponse struct {
 	License     *License     `json:"license,omitempty"`
 	AISensing   *AISensing   `json:"ai_sensing,omitempty"`
 	Behavior    *Behavior    `json:"behavior,omitempty"`
+	ScoringMode string       `json:"scoring_mode"` // "global" or "repo"
 	ScoredAt    time.Time    `json:"scored_at"`
 	CachedAt    *time.Time   `json:"cached_at,omitempty"`
 	Detail      string       `json:"detail,omitempty"`
