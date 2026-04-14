@@ -182,7 +182,7 @@ func buildGitHubClient(ctx context.Context, store *postgres.Store) (ghclient.Cli
 			for _, inst := range installations {
 				tok, err := tenant.MintInstallationToken(ctx, appCfg, inst.InstallationID)
 				if err != nil {
-					slog.Warn("skip installation token", "installation_id", inst.InstallationID, "error", err)
+					slog.Debug("skip installation token (likely belongs to another app)", "installation_id", inst.InstallationID, "error", err)
 					continue
 				}
 				tokens = append(tokens, tok.Token)
