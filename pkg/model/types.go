@@ -32,7 +32,7 @@ type Score struct {
 	Categories map[string]float64 `json:"categories,omitempty"`
 }
 
-// Signals holds the raw profile and activity signals used for scoring.
+// Signals holds global profile and activity signals (always meaningful without repo context).
 type Signals struct {
 	AccountAgeDays    int64 `json:"account_age_days"`
 	Followers         int64 `json:"followers"`
@@ -48,13 +48,10 @@ type Signals struct {
 	HasWebsite        bool  `json:"has_website"`
 	HasVerifiedEmail  bool  `json:"has_verified_email"`
 	Suspended         bool  `json:"suspended"`
-	// Repo-scoped signals: nil when no repo context (not evaluated), non-nil when checked.
-	OrgMember         *bool  `json:"org_member"`
-	CommitsVerified   *bool  `json:"commits_verified"`
-	AuthorAssociation string `json:"author_association,omitempty"`
 }
 
 // RepoContext holds contributor-specific context within a repository.
+// Only present when a repo is provided in the request.
 type RepoContext struct {
 	Repo              string `json:"repo"`
 	Commits           int64  `json:"commits"`
@@ -62,7 +59,8 @@ type RepoContext struct {
 	TotalContributors int    `json:"total_contributors"`
 	LastCommitDays    *int64 `json:"last_commit_days"`
 	OrgMember         bool   `json:"org_member"`
-	AuthorAssociation string `json:"author_association"`
+	CommitsVerified   bool   `json:"commits_verified"`
+	AuthorAssociation string `json:"author_association,omitempty"`
 	TrustedOrgMember  bool   `json:"trusted_org_member"`
 }
 

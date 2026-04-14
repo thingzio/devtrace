@@ -174,14 +174,41 @@ func TestScoreContributorWithRepo(t *testing.T) {
 	}
 }
 
-func TestRiskSummarySuspended(t *testing.T) {
+func TestRiskSummarySuspendedWithRepo(t *testing.T) {
 	sig := &score.InputSignals{Suspended: true}
-	summary := generateRiskSummary(sig, 0)
+	summary := generateRiskSummary(sig, 0, true)
 	if !strings.Contains(summary, "suspended") {
 		t.Errorf("suspended summary missing keyword: %q", summary)
 	}
 	if !strings.Contains(summary, "Do not merge") {
-		t.Errorf("suspended summary missing warning: %q", summary)
+		t.Errorf("suspended summary with repo missing warning: %q", summary)
+	}
+}
+
+func TestRiskSummarySuspendedWithoutRepo(t *testing.T) {
+	sig := &score.InputSignals{Suspended: true}
+	summary := generateRiskSummary(sig, 0, false)
+	if !strings.Contains(summary, "suspended") {
+		t.Errorf("suspended summary missing keyword: %q", summary)
+	}
+	if strings.Contains(summary, "Do not merge") {
+		t.Errorf("suspended summary without repo should not have review language: %q", summary)
+	}
+}
+
+func TestRiskSummaryWithRepoReviewLanguage(t *testing.T) {
+	sig := &score.InputSignals{AgeDays: 500, PRsMerged: 5}
+	summary := generateRiskSummary(sig, 0.5, true)
+	if !strings.Contains(summary, "review") {
+		t.Errorf("with-repo summary should contain review language: %q", summary)
+	}
+}
+
+func TestRiskSummaryWithoutRepoNoReviewLanguage(t *testing.T) {
+	sig := &score.InputSignals{AgeDays: 500, PRsMerged: 5}
+	summary := generateRiskSummary(sig, 0.5, false)
+	if strings.Contains(summary, "review") {
+		t.Errorf("without-repo summary should not contain review language: %q", summary)
 	}
 }
 
@@ -232,7 +259,7 @@ func TestRiskSummaryNewAccount(t *testing.T) {
 		AgeDays:   30,
 		PRsMerged: 1,
 	}
-	summary := generateRiskSummary(sig, 0.2)
+	summary := generateRiskSummary(sig, 0.2, false)
 	if !strings.Contains(summary, "recently") {
 		t.Errorf("new account summary should mention 'recently': %q", summary)
 	}

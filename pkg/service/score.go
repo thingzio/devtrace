@@ -105,8 +105,8 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string) (
 			Value:      value,
 			Categories: score.Categories(*signals),
 		},
-		Signals:     signalsFromInput(signals, profile, repo != ""),
-		RiskSummary: generateRiskSummary(signals, value),
+		Signals:     signalsFromInput(signals, profile),
+		RiskSummary: generateRiskSummary(signals, value, repo != ""),
 		ScoredAt:    now,
 	}
 
@@ -182,11 +182,9 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 	return &resp
 }
 
-// signalsFromInput maps InputSignals and UserProfile to the response Signals type.
-// Repo-scoped signals (OrgMember, CommitsVerified, AuthorAssociation) are only
-// populated when repo context exists; otherwise they are nil/empty.
-func signalsFromInput(s *score.InputSignals, p *ghclient.UserProfile, hasRepo bool) *model.Signals {
-	sig := &model.Signals{
+// signalsFromInput maps InputSignals and UserProfile to global response signals.
+func signalsFromInput(s *score.InputSignals, p *ghclient.UserProfile) *model.Signals {
+	return &model.Signals{
 		AccountAgeDays:    s.AgeDays,
 		Followers:         p.Followers,
 		Following:         p.Following,
@@ -202,16 +200,6 @@ func signalsFromInput(s *score.InputSignals, p *ghclient.UserProfile, hasRepo bo
 		HasVerifiedEmail:  s.HasVerifiedEmail,
 		Suspended:         s.Suspended,
 	}
-
-	if hasRepo {
-		orgMember := s.OrgMember
-		sig.OrgMember = &orgMember
-		verified := s.UnverifiedCommits == 0 && s.Commits > 0
-		sig.CommitsVerified = &verified
-		sig.AuthorAssociation = s.AuthorAssociation
-	}
-
-	return sig
 }
 
 // repoContextFromSignals maps repo-specific fields from InputSignals.
@@ -224,6 +212,7 @@ func repoContextFromSignals(s *score.InputSignals, repo string) *model.RepoConte
 		TotalContributors: s.TotalContributors,
 		LastCommitDays:    &lcd,
 		OrgMember:         s.OrgMember,
+		CommitsVerified:   s.UnverifiedCommits == 0 && s.Commits > 0,
 		AuthorAssociation: s.AuthorAssociation,
 		TrustedOrgMember:  s.TrustedOrgMember,
 	}
@@ -245,20 +234,26 @@ func (s *ScoreService) botResponse(username string) *model.ScoreResponse {
 }
 
 // generateRiskSummary produces a human-readable risk assessment.
-func generateRiskSummary(s *score.InputSignals, value float64) string {
+// When repo is provided, uses review-oriented language. Without repo,
+// focuses on contributor reputation.
+func generateRiskSummary(s *score.InputSignals, value float64, hasRepo bool) string {
 	var summary string
 
 	switch {
 	case s.Suspended:
-		summary = "Account is suspended. Do not merge without manual review."
+		if hasRepo {
+			summary = "Account is suspended. Do not merge without manual review."
+		} else {
+			summary = "Account is suspended."
+		}
 	case value >= 0.8:
-		summary = "Established account with strong contribution history."
+		summary = "Well-established contributor with strong activity history."
 	case value >= 0.5:
-		summary = "Established account with consistent contribution history."
+		summary = "Established contributor with consistent activity history."
 	case value >= 0.3:
-		summary = "Limited contribution history. Careful review recommended."
+		summary = "Limited contribution history."
 	default:
-		summary = "Minimal public activity. Manual review strongly recommended."
+		summary = "Minimal public activity."
 	}
 
 	if s.AgeDays < 90 {
@@ -267,17 +262,19 @@ func generateRiskSummary(s *score.InputSignals, value float64) string {
 	if s.PRsMerged == 0 {
 		summary += " No merged pull requests on record."
 	}
-	if s.AuthorAssociation == "FIRST_TIME_CONTRIBUTOR" {
-		summary += " First-time contributor to this repository."
-	}
 
-	switch {
-	case value >= 0.7:
-		summary += " Standard review process is sufficient."
-	case value >= 0.4:
-		summary += " Enhanced review recommended."
-	default:
-		summary += " Maintainer review required."
+	if hasRepo {
+		if s.AuthorAssociation == "FIRST_TIME_CONTRIBUTOR" {
+			summary += " First-time contributor to this repository."
+		}
+		switch {
+		case value >= 0.7:
+			summary += " Standard review process is sufficient."
+		case value >= 0.4:
+			summary += " Enhanced review recommended."
+		default:
+			summary += " Maintainer review required."
+		}
 	}
 
 	return summary
