@@ -128,6 +128,9 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	scoreSvc := service.NewScoreService(ghClient, nil)
+	if store != nil {
+		scoreSvc.SetBehaviorStore(store)
+	}
 
 	oauthCfg := &oauth.Config{
 		ClientID:     os.Getenv("GITHUB_OAUTH_CLIENT_ID"),

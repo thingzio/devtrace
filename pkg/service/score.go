@@ -16,16 +16,27 @@ type ScoreStore interface {
 	SaveScore(ctx context.Context, resp *model.ScoreResponse) error
 }
 
+// BehaviorStore provides behavioral signal data from contributor activity.
+type BehaviorStore interface {
+	GetBehavioralSignals(ctx context.Context, username, provider string) (*model.Behavior, error)
+}
+
 // ScoreService orchestrates signal fetching, scoring, and response enrichment.
 type ScoreService struct {
-	gh    ghclient.Client
-	store ScoreStore // nil-safe for unit tests without DB
-	cache *scoreCache
+	gh       ghclient.Client
+	store    ScoreStore    // nil-safe for unit tests without DB
+	behStore BehaviorStore // nil-safe; behavioral signals omitted when nil
+	cache    *scoreCache
 }
 
 // NewScoreService returns a ScoreService wired to the given GitHub client and optional store.
 func NewScoreService(gh ghclient.Client, store ScoreStore) *ScoreService {
 	return &ScoreService{gh: gh, store: store, cache: newScoreCache()}
+}
+
+// SetBehaviorStore sets an optional store for behavioral signal enrichment.
+func (s *ScoreService) SetBehaviorStore(bs BehaviorStore) {
+	s.behStore = bs
 }
 
 // Score fetches signals, computes a reputation score, and builds a plan-aware response.
@@ -70,6 +81,13 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string) (
 		full.RepoContext = repoContextFromSignals(signals, repo)
 	}
 
+	// Best-effort: attach behavioral signals from GH Archive data.
+	if s.behStore != nil {
+		if beh, err := s.behStore.GetBehavioralSignals(ctx, username, string(model.ProviderGitHub)); err == nil && beh != nil {
+			full.Behavior = beh
+		}
+	}
+
 	// Cache the full response.
 	s.cache.set(username, repo, full)
 
@@ -93,12 +111,13 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 		resp.RepoContext = nil
 		resp.License = nil
 		resp.AISensing = nil
+		resp.Behavior = nil
 		resp.Detail = "Sign up for full signal breakdown -> devtrace.thingz.io"
 		now := time.Now().UTC()
 		resp.CachedAt = &now
 
 	case "free":
-		// Free gets categories, signals, risk summary — no license/AI sensing.
+		// Free gets categories, signals, risk summary, behavior — no license/AI sensing.
 		resp.License = nil
 		resp.AISensing = nil
 

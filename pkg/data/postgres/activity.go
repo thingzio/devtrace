@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"github.com/thingzio/devtrace/pkg/model"
 )
 
 // HourlySummary represents one hour of aggregated contributor activity from GH Archive.
@@ -24,15 +26,9 @@ type HourlySummary struct {
 }
 
 // BehavioralSignals holds derived behavioral metrics for a contributor.
-type BehavioralSignals struct {
-	PRVelocity30d      int       `json:"pr_velocity_30d"`
-	PRVelocityBaseline float64   `json:"pr_velocity_baseline"`
-	ReviewsGiven30d    int       `json:"reviews_given_30d"`
-	IssueComments30d   int       `json:"issue_comments_30d"`
-	DistinctRepos90d   int       `json:"distinct_repos_90d"`
-	ConsistencyScore   float64   `json:"consistency_score"`
-	ActiveSince        time.Time `json:"active_since,omitempty"`
-}
+//
+// Deprecated: Use model.Behavior directly. Kept as an alias for backward compatibility.
+type BehavioralSignals = model.Behavior
 
 // BatchUpsertActivity upserts hourly summaries into contributor_activity.
 // On conflict, counts are added to existing values. Returns the number of rows upserted.

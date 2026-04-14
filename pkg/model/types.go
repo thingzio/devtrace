@@ -18,6 +18,7 @@ type ScoreResponse struct {
 	RepoContext *RepoContext `json:"repo_context,omitempty"`
 	License     *License     `json:"license,omitempty"`
 	AISensing   *AISensing   `json:"ai_sensing,omitempty"`
+	Behavior    *Behavior    `json:"behavior,omitempty"`
 	ScoredAt    time.Time    `json:"scored_at"`
 	CachedAt    *time.Time   `json:"cached_at,omitempty"`
 	Detail      string       `json:"detail,omitempty"`
@@ -76,6 +77,17 @@ type LicenseEntry struct {
 	Count       int    `json:"count"`
 	Own         int    `json:"own"`
 	Contributed int    `json:"contributed"`
+}
+
+// Behavior holds derived behavioral metrics from GH Archive contributor activity.
+type Behavior struct {
+	PRVelocity30d      int       `json:"pr_velocity_30d"`
+	PRVelocityBaseline float64   `json:"pr_velocity_baseline"`
+	ReviewsGiven30d    int       `json:"reviews_given_30d"`
+	IssueComments30d   int       `json:"issue_comments_30d"`
+	DistinctRepos90d   int       `json:"distinct_repos_90d"`
+	ConsistencyScore   float64   `json:"consistency_score"`
+	ActiveSince        time.Time `json:"active_since,omitempty"`
 }
 
 // AISensing holds signals about AI-assisted development activity.
