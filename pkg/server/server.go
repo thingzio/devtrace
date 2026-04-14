@@ -176,13 +176,13 @@ func buildGitHubClient(ctx context.Context, store *postgres.Store) (ghclient.Cli
 
 	// Try to build a token pool from all active GitHub App installations.
 	if appErr == nil && store != nil {
-		installations, err := tenant.GetAllActiveInstallations(ctx, store.DB())
+		installations, err := tenant.GetAllActiveInstallations(ctx, store.DB(), appCfg.AppID)
 		if err == nil && len(installations) > 0 {
 			var tokens []string
 			for _, inst := range installations {
 				tok, err := tenant.MintInstallationToken(ctx, appCfg, inst.InstallationID)
 				if err != nil {
-					slog.Debug("skip installation token (likely belongs to another app)", "installation_id", inst.InstallationID, "error", err)
+					slog.Error("skip installation token", "installation_id", inst.InstallationID, "error", err)
 					continue
 				}
 				tokens = append(tokens, tok.Token)

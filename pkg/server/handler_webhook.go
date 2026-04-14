@@ -64,6 +64,7 @@ func handleInstallationEvent(ctx context.Context, db *sql.DB, body []byte) error
 		Action       string `json:"action"`
 		Installation struct {
 			ID      int64 `json:"id"`
+			AppID   int64 `json:"app_id"`
 			Account struct {
 				Login string `json:"login"`
 				Type  string `json:"type"`
@@ -85,6 +86,7 @@ func handleInstallationEvent(ctx context.Context, db *sql.DB, body []byte) error
 		}
 		return tenant.SaveInstallation(ctx, db, tn.ID,
 			event.Installation.ID,
+			event.Installation.AppID,
 			event.Installation.Account.Type,
 			event.Installation.Account.Login)
 

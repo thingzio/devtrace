@@ -21,7 +21,7 @@ func TestSaveAndListInstallations(t *testing.T) {
 		cleanup(t, db, ghID)
 	})
 
-	err = tenant.SaveInstallation(ctx, db, tn.ID, 1001, "Organization", "acme-org")
+	err = tenant.SaveInstallation(ctx, db, tn.ID, 1001, 99, "Organization", "acme-org")
 	if err != nil {
 		t.Fatalf("save installation: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestSuspendInstallation(t *testing.T) {
 		cleanup(t, db, ghID)
 	})
 
-	err = tenant.SaveInstallation(ctx, db, tn.ID, 1002, "Organization", "beta-org")
+	err = tenant.SaveInstallation(ctx, db, tn.ID, 1002, 99, "Organization", "beta-org")
 	if err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -94,11 +94,11 @@ func TestGetActiveInstallations(t *testing.T) {
 		cleanup(t, db, ghID)
 	})
 
-	err = tenant.SaveInstallation(ctx, db, tn.ID, 2001, "Organization", "org-a")
+	err = tenant.SaveInstallation(ctx, db, tn.ID, 2001, 99, "Organization", "org-a")
 	if err != nil {
 		t.Fatalf("save org-a: %v", err)
 	}
-	err = tenant.SaveInstallation(ctx, db, tn.ID, 2002, "User", "user-b")
+	err = tenant.SaveInstallation(ctx, db, tn.ID, 2002, 99, "User", "user-b")
 	if err != nil {
 		t.Fatalf("save user-b: %v", err)
 	}
