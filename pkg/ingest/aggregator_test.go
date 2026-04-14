@@ -102,6 +102,31 @@ func TestAggregatorRepoDedup(t *testing.T) {
 	}
 }
 
+func TestAggregatorSkipsBots(t *testing.T) {
+	a := NewAggregator(time.Now())
+
+	events := []Event{
+		{Type: "PullRequestEvent", Action: "opened", Actor: "alice", Repo: "org/repo"},
+		{Type: "PullRequestEvent", Action: "opened", Actor: "dependabot[bot]", Repo: "org/repo"},
+		{Type: "PullRequestReviewEvent", Action: "submitted", Actor: "renovate[bot]", Repo: "org/repo"},
+		{Type: "IssueCommentEvent", Action: "created", Actor: "copilot", Repo: "org/repo"},
+		{Type: "PullRequestEvent", Action: "opened", Actor: "bob", Repo: "org/repo"},
+	}
+	for _, ev := range events {
+		a.Add(ev)
+	}
+
+	if got := a.Count(); got != 2 {
+		t.Fatalf("Count = %d, want 2 (bots filtered)", got)
+	}
+	results := a.Results()
+	for _, s := range results {
+		if s.Username == "dependabot[bot]" || s.Username == "renovate[bot]" || s.Username == "copilot" {
+			t.Errorf("bot %q should have been filtered", s.Username)
+		}
+	}
+}
+
 func TestAggregatorHourTruncation(t *testing.T) {
 	input := time.Date(2026, 3, 15, 8, 30, 45, 0, time.UTC)
 	a := NewAggregator(input)

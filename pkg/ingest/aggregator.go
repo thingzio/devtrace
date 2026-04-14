@@ -1,6 +1,10 @@
 package ingest
 
-import "time"
+import (
+	"time"
+
+	"github.com/thingzio/devtrace/pkg/bot"
+)
 
 // Summary is the per-contributor hourly aggregation result.
 type Summary struct {
@@ -27,8 +31,12 @@ func NewAggregator(hour time.Time) *Aggregator {
 	}
 }
 
-// Add processes a single event.
+// Add processes a single event. Bot actors are silently skipped.
 func (a *Aggregator) Add(ev Event) {
+	if bot.IsBot(ev.Actor) {
+		return
+	}
+
 	s, ok := a.summaries[ev.Actor]
 	if !ok {
 		s = &Summary{
