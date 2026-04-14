@@ -2,9 +2,6 @@ package score
 
 import "math"
 
-// ModelVersion is the current scoring model version (ported from reputer v3.2.0).
-const ModelVersion = "3.2.0"
-
 const (
 	// Category weights (sum to 1.0).
 	provenanceWeight  = 0.15
@@ -52,6 +49,7 @@ type InputSignals struct {
 	HasCompany        bool
 	HasLocation       bool
 	HasWebsite        bool
+	HasVerifiedEmail  bool
 
 	// Engagement
 	Commits           int64
@@ -111,7 +109,10 @@ func Compute(s InputSignals) float64 {
 	if s.HasWebsite {
 		profileCount++
 	}
-	rep += float64(profileCount) / 4.0 * profileWeight
+	if s.HasVerifiedEmail {
+		profileCount++
+	}
+	rep += float64(profileCount) / 5.0 * profileWeight
 
 	// --- Category 3: Engagement (0.25) ---
 	if s.Commits > 0 && s.TotalCommits > 0 {
@@ -207,7 +208,10 @@ func Categories(s InputSignals) map[string]float64 {
 	if s.HasWebsite {
 		profileCount++
 	}
-	identity += float64(profileCount) / 4.0 * profileWeight
+	if s.HasVerifiedEmail {
+		profileCount++
+	}
+	identity += float64(profileCount) / 5.0 * profileWeight
 	cats["identity"] = toFixed(identity, 4)
 
 	// Engagement

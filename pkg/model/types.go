@@ -10,6 +10,7 @@ const ProviderGitHub Provider = "github"
 
 // ScoreResponse is the top-level API response for a contributor score.
 type ScoreResponse struct {
+	Version     string       `json:"version"`
 	Username    string       `json:"username"`
 	Provider    Provider     `json:"provider"`
 	Score       *Score       `json:"score"`
@@ -26,30 +27,31 @@ type ScoreResponse struct {
 
 // Score holds the computed reputation score and grade.
 type Score struct {
-	Grade        string             `json:"grade"`
-	Value        float64            `json:"value"`
-	ModelVersion string             `json:"model_version"`
-	Categories   map[string]float64 `json:"categories,omitempty"`
+	Grade      string             `json:"grade"`
+	Value      float64            `json:"value"`
+	Categories map[string]float64 `json:"categories,omitempty"`
 }
 
 // Signals holds the raw profile and activity signals used for scoring.
 type Signals struct {
-	AccountAgeDays    int64  `json:"account_age_days"`
-	Followers         int64  `json:"followers"`
-	Following         int64  `json:"following"`
-	PublicRepos       int64  `json:"public_repos"`
-	ForkedRepos       int64  `json:"forked_repos"`
-	PRsMerged         int64  `json:"prs_merged"`
-	PRsClosed         int64  `json:"prs_closed"`
-	RecentPRRepoCount int64  `json:"recent_pr_repo_count"`
-	HasBio            bool   `json:"has_bio"`
-	HasCompany        bool   `json:"has_company"`
-	HasLocation       bool   `json:"has_location"`
-	HasWebsite        bool   `json:"has_website"`
-	OrgMember         bool   `json:"org_member"`
-	Suspended         bool   `json:"suspended"`
-	AuthorAssociation string `json:"author_association"`
-	CommitsVerified   bool   `json:"commits_verified"`
+	AccountAgeDays    int64 `json:"account_age_days"`
+	Followers         int64 `json:"followers"`
+	Following         int64 `json:"following"`
+	PublicRepos       int64 `json:"public_repos"`
+	ForkedRepos       int64 `json:"forked_repos"`
+	PRsMerged         int64 `json:"prs_merged"`
+	PRsClosed         int64 `json:"prs_closed"`
+	RecentPRRepoCount int64 `json:"recent_pr_repo_count"`
+	HasBio            bool  `json:"has_bio"`
+	HasCompany        bool  `json:"has_company"`
+	HasLocation       bool  `json:"has_location"`
+	HasWebsite        bool  `json:"has_website"`
+	HasVerifiedEmail  bool  `json:"has_verified_email"`
+	Suspended         bool  `json:"suspended"`
+	// Repo-scoped signals: nil when no repo context (not evaluated), non-nil when checked.
+	OrgMember         *bool  `json:"org_member"`
+	CommitsVerified   *bool  `json:"commits_verified"`
+	AuthorAssociation string `json:"author_association,omitempty"`
 }
 
 // RepoContext holds contributor-specific context within a repository.
@@ -88,6 +90,9 @@ type Behavior struct {
 	DistinctRepos90d   int       `json:"distinct_repos_90d"`
 	ConsistencyScore   float64   `json:"consistency_score"`
 	ActiveSince        time.Time `json:"active_since,omitempty"`
+	// Cumulative counts from GH Archive (used by hybrid scoring to skip GitHub Search API).
+	TotalPRsMerged int `json:"total_prs_merged"`
+	TotalPRsClosed int `json:"total_prs_closed"`
 }
 
 // AISensing holds signals about AI-assisted development activity.

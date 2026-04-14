@@ -59,7 +59,7 @@ func TestUpdateReputation(t *testing.T) {
 		Following:    5,
 		PublicRepos:  8,
 	}
-	if err := store.UpdateReputation(ctx, user, provider, 0.72, "B", signals); err != nil {
+	if err := store.UpdateReputation(ctx, user, provider, 0.72, "B", "v0.0.1-test", signals); err != nil {
 		t.Fatalf("update reputation: %v", err)
 	}
 

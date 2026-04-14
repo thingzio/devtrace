@@ -124,11 +124,11 @@ func Run(ctx context.Context, opts Options) error {
 		syncStop := background.StartDevPulseSync(ctx, store)
 		defer syncStop()
 
-		scorerStop := background.StartBackgroundScorer(ctx, store, ghClient)
+		scorerStop := background.StartBackgroundScorer(ctx, store, ghClient, opts.Version)
 		defer scorerStop()
 	}
 
-	scoreSvc := service.NewScoreService(ghClient, nil)
+	scoreSvc := service.NewScoreService(ghClient, nil, opts.Version)
 	if store != nil {
 		scoreSvc.SetBehaviorStore(store)
 	}

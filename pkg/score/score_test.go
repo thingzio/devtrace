@@ -96,12 +96,6 @@ func TestComputeBounds(t *testing.T) {
 	}
 }
 
-func TestModelVersion(t *testing.T) {
-	if ModelVersion != "3.2.0" {
-		t.Errorf("unexpected model version: %s", ModelVersion)
-	}
-}
-
 func TestCategoryWeightsSum(t *testing.T) {
 	sum := CategoryProvenanceWeight + CategoryIdentityWeight +
 		CategoryEngagementWeight + CategoryCommunityWeight +

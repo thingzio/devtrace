@@ -54,7 +54,7 @@ func scorecardHandler(svc *service.ScoreService) http.HandlerFunc {
 			slog.Error("scoring for scorecard", "username", username, "error", err)
 			renderTemplate(w, "scorecard.html", map[string]any{
 				"Title": username, "Username": username,
-				"Grade": "?", "Value": 0.0, "ModelVersion": "?",
+				"Grade": "?", "Value": 0.0, "Version": "?",
 				"GradeClass": "grade-f",
 			})
 			return
@@ -78,17 +78,17 @@ func scorecardHandler(svc *service.ScoreService) http.HandlerFunc {
 		showSignUp := middleware.TenantFromContext(r.Context()) == nil
 
 		renderTemplate(w, "scorecard.html", map[string]any{
-			"Title":        username,
-			"Username":     username,
-			"Grade":        resp.Score.Grade,
-			"Value":        resp.Score.Value,
-			"ModelVersion": resp.Score.ModelVersion,
-			"GradeClass":   gradeClass,
-			"Categories":   resp.Score.Categories,
-			"Signals":      resp.Signals,
-			"RiskSummary":  resp.RiskSummary,
-			"RepoContext":  resp.RepoContext,
-			"ShowSignUp":   showSignUp,
+			"Title":       username,
+			"Username":    username,
+			"Grade":       resp.Score.Grade,
+			"Value":       resp.Score.Value,
+			"Version":     resp.Version,
+			"GradeClass":  gradeClass,
+			"Categories":  resp.Score.Categories,
+			"Signals":     resp.Signals,
+			"RiskSummary": resp.RiskSummary,
+			"RepoContext": resp.RepoContext,
+			"ShowSignUp":  showSignUp,
 		})
 	}
 }

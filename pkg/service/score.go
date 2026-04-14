@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/thingzio/devtrace/pkg/bot"
 	"github.com/thingzio/devtrace/pkg/claude"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/model"
@@ -29,11 +30,12 @@ type ScoreService struct {
 	behStore BehaviorStore // nil-safe; behavioral signals omitted when nil
 	cache    *scoreCache
 	claude   *claude.Client // nil = fallback to templates
+	version  string         // DevTrace build version stamped on every response
 }
 
 // NewScoreService returns a ScoreService wired to the given GitHub client and optional store.
-func NewScoreService(gh ghclient.Client, store ScoreStore) *ScoreService {
-	return &ScoreService{gh: gh, store: store, cache: newScoreCache()}
+func NewScoreService(gh ghclient.Client, store ScoreStore, version string) *ScoreService {
+	return &ScoreService{gh: gh, store: store, cache: newScoreCache(), version: version}
 }
 
 // SetBehaviorStore sets an optional store for behavioral signal enrichment.
@@ -49,13 +51,37 @@ func (s *ScoreService) SetClaudeClient(c *claude.Client) {
 // Score fetches signals, computes a reputation score, and builds a plan-aware response.
 // Results are cached to avoid redundant GitHub API calls.
 func (s *ScoreService) Score(ctx context.Context, username, repo, plan string) (*model.ScoreResponse, error) {
+	// Bot accounts get a predictable zero-score response — no API calls.
+	if bot.IsBot(username) {
+		return s.botResponse(username), nil
+	}
+
 	// Check cache first. Cached responses contain the full data;
 	// plan-aware filtering is applied below before returning.
 	if cached := s.cache.get(username, repo); cached != nil {
 		return enrichForPlan(cached, plan), nil
 	}
 
-	signals, err := s.gh.FetchSignals(ctx, username, repo)
+	// Fetch behavioral signals once — used for both archive hints and response enrichment.
+	var behavior *model.Behavior
+	if s.behStore != nil {
+		if beh, err := s.behStore.GetBehavioralSignals(ctx, username, string(model.ProviderGitHub)); err == nil && beh != nil {
+			behavior = beh
+		}
+	}
+
+	// Build archive hints from GH Archive data when available.
+	// This lets fetchSignals skip 3 GitHub Search API calls.
+	var hints *ghclient.ArchiveHints
+	if behavior != nil {
+		hints = &ghclient.ArchiveHints{
+			PRsMerged:         int64(behavior.TotalPRsMerged),
+			PRsClosed:         int64(behavior.TotalPRsClosed),
+			RecentPRRepoCount: int64(behavior.DistinctRepos90d),
+		}
+	}
+
+	signals, err := s.gh.FetchSignals(ctx, username, repo, hints)
 	if err != nil {
 		return nil, fmt.Errorf("fetch signals: %w", err)
 	}
@@ -71,15 +97,15 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string) (
 
 	// Build the full response (all fields populated).
 	full := &model.ScoreResponse{
+		Version:  s.version,
 		Username: username,
 		Provider: model.ProviderGitHub,
 		Score: &model.Score{
-			Grade:        grade,
-			Value:        value,
-			ModelVersion: score.ModelVersion,
-			Categories:   score.Categories(*signals),
+			Grade:      grade,
+			Value:      value,
+			Categories: score.Categories(*signals),
 		},
-		Signals:     signalsFromInput(signals, profile),
+		Signals:     signalsFromInput(signals, profile, repo != ""),
 		RiskSummary: generateRiskSummary(signals, value),
 		ScoredAt:    now,
 	}
@@ -108,11 +134,9 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string) (
 		}
 	}
 
-	// Best-effort: attach behavioral signals from GH Archive data.
-	if s.behStore != nil {
-		if beh, err := s.behStore.GetBehavioralSignals(ctx, username, string(model.ProviderGitHub)); err == nil && beh != nil {
-			full.Behavior = beh
-		}
+	// Attach behavioral signals (already fetched above for hints).
+	if behavior != nil {
+		full.Behavior = behavior
 	}
 
 	// Cache the full response.
@@ -129,9 +153,8 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 	switch plan {
 	case "": // unauthenticated — score only
 		resp.Score = &model.Score{
-			Grade:        full.Score.Grade,
-			Value:        full.Score.Value,
-			ModelVersion: full.Score.ModelVersion,
+			Grade: full.Score.Grade,
+			Value: full.Score.Value,
 		}
 		resp.Signals = nil
 		resp.RiskSummary = ""
@@ -160,8 +183,10 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 }
 
 // signalsFromInput maps InputSignals and UserProfile to the response Signals type.
-func signalsFromInput(s *score.InputSignals, p *ghclient.UserProfile) *model.Signals {
-	return &model.Signals{
+// Repo-scoped signals (OrgMember, CommitsVerified, AuthorAssociation) are only
+// populated when repo context exists; otherwise they are nil/empty.
+func signalsFromInput(s *score.InputSignals, p *ghclient.UserProfile, hasRepo bool) *model.Signals {
+	sig := &model.Signals{
 		AccountAgeDays:    s.AgeDays,
 		Followers:         p.Followers,
 		Following:         p.Following,
@@ -174,11 +199,19 @@ func signalsFromInput(s *score.InputSignals, p *ghclient.UserProfile) *model.Sig
 		HasCompany:        s.HasCompany,
 		HasLocation:       s.HasLocation,
 		HasWebsite:        s.HasWebsite,
-		OrgMember:         s.OrgMember,
+		HasVerifiedEmail:  s.HasVerifiedEmail,
 		Suspended:         s.Suspended,
-		AuthorAssociation: s.AuthorAssociation,
-		CommitsVerified:   s.UnverifiedCommits == 0 && s.Commits > 0,
 	}
+
+	if hasRepo {
+		orgMember := s.OrgMember
+		sig.OrgMember = &orgMember
+		verified := s.UnverifiedCommits == 0 && s.Commits > 0
+		sig.CommitsVerified = &verified
+		sig.AuthorAssociation = s.AuthorAssociation
+	}
+
+	return sig
 }
 
 // repoContextFromSignals maps repo-specific fields from InputSignals.
@@ -193,6 +226,21 @@ func repoContextFromSignals(s *score.InputSignals, repo string) *model.RepoConte
 		OrgMember:         s.OrgMember,
 		AuthorAssociation: s.AuthorAssociation,
 		TrustedOrgMember:  s.TrustedOrgMember,
+	}
+}
+
+// botResponse returns a zero-score response for bot accounts.
+func (s *ScoreService) botResponse(username string) *model.ScoreResponse {
+	return &model.ScoreResponse{
+		Version:  s.version,
+		Username: username,
+		Provider: model.ProviderGitHub,
+		Score: &model.Score{
+			Grade: "F",
+			Value: 0,
+		},
+		RiskSummary: "Bot account detected. Scoring is not applicable.",
+		ScoredAt:    time.Now().UTC(),
 	}
 }
 

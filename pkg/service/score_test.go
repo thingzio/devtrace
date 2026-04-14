@@ -15,7 +15,7 @@ type mockClient struct {
 	profile *ghclient.UserProfile
 }
 
-func (m *mockClient) FetchSignals(_ context.Context, _, _ string) (*score.InputSignals, error) {
+func (m *mockClient) FetchSignals(_ context.Context, _, _ string, _ *ghclient.ArchiveHints) (*score.InputSignals, error) {
 	return m.signals, nil
 }
 
@@ -59,7 +59,7 @@ func TestScoreContributor(t *testing.T) {
 	svc := NewScoreService(&mockClient{
 		signals: establishedSignals(),
 		profile: establishedProfile(),
-	}, nil)
+	}, nil, "v0.0.1-test")
 
 	resp, err := svc.Score(context.Background(), "testuser", "", "free")
 	if err != nil {
@@ -81,8 +81,8 @@ func TestScoreContributor(t *testing.T) {
 	if resp.Score.Grade == "" {
 		t.Error("grade is empty")
 	}
-	if resp.Score.ModelVersion == "" {
-		t.Error("model version is empty")
+	if resp.Version == "" {
+		t.Error("version is empty")
 	}
 }
 
@@ -91,7 +91,7 @@ func TestScoreContributorPlanAware(t *testing.T) {
 		signals: establishedSignals(),
 		profile: establishedProfile(),
 	}
-	svc := NewScoreService(mc, nil)
+	svc := NewScoreService(mc, nil, "v0.0.1-test")
 	ctx := context.Background()
 
 	t.Run("unauth", func(t *testing.T) {
@@ -153,7 +153,7 @@ func TestScoreContributorWithRepo(t *testing.T) {
 	svc := NewScoreService(&mockClient{
 		signals: sig,
 		profile: establishedProfile(),
-	}, nil)
+	}, nil, "v0.0.1-test")
 
 	resp, err := svc.Score(context.Background(), "testuser", "org/repo", "free")
 	if err != nil {
@@ -182,6 +182,48 @@ func TestRiskSummarySuspended(t *testing.T) {
 	}
 	if !strings.Contains(summary, "Do not merge") {
 		t.Errorf("suspended summary missing warning: %q", summary)
+	}
+}
+
+func TestScoreBotReturnsZero(t *testing.T) {
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, nil, "v0.0.1-test")
+
+	bots := []string{"dependabot[bot]", "renovate[bot]", "copilot", "github-copilot", "custom-app[bot]"}
+	for _, botName := range bots {
+		resp, err := svc.Score(context.Background(), botName, "", "free")
+		if err != nil {
+			t.Fatalf("Score(%q): unexpected error: %v", botName, err)
+		}
+		if resp.Score.Value != 0 {
+			t.Errorf("Score(%q).Value = %f, want 0", botName, resp.Score.Value)
+		}
+		if resp.Score.Grade != "F" {
+			t.Errorf("Score(%q).Grade = %q, want F", botName, resp.Score.Grade)
+		}
+		if resp.RiskSummary == "" {
+			t.Errorf("Score(%q).RiskSummary should not be empty", botName)
+		}
+		if resp.Signals != nil {
+			t.Errorf("Score(%q) should not have signals", botName)
+		}
+	}
+}
+
+func TestScoreNonBotNotFiltered(t *testing.T) {
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, nil, "v0.0.1-test")
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "free")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Score.Value == 0 {
+		t.Error("non-bot should have non-zero score with established signals")
 	}
 }
 

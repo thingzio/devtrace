@@ -23,7 +23,7 @@ func (m *mockGH) FetchUser(_ context.Context, _ string) (*ghclient.UserProfile, 
 	return m.profile, m.err
 }
 
-func (m *mockGH) FetchSignals(_ context.Context, _, _ string) (*score.InputSignals, error) {
+func (m *mockGH) FetchSignals(_ context.Context, _, _ string, _ *ghclient.ArchiveHints) (*score.InputSignals, error) {
 	return m.signals, m.err
 }
 
@@ -46,7 +46,7 @@ func TestScoreHandler(t *testing.T) {
 		},
 	}
 
-	svc := service.NewScoreService(mock, nil)
+	svc := service.NewScoreService(mock, nil, "v0.0.1-test")
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/score/{username}", scoreHandler(nil, nil, svc))
@@ -89,7 +89,7 @@ func TestScoreHandlerSecurityHeaders(t *testing.T) {
 		signals: &score.InputSignals{AgeDays: 100},
 	}
 
-	svc := service.NewScoreService(mock, nil)
+	svc := service.NewScoreService(mock, nil, "v0.0.1-test")
 	mux := makeRouter(nil, svc, nil, Options{})
 	handler := securityHeaders(mux)
 
