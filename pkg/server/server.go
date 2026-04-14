@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/thingzio/devtrace/pkg/background"
+	"github.com/thingzio/devtrace/pkg/claude"
 	"github.com/thingzio/devtrace/pkg/config"
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
@@ -130,6 +131,12 @@ func Run(ctx context.Context, opts Options) error {
 	scoreSvc := service.NewScoreService(ghClient, nil)
 	if store != nil {
 		scoreSvc.SetBehaviorStore(store)
+	}
+
+	claudeClient := claude.New()
+	if claudeClient != nil {
+		slog.Info("claude API enabled", "model", os.Getenv("ANTHROPIC_MODEL"))
+		scoreSvc.SetClaudeClient(claudeClient)
 	}
 
 	oauthCfg := &oauth.Config{

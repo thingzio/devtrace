@@ -117,10 +117,10 @@ func (c *Client) ClassifyPRAuthenticity(ctx context.Context, descriptions []stri
 
 // messagesRequest is the Anthropic Messages API request body.
 type messagesRequest struct {
-	Model    string           `json:"model"`
-	MaxToks  int              `json:"max_tokens"`
-	System   string           `json:"system"`
-	Messages []messagesEntry  `json:"messages"`
+	Model    string          `json:"model"`
+	MaxToks  int             `json:"max_tokens"`
+	System   string          `json:"system"`
+	Messages []messagesEntry `json:"messages"`
 }
 
 type messagesEntry struct {

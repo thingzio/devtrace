@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/thingzio/devtrace/pkg/claude"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/model"
 	"github.com/thingzio/devtrace/pkg/score"
@@ -27,6 +28,7 @@ type ScoreService struct {
 	store    ScoreStore    // nil-safe for unit tests without DB
 	behStore BehaviorStore // nil-safe; behavioral signals omitted when nil
 	cache    *scoreCache
+	claude   *claude.Client // nil = fallback to templates
 }
 
 // NewScoreService returns a ScoreService wired to the given GitHub client and optional store.
@@ -37,6 +39,11 @@ func NewScoreService(gh ghclient.Client, store ScoreStore) *ScoreService {
 // SetBehaviorStore sets an optional store for behavioral signal enrichment.
 func (s *ScoreService) SetBehaviorStore(bs BehaviorStore) {
 	s.behStore = bs
+}
+
+// SetClaudeClient sets an optional Claude client for AI-powered risk narratives.
+func (s *ScoreService) SetClaudeClient(c *claude.Client) {
+	s.claude = c
 }
 
 // Score fetches signals, computes a reputation score, and builds a plan-aware response.
@@ -79,6 +86,26 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string) (
 
 	if repo != "" {
 		full.RepoContext = repoContextFromSignals(signals, repo)
+	}
+
+	// Try Claude for richer risk narrative (best-effort, falls back to template).
+	if s.claude != nil {
+		input := claude.RiskInput{
+			Username:    username,
+			Score:       value,
+			Grade:       grade,
+			Categories:  score.Categories(*signals),
+			AccountAge:  signals.AgeDays,
+			PRsMerged:   signals.PRsMerged,
+			PRsClosed:   signals.PRsClosed,
+			Followers:   signals.Followers,
+			PublicRepos: signals.PublicRepos,
+			Suspended:   signals.Suspended,
+			RepoContext: repo,
+		}
+		if narrative, err := s.claude.GenerateRiskNarrative(ctx, input); err == nil && narrative != "" {
+			full.RiskSummary = narrative
+		}
 	}
 
 	// Best-effort: attach behavioral signals from GH Archive data.
