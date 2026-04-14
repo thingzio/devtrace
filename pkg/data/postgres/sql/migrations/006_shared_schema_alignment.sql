@@ -4,7 +4,7 @@
 -- tenant: DevTrace needs max_contributors (already in 005, but kept here for completeness).
 -- DevPulse columns (max_repos, max_events_per_week, upgrade_requested_at) are
 -- ignored by DevTrace — they exist in the physical table but DevTrace doesn't query them.
-ALTER TABLE tenant ADD COLUMN IF NOT EXISTS max_contributors INTEGER NOT NULL DEFAULT 50;
+ALTER TABLE devtrace_tenant ADD COLUMN IF NOT EXISTS max_contributors INTEGER NOT NULL DEFAULT 50;
 
 -- github_app_installation: app_id was added in 004, ensure it exists.
 ALTER TABLE github_app_installation ADD COLUMN IF NOT EXISTS app_id BIGINT;
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS ai_signal (
 
 CREATE TABLE IF NOT EXISTS api_token (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    tenant_id UUID NOT NULL REFERENCES devtrace_tenant(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     token_hash TEXT UNIQUE NOT NULL,
     last_used_at TIMESTAMPTZ,
@@ -96,7 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_api_token_tenant ON api_token(tenant_id);
 
 CREATE TABLE IF NOT EXISTS usage_record (
     id BIGSERIAL PRIMARY KEY,
-    tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    tenant_id UUID NOT NULL REFERENCES devtrace_tenant(id) ON DELETE CASCADE,
     username_scored TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
     deep BOOLEAN NOT NULL DEFAULT FALSE,

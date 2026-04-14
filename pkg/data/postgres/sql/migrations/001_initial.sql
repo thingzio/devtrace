@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS ai_signal (
 );
 
 -- Tenants (registered users)
-CREATE TABLE IF NOT EXISTS tenant (
+CREATE TABLE IF NOT EXISTS devtrace_tenant (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     github_id BIGINT UNIQUE NOT NULL,
     username TEXT NOT NULL,
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS tenant (
 -- API tokens (DevTrace-minted)
 CREATE TABLE IF NOT EXISTS api_token (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    tenant_id UUID NOT NULL REFERENCES devtrace_tenant(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
     token_hash TEXT UNIQUE NOT NULL,
     last_used_at TIMESTAMPTZ,
@@ -114,7 +114,7 @@ CREATE INDEX IF NOT EXISTS idx_api_token_tenant ON api_token(tenant_id);
 -- Sessions (UI auth)
 CREATE TABLE IF NOT EXISTS session (
     id TEXT PRIMARY KEY,
-    tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    tenant_id UUID NOT NULL REFERENCES devtrace_tenant(id) ON DELETE CASCADE,
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS session (
 -- GitHub App installations
 CREATE TABLE IF NOT EXISTS github_app_installation (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    tenant_id UUID NOT NULL REFERENCES devtrace_tenant(id) ON DELETE CASCADE,
     installation_id BIGINT UNIQUE NOT NULL,
     target_type TEXT,
     target_login TEXT,
@@ -134,7 +134,7 @@ CREATE TABLE IF NOT EXISTS github_app_installation (
 -- Usage tracking (quota enforcement)
 CREATE TABLE IF NOT EXISTS usage_record (
     id BIGSERIAL PRIMARY KEY,
-    tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
+    tenant_id UUID NOT NULL REFERENCES devtrace_tenant(id) ON DELETE CASCADE,
     username_scored TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
     deep BOOLEAN NOT NULL DEFAULT FALSE,

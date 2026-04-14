@@ -40,7 +40,7 @@ func ValidateSession(ctx context.Context, db *sql.DB, rawToken string) (*Tenant,
 		       COALESCE(t.name,''), COALESCE(t.company,''), COALESCE(t.location,''), COALESCE(t.bio,''),
 		       t.plan, t.max_contributors, t.tos_accepted_at, t.created_at, t.updated_at
 		FROM session s
-		JOIN tenant t ON t.id = s.tenant_id
+		JOIN devtrace_tenant t ON t.id = s.tenant_id
 		WHERE s.id = $1 AND s.expires_at > NOW()`, hashed)
 
 	t, err := scanTenant(row)

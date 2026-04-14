@@ -25,7 +25,7 @@ type Tenant struct {
 }
 
 func UpsertTenant(ctx context.Context, db *sql.DB, githubID int64, username, email, avatarURL, name, company, location, bio string) (*Tenant, error) {
-	const q = `INSERT INTO tenant (github_id, username, email, avatar_url, name, company, location, bio)
+	const q = `INSERT INTO devtrace_tenant (github_id, username, email, avatar_url, name, company, location, bio)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		ON CONFLICT (github_id) DO UPDATE SET
 			username=$2, email=$3, avatar_url=$4, name=$5, company=$6, location=$7, bio=$8, updated_at=NOW()
@@ -39,7 +39,7 @@ func GetTenantByID(ctx context.Context, db *sql.DB, id string) (*Tenant, error) 
 	const q = `SELECT id, github_id, username, email, avatar_url,
 		COALESCE(name,''), COALESCE(company,''), COALESCE(location,''), COALESCE(bio,''),
 		plan, max_contributors, tos_accepted_at, created_at, updated_at
-		FROM tenant WHERE id = $1`
+		FROM devtrace_tenant WHERE id = $1`
 	return scanTenant(db.QueryRowContext(ctx, q, id))
 }
 
@@ -47,12 +47,12 @@ func GetTenantByGitHubID(ctx context.Context, db *sql.DB, githubID int64) (*Tena
 	const q = `SELECT id, github_id, username, email, avatar_url,
 		COALESCE(name,''), COALESCE(company,''), COALESCE(location,''), COALESCE(bio,''),
 		plan, max_contributors, tos_accepted_at, created_at, updated_at
-		FROM tenant WHERE github_id = $1`
+		FROM devtrace_tenant WHERE github_id = $1`
 	return scanTenant(db.QueryRowContext(ctx, q, githubID))
 }
 
 func AcceptToS(ctx context.Context, db *sql.DB, tenantID string) error {
-	const q = `UPDATE tenant SET tos_accepted_at = NOW(), updated_at = NOW() WHERE id = $1`
+	const q = `UPDATE devtrace_tenant SET tos_accepted_at = NOW(), updated_at = NOW() WHERE id = $1`
 	res, err := db.ExecContext(ctx, q, tenantID)
 	if err != nil {
 		return fmt.Errorf("accept tos: %w", err)

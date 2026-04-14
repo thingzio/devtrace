@@ -52,7 +52,7 @@ func ValidateAPIToken(ctx context.Context, db *sql.DB, rawToken string) (*Tenant
 		       COALESCE(t.name,''), COALESCE(t.company,''), COALESCE(t.location,''), COALESCE(t.bio,''),
 		       t.plan, t.max_contributors, t.tos_accepted_at, t.created_at, t.updated_at
 		FROM api_token at
-		JOIN tenant t ON t.id = at.tenant_id
+		JOIN devtrace_tenant t ON t.id = at.tenant_id
 		WHERE at.token_hash = $1`, hashed)
 
 	t, err := scanTenant(row)
