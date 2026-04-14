@@ -1,161 +1,145 @@
 # DevTrace — GH Archive Integration
 
-Design notes for integrating GitHub Archive as a data enrichment layer. This is a future capability, not yet planned for implementation.
-
-## Motivation
-
-DevTrace currently scores contributors reactively — on API request or via DevPulse sync. GH Archive enables proactive enrichment by continuously ingesting the GitHub public event firehose, giving DevTrace signals that the GitHub API alone cannot provide.
-
-Two key benefits:
-1. **API-free signals** — contribution patterns, cross-repo activity, behavioral analysis computed entirely from archive data. No GitHub API quota consumed.
-2. **Pre-scored contributors** — popular contributors are scored before anyone asks, making lookups instant.
-
-## Data Source
-
-- URL: `https://data.gharchive.org/YYYY-MM-DD-H.json.gz`
-- Format: Newline-delimited JSON, gzipped
-- Size: ~500MB-1GB gzipped per hour
-- Frequency: Hourly dumps
-
-## Relevant Event Types
-
-| Event Type | What it gives us |
-|-----------|-----------------|
-| `PullRequestEvent` | PR author, repo, action (opened/closed/merged), timestamps |
-| `PullRequestReviewEvent` | Who reviews whose code, review engagement |
-| `IssueCommentEvent` | Community engagement, discussion participation |
-| `PushEvent` | Commit activity, velocity, repo breadth |
-| `CreateEvent` | New repos, forks (fork-only detection) |
-| `WatchEvent` | Star patterns (less useful for scoring) |
-
-Primary filter for MVP: `PullRequestEvent` only. Expand to other types as value is proven.
-
-## Signals Derived from Archive (No API Calls)
-
-These signals supplement the existing reputer-based model and can be computed entirely from archive data:
-
-**Behavioral (Tier 2 AI sensing):**
-- Velocity anomalies — rolling 30-day commit/PR rate vs 6-month baseline
-- Time-of-day spread — contribution timestamps across 24h (inhuman = 20+ hours/day consistently)
-- Commit size uniformity — low variance in PR sizes suggests mechanical output
-- Burst-and-vanish — intense activity in short window, then silence
-
-**Engagement quality:**
-- PR acceptance rate across repos — merged / (merged + closed), observed from events
-- Review-to-author ratio — PRs reviewed vs PRs authored
-- Cross-repo diversity — distinct repos with activity over time
-- Issue engagement — comments, not just code
-
-**Consistency:**
-- Contribution cadence — weekly/monthly regularity
-- Sustained engagement — months of activity vs one-time bursts
-- Repo loyalty — repeat contributions to same repos vs drive-by
+Hourly ingest of the GitHub public event firehose. Provides API-free behavioral signals and enables the hybrid scoring path that reduces GitHub API calls from 5 to 1.
 
 ## Architecture
 
 ```
-GH Archive hourly dump (Cloud Run Job, scheduled)
-  → download + gunzip + stream NDJSON
-  → filter relevant event types
-  → extract (actor.login, repo, event_type, action, created_at)
-  → batch insert into contributor_events table
-
-Enrichment routine (background goroutine or separate job)
-  → compute behavioral signals from contributor_events
-  → update contributor profiles with archive-derived signals
-  → queue high-priority contributors for API-based deep scoring
-
-Scoring pipeline (existing)
-  → reads archive-derived signals alongside API signals
-  → combined score uses both sources
-  → API calls reserved for signals archive can't provide
+Cloud Scheduler (hourly at :20)
+  → Cloud Run Job (devtrace-ingest)
+    → download data.gharchive.org/{YYYY-MM-DD-H}.json.gz
+    → stream gunzip → NDJSON line-by-line (1MB buffer)
+    → filter: PullRequestEvent, PullRequestReviewEvent, IssueCommentEvent
+    → skip bot actors (pkg/bot)
+    → aggregate per-contributor hourly summaries in memory
+    → batch upsert into contributor_activity
+    → queue new/relevant contributors for scoring
+    → compact old rows (daily, >30 days → weekly buckets)
 ```
 
-## Priority Queue for Scoring
+## Event Types
 
-Not every discovered contributor needs immediate API scoring. Priority tiers:
+| Event Type | What it captures |
+|-----------|-----------------|
+| `PullRequestEvent` | PR author, repo, action (opened/closed) |
+| `PullRequestReviewEvent` | Review activity, engagement |
+| `IssueCommentEvent` | Community participation |
 
-| Priority | Criteria | API scoring? |
-|----------|----------|-------------|
-| 1 (immediate) | On-demand API/UI request | Yes, synchronous |
-| 2 (high) | Contributor to a tenant-tracked repo | Yes, background |
-| 3 (medium) | Active contributor with no existing score | Yes, background (low rate) |
-| 4 (low) | Contributor with fresh score, archive update only | No — archive signals only |
+Other event types (PushEvent, CreateEvent, WatchEvent) are filtered out.
 
-On-demand requests always bypass the queue and score immediately.
+## Data Model
 
-## Data Model (New Tables)
+### contributor_activity
 
-```sql
--- Raw events from GH Archive (append-only, partitioned by date)
-CREATE TABLE contributor_event (
-    id BIGSERIAL PRIMARY KEY,
-    username TEXT NOT NULL,
-    repo TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    action TEXT,
-    created_at TIMESTAMPTZ NOT NULL,
-    ingested_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+Per-contributor hourly summaries. Primary key: `(username, provider, hour)`.
 
--- Scoring queue
-CREATE TABLE scoring_queue (
-    username TEXT NOT NULL,
-    provider TEXT NOT NULL DEFAULT 'github',
-    priority INTEGER NOT NULL DEFAULT 3,
-    queued_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (username, provider)
-);
+| Column | Type | Description |
+|--------|------|-------------|
+| username | TEXT | GitHub login |
+| provider | TEXT | Always `github` |
+| hour | TIMESTAMPTZ | Truncated to hour boundary |
+| prs_opened | INTEGER | PRs opened in this hour |
+| prs_merged | INTEGER | PRs merged |
+| prs_closed | INTEGER | PRs closed (unmerged) |
+| reviews_given | INTEGER | Reviews submitted |
+| issue_comments | INTEGER | Issue comments |
+| distinct_repos | INTEGER | Unique repos touched |
+| repos | JSONB | List of repo names |
 
--- Archive-derived behavioral signals (computed, not raw)
-CREATE TABLE contributor_behavior (
-    username TEXT NOT NULL,
-    provider TEXT NOT NULL DEFAULT 'github',
-    pr_velocity_30d REAL,
-    pr_velocity_baseline REAL,
-    time_spread_hours INTEGER,
-    review_to_author_ratio REAL,
-    distinct_repos_90d INTEGER,
-    burst_score REAL,
-    consistency_score REAL,
-    computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (username, provider)
-);
-```
+ON CONFLICT: counts are added to existing values (idempotent re-runs).
 
-## Scale Considerations
+### scoring_queue
 
-- **Storage:** `contributor_event` will grow fast (~millions of rows/day). Needs partitioning by date and retention policy (e.g., keep 6 months, archive older).
-- **Compute:** Behavioral signal computation is CPU-bound but parallelizable. Run as a batch job, not inline.
-- **API budget:** Archive-derived scoring consumes zero API calls. Reserve API budget for on-demand and high-priority background scoring.
-- **Cold start:** Initial backfill from GH Archive history (available back to 2011) is optional but valuable for bootstrapping contributor profiles.
+Priority-based queue for background scoring.
 
-## Scoring Model Evolution
+| Priority | Criteria |
+|----------|----------|
+| P1 | New contributor in a tenant-tracked repo |
+| P2 | New contributor in any repo |
+| P3 | Existing contributor in a tenant-tracked repo (rescore) |
 
-The current model (reputer v3.2.0) uses 22 signals across 5 categories. Archive integration adds a 6th dimension:
+Existing contributors in non-tenant repos are skipped (no queue entry).
 
-| Category | Source | Weight (current) | Weight (with archive) |
-|----------|--------|:-:|:-:|
-| Code Provenance | API | 0.15 | 0.12 |
-| Identity | API | 0.25 | 0.20 |
-| Engagement | API + Archive | 0.25 | 0.20 |
-| Community | API + Archive | 0.15 | 0.13 |
-| Behavioral | API + Archive | 0.20 | 0.20 |
-| Consistency | Archive only | — | 0.15 |
+ON CONFLICT: priority upgrades to the higher (lower number) value.
 
-Weight adjustments TBD — requires validation against labeled data.
+## Behavioral Signals
 
-## Phased Approach
+Computed by `GetBehavioralSignals()` from the last 180 days of `contributor_activity`:
 
-1. **Phase A:** Ingest `PullRequestEvent` only, populate `contributor_event`, compute basic stats (PR count, repo count, velocity). No scoring model changes.
-2. **Phase B:** Compute behavioral signals (`contributor_behavior` table). Feed into scoring model as supplementary signals.
-3. **Phase C:** Add more event types (reviews, issues, pushes). Richer behavioral analysis.
-4. **Phase D:** Tier 2 AI sensing using archive data (velocity anomalies, time patterns, burst detection).
+| Signal | Computation |
+|--------|------------|
+| `pr_velocity_30d` | SUM(prs_opened) last 30 days |
+| `pr_velocity_baseline` | SUM(prs_opened) / months in window |
+| `reviews_given_30d` | SUM(reviews_given) last 30 days |
+| `issue_comments_30d` | SUM(issue_comments) last 30 days |
+| `distinct_repos_90d` | COUNT(DISTINCT repo) last 90 days (from JSONB expansion) |
+| `consistency_score` | Active weeks / total weeks (0.0-1.0) |
+| `active_since` | MIN(hour) |
+| `total_prs_merged` | SUM(prs_merged) all time |
+| `total_prs_closed` | SUM(prs_closed) all time |
 
-## Open Questions
+## Hybrid Scoring Path
 
-- **Retention policy:** How long to keep raw events? 6 months? 1 year?
-- **Backfill:** How far back to ingest from GH Archive history?
-- **Cost:** Cloud Run job + storage for millions of rows/day. Estimate needed.
-- **Model validation:** How to validate that archive-derived signals improve scoring accuracy?
-- **Privacy:** GH Archive is public data, but aggregating behavioral profiles may have perception implications.
+When behavioral signals exist for a contributor, the score service builds `ArchiveHints` from cumulative PR counts and distinct repos. `FetchSignals` accepts these hints and skips 3 GitHub Search API calls (merged PRs, closed PRs, recent repos).
+
+| Scenario | API Calls |
+|----------|-----------|
+| No archive data, no repo | 3 (profile + search×2 + repos) |
+| With archive data, no repo | 1 (profile only) |
+| No archive data, with repo | 6 |
+| With archive data, with repo | 4 (profile + repos + 3 repo-scoped) |
+
+## Bot Filtering
+
+Bot actors are skipped during aggregation (`pkg/bot/IsBot`). Detection:
+1. `[bot]` suffix (GitHub App convention)
+2. Known bot names list (aligned with DevPulse: dependabot, renovate, copilot, etc.)
+
+This prevents bot activity from polluting behavioral signals and wasting scoring queue entries.
+
+## Compaction
+
+Runs as part of the hourly ingest job (after import + queue). Checks `sync_state` key `activity_compacted` — skips if last run was < 24 hours ago.
+
+Process (single transaction):
+1. Aggregate hourly rows older than 30 days into weekly buckets (Monday 00:00 UTC)
+2. Delete original hourly rows
+3. Preserve count totals (SUM-based aggregation)
+
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GHARCHIVE_BASE_URL` | `https://data.gharchive.org` | Archive URL (override for testing) |
+| `GHARCHIVE_LOOKBACK_HOURS` | `1` | Hours to bootstrap on fresh install (no cursor) |
+| `GHARCHIVE_CATCHUP_MAX_HOURS` | `24` | Max hours to process when catching up from cursor |
+
+### Cursor Management
+
+Progress tracked via `sync_state` table (key: `gharchive_cursor`). Each successfully processed hour advances the cursor. On failure, the hour is skipped and retried next run.
+
+Fresh install: processes `GHARCHIVE_LOOKBACK_HOURS` ending at now-1h.
+With cursor: processes from cursor+1h, capped at `GHARCHIVE_CATCHUP_MAX_HOURS`.
+
+## Infrastructure
+
+| Resource | Description |
+|----------|-------------|
+| `devtrace-saas-ingest` | Cloud Run v2 Job (1 task, 55min timeout, 1Gi memory) |
+| `devtrace-saas-ingest-hourly` | Cloud Scheduler at `:20` past each hour |
+| `devtrace-saas-scheduler` | Dedicated invoker service account |
+
+Same VPC, Cloud SQL socket, and runtime service account as the serve service.
+
+## Scale Notes
+
+- One hour of GH Archive yields ~3-10K contributor summaries after filtering
+- Ingest completes in ~6 seconds locally (download + parse + store + queue)
+- Compaction keeps the table bounded — weekly rows replace 168 hourly rows per contributor
+- No raw event storage — only aggregated summaries (much smaller footprint than raw events)
+
+## Future Extensions
+
+- **Additional event types**: PushEvent for commit velocity, CreateEvent for fork detection
+- **Tier 2 AI sensing**: Velocity anomalies, time-of-day spread, burst detection computed from activity data
+- **Historical backfill**: GH Archive goes back to 2011 — optional bootstrap for contributor profiles

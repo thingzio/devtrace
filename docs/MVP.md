@@ -1,92 +1,38 @@
-# DevTrace — MVP Definition
+# DevTrace — Implementation Status
 
-Minimum viable product scoped from the user's perspective. API-first architecture — UI, CLI, and GitHub Action are thin clients on top of a single REST API.
-
----
-
-## Personas
-
-### Day 1: OSS Maintainer
-
-Maintains 1-5 public repos. Gets PRs from unknown contributors. Wants an automated trust signal in the PR workflow — actionable insight that tells them how to handle the PR.
-
-**Journey:**
-
-1. Discovers DevTrace (word of mouth, GitHub Marketplace, blog post)
-2. Visits landing page, types a known contributor's username in "try it" box
-3. Sees a fully-populated score card (1 free lookup per IP) — convinced there's value
-4. Signs up via GitHub OAuth, installs GitHub App on their org
-5. Gets an API token from the dashboard
-6. Adds DevTrace GitHub Action to their repo
-7. Next PR from an unknown contributor — Action posts a comment with score card + risk summary
-8. Maintainer uses the signal to decide review depth
-
-**Value moment:** Step 7 — the first PR comment with actionable reputation data.
-
-### Day 2: Enterprise SecOps
-
-Security team at a company with 50+ repos and 200+ contributors. Cares about contributor risk, license exposure, and AI provenance across the portfolio.
-
-**Journey:**
-
-1. Day 1 maintainer within the company evangelizes DevTrace
-2. SecOps team signs up for Pro plan, installs GitHub App across the org
-3. Uses batch API to score all external contributors across their repos
-4. Sets up webhook alerts for contributors below threshold
-5. Reviews license exposure — identifies repos with copyleft contributions
-6. Monitors AI sensing signals — understands AI tool usage patterns
-7. Generates reports for compliance/legal review
-
-**Value moment:** Step 4 — automated monitoring replaces manual contributor vetting.
+API-first architecture. UI, CLI, and GitHub Action are thin clients on top of a single REST API.
 
 ---
 
-## Architecture
+## Build Phases
 
-### API is the product
+### Phase 1 — API + Scoring Engine ✅
 
-Everything is a client of the REST API:
+Schema, scoring engine, REST API, rate limiting, quota enforcement. Local Postgres via docker-compose, PAT for GitHub API calls, seeded test tenant.
 
-- **Web UI** — server-rendered, same patterns as DevPulse
-- **CLI** — thin wrapper around API calls
-- **GitHub Action** — calls API, posts PR comment
-- **Future integrations** — all via the same API
+### Phase 2 — Auth + Registration ✅
 
-### Auth Model
+GitHub OAuth flow, GitHub App installation, token minting, session management. PAT client swapped for App installation client behind the same interface.
 
-1. **Registration:** GitHub OAuth sign-up → user installs DevTrace GitHub App on their org/repos
-2. **Token pool:** Each GitHub App installation gives DevTrace server-side installation tokens for GitHub API calls
-3. **API access:** DevTrace mints its own opaque API tokens for users — map internally to tenant + GitHub App installation
-4. **No stored credentials:** OAuth identifies users, GitHub App tokens are server-managed and short-lived, DevTrace API tokens are the service's own domain
+### Phase 3 — UI ✅
 
-### Shared Database
+Landing page, score card, dashboard, settings, ToS acceptance. Server-rendered templates.
 
-Same Cloud SQL instance as DevPulse, own database and DB user (`devtrace`):
+### Phase 4 — Backend Operations ✅
 
-- **DevTrace-owned tables:** contributor, reputation, license_profile, ai_signal, tenant, api_token, session, usage_record
-- **Read access to DevPulse tables:** `developer` (existing reputation scores + `reputation_signals` JSONB), `event`, `repo_meta` — reuse deep reputation state already collected by DevPulse's import pipeline
-- **Write boundary:** DevTrace NEVER writes to DevPulse tables
-- **Infra ownership:** VPC, Cloud SQL, and private networking are owned by DevPulse's Terraform. DevTrace references them via `data` sources. Ideally these would live in a shared infra repo, but we reuse DevPulse's as-is.
+Background scorer (queue drain + stale rescoring), DevPulse sync, Claude API integration.
 
-### Service Identity
+### Phase 5 — GH Archive Ingest ✅
 
-DevTrace gets its own GCP service account (`devtrace-saas-run`), Cloud Run services, secrets, Artifact Registry repo, and WIF provider. Clean separation from DevPulse at the identity/IAM level despite shared infrastructure.
+Hourly Cloud Run Job, event aggregation, behavioral signals, activity compaction, hybrid scoring path, bot filtering, token pool.
 
-### GitHub Client Interface
+### Phase 6 — Admin Service (next)
 
-Abstracted behind an interface to support development and production modes:
+Operator visibility: tenant management, pipeline health, token pool monitoring, scoring metrics.
 
-- **Development:** PAT-backed client (your own token, local docker-compose + Postgres)
-- **Production:** GitHub App installation-token-backed client
+### Phase 7 — GitHub Action (next)
 
-Single interface, swap implementation via config.
-
-### Unauthenticated Access
-
-- 1 free fully-populated lookup per IP (showcases full capabilities)
-- After that, cached-only responses (letter grade + summary, no GitHub API cost)
-- If contributor not cached: "Not yet scored — sign up to request"
-- IP-based rate limiting (e.g., 10 requests/hour)
+`thingzio/devtrace-action` — calls API, posts PR comment with score card. Published to GitHub Marketplace.
 
 ---
 
@@ -100,186 +46,157 @@ Single interface, swap implementation via config.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/score/{username}` | None | Cached letter grade + summary (or 1 free full lookup) |
-| `GET` | `/score/{username}` | API token | Full score — response depth based on caller's plan |
-| `GET` | `/score/{username}?repo={owner/repo}` | API token | Same + repo-contextual signals |
-| `GET` | `/tenant` | API token | Tenant info, plan, quota usage |
-| `POST` | `/token` | Session (UI) | Mint new API token |
-| `DELETE` | `/token/{id}` | Session (UI) | Revoke API token |
+| `GET` | `/score/{username}` | Any | Score contributor (plan-aware response) |
+| `GET` | `/score/{username}?repo=owner/repo` | Any | Score with repo-specific context |
+| `GET` | `/score/{username}/history` | Any | Score trend data |
+| `POST` | `/token` | Session | Create API token |
+| `GET` | `/token` | Session | List API tokens |
+| `DELETE` | `/token/{id}` | Session | Revoke API token |
 | `GET` | `/health` | None | Health check |
+| `POST` | `/webhook/github` | Signature | GitHub App webhook |
 
-### Plan-Aware Response
+### UI Routes
 
-Single endpoint, progressively richer response based on caller's plan:
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/` | None | Landing page |
+| `GET` | `/score/{username}` | Any | Score card page |
+| `GET` | `/dashboard` | Session | Tenant dashboard |
+| `GET` | `/settings` | Session | Account settings |
+| `GET` | `/auth/github` | None | OAuth start |
+| `GET` | `/auth/github/callback` | None | OAuth callback |
+| `POST` | `/auth/signout` | Session | Sign out |
+| `GET` | `/tos` | None | Terms of Service |
+| `POST` | `/tos/accept` | Session | Accept ToS |
 
-| Plan | Response includes |
-|------|------------------|
-| **Unauth** | grade, value, model_version |
-| **Free** | + categories, signals, risk_summary, repo_context |
-| **Starter** | + license distribution, AI sensing (Tier 1) |
-| **Pro** | + full signal breakdown, AI Tier 2/3, trend data |
-
-### Example: Unauthenticated Response
+### Response: Unauthenticated
 
 ```json
 {
+  "version": "v0.5.0",
   "username": "octocat",
   "provider": "github",
   "score": {
     "grade": "B+",
-    "value": 0.78,
-    "model_version": "3.2.0"
+    "value": 0.78
   },
-  "cached_at": "2026-04-12T10:30:00Z",
+  "scored_at": "2026-04-14T10:30:00Z",
+  "cached_at": "2026-04-14T10:25:00Z",
   "detail": "Sign up for full signal breakdown -> devtrace.thingz.io"
 }
 ```
 
-### Example: Authenticated Response (Free+)
+### Response: Authenticated (Free+)
 
 ```json
 {
-  "username": "octocat",
+  "version": "v0.5.0",
+  "username": "mchmarny",
   "provider": "github",
   "score": {
-    "grade": "B+",
-    "value": 0.78,
-    "model_version": "3.2.0",
+    "grade": "C+",
+    "value": 0.63,
     "categories": {
-      "code_provenance": 0.82,
-      "identity": 0.91,
-      "engagement": 0.65,
-      "community": 0.73,
-      "behavioral": 0.79
+      "code_provenance": 0.0,
+      "identity": 0.19,
+      "engagement": 0.09,
+      "community": 0.15,
+      "behavioral": 0.20
     }
   },
   "signals": {
-    "account_age_days": 1095,
-    "followers": 42,
-    "following": 18,
-    "public_repos": 23,
-    "forked_repos": 5,
-    "prs_merged": 87,
-    "prs_closed": 12,
-    "recent_pr_repo_count": 4,
+    "account_age_days": 5944,
+    "followers": 296,
+    "following": 10,
+    "public_repos": 158,
+    "forked_repos": 9,
+    "prs_merged": 304,
+    "prs_closed": 47,
+    "recent_pr_repo_count": 6,
     "has_bio": true,
     "has_company": true,
     "has_location": true,
-    "has_website": false,
-    "org_member": false,
-    "suspended": false,
-    "author_association": "CONTRIBUTOR",
-    "commits_verified": true
+    "has_website": true,
+    "has_verified_email": false,
+    "suspended": false
   },
-  "risk_summary": "Established account with consistent contribution history. No prior contributions to this project. Standard review recommended.",
-  "repo_context": null,
-  "license": null,
-  "ai_sensing": null,
-  "scored_at": "2026-04-13T08:15:00Z"
+  "risk_summary": "Established contributor with consistent activity history.",
+  "behavior": {
+    "pr_velocity_30d": 12,
+    "pr_velocity_baseline": 8.5,
+    "reviews_given_30d": 4,
+    "issue_comments_30d": 7,
+    "distinct_repos_90d": 6,
+    "consistency_score": 0.82,
+    "active_since": "2025-01-15T00:00:00Z",
+    "total_prs_merged": 304,
+    "total_prs_closed": 47
+  },
+  "scored_at": "2026-04-14T09:44:42Z"
 }
 ```
 
-### Example: With Repo Context (`?repo=owner/repo`)
+### Response: With Repo Context
 
 ```json
 {
   "repo_context": {
-    "repo": "owner/repo",
-    "commits": 0,
+    "repo": "org/repo",
+    "commits": 50,
     "total_commits": 1842,
     "total_contributors": 34,
-    "last_commit_days": null,
-    "org_member": false,
-    "author_association": "FIRST_TIME_CONTRIBUTOR",
+    "last_commit_days": 3,
+    "org_member": true,
+    "commits_verified": true,
+    "author_association": "MEMBER",
     "trusted_org_member": false
-  }
+  },
+  "risk_summary": "Well-established contributor with strong activity history. Standard review process is sufficient."
 }
 ```
 
-### Example: License Distribution (Starter+)
+Note: `signals` contains only global fields — no nulls. Repo-scoped fields (`org_member`, `commits_verified`, `author_association`) live in `repo_context` and only appear when `?repo=` is provided.
+
+### Response: Bot Account
 
 ```json
 {
-  "license": {
-    "total_repos_with_merged_prs": 47,
-    "own_repos": 23,
-    "distribution": [
-      {"license": "Apache-2.0", "count": 38, "own": 15, "contributed": 23},
-      {"license": "MIT", "count": 6, "own": 5, "contributed": 1},
-      {"license": "GPL-3.0", "count": 3, "own": 0, "contributed": 3}
-    ]
-  }
+  "version": "v0.5.0",
+  "username": "dependabot[bot]",
+  "provider": "github",
+  "score": {
+    "grade": "F",
+    "value": 0
+  },
+  "risk_summary": "Bot account detected. Scoring is not applicable.",
+  "scored_at": "2026-04-14T10:00:00Z"
 }
-```
-
-### Example: AI Sensing (Starter+, Tier 1)
-
-```json
-{
-  "ai_sensing": {
-    "co_authored_commits": 12,
-    "bot_associated_prs": 3,
-    "known_tool_signatures": ["dependabot", "copilot"],
-    "total_commits_analyzed": 87,
-    "ai_associated_ratio": 0.17
-  }
-}
-```
-
-### Rate Limit Headers (all responses)
-
-```
-X-RateLimit-Limit: 120
-X-RateLimit-Remaining: 98
-X-RateLimit-Reset: 1712956800
-X-Quota-Limit: 200
-X-Quota-Remaining: 143
-X-Quota-Reset: 1714521600
 ```
 
 ---
 
-## UI Screens
+## Auth Model
 
-### 1. Landing Page
-
-- Value prop headline + subtext
-- "Try it" search box — type username, get fully-populated score card (1 free lookup per IP)
-- After free lookup exhausted: cached-only results with "sign up for more"
-- If not cached: "Not yet scored — sign up to request"
-- CTA: "Sign up with GitHub" button
-
-### 2. Score Card
-
-- **Unauth:** Letter grade badge, numeric score, "sign up for details" CTA
-- **Authed:** Full score with category breakdown, signal details, risk summary
-- **Starter+:** License distribution section, AI sensing section
-- Trend chart showing score history over time (reuse DevPulse charting solution)
-- Optional repo context panel when `?repo=` is provided
-
-### 3. GitHub OAuth + App Installation Flow
-
-- "Sign up with GitHub" -> OAuth consent -> GitHub App installation prompt
-- Redirect to dashboard on completion
-- Same pattern as DevPulse registration
-
-### 4. Dashboard
-
-- Plan status + quota usage (visual bar: used/remaining)
-- API token list (name, created, last used, truncated value)
-- "Generate new token" button + revoke action
-- Recent scoring activity (last 10 lookups)
-
-### 5. Admin Service (separate Cloud Run service)
-
-- Tenant list + usage summary
-- Scoring pipeline status (last run, queue depth, errors)
-- GitHub API token pool health (rate limit remaining across installations)
-- System metrics (request volume, cache hit rate, latency)
+1. **Registration:** GitHub OAuth → GitHub App installation prompt → dashboard
+2. **Token pool:** Each installation gives DevTrace server-side tokens for GitHub API. All active installations pooled with round-robin rotation.
+3. **API access:** DevTrace mints its own opaque API tokens (`dt_` prefix). Map to tenant + plan.
+4. **No stored credentials:** OAuth identifies users, installation tokens are server-managed and short-lived, API tokens are DevTrace's own domain.
 
 ---
 
-## GitHub Action (MVP)
+## Scoring Model
+
+5 categories, 23 signals. See [SCOPE.md](SCOPE.md) for full breakdown.
+
+Key properties:
+- Hybrid scoring: 1 API call with GH Archive data, 3 without, +3 with repo context
+- Bot accounts return immediately (score 0, no API calls)
+- Profile scoring includes 5 identity fields (bio, company, location, website, verified email)
+- Version stamped from DevTrace build tags, not a separate model version
+
+---
+
+## GitHub Action (Phase 7)
 
 ```yaml
 # .github/workflows/devtrace.yaml
@@ -298,130 +215,12 @@ jobs:
           repo: ${{ github.repository }}
 ```
 
-**MVP behavior:**
+**MVP behavior:** Extract PR author → call score API with repo context → post PR comment with score card.
 
-1. Extracts PR author username
-2. Calls `GET /api/v1/score/{username}?repo={owner/repo}` with the tenant's token
-3. Posts a PR comment with the score card (grade, key signals, risk summary, repo context)
-
-**Post-MVP additions:**
-
-- `threshold` input — set a minimum score
-- Sets GitHub check status (pass/warn/fail) based on threshold
-- Opt-in blocking (require maintainer override for low scores)
+**Post-MVP:** `threshold` input, GitHub check status (pass/warn/fail), opt-in blocking.
 
 ---
 
-## Scoring Model
+## Remaining Work
 
-Based on `mchmarny/reputer` v3.2.0 (copied into DevTrace, evolved independently).
-
-### 5 Categories (weights sum to 1.0)
-
-| Category | Weight | Signals |
-|----------|--------|---------|
-| Code Provenance | 0.15 | Commit verification ratio x account maturity |
-| Identity | 0.25 | Account age, author association, profile completeness |
-| Engagement | 0.25 | Commit proportion, recency, PR acceptance rate |
-| Community | 0.15 | Follower/following ratio, repository count |
-| Behavioral | 0.20 | Cross-repo burst detection, fork-only ratio |
-
-### 22 Signals
-
-Carried over from reputer, extended by DevPulse patterns:
-
-**Identity:** account_age_days, author_association, has_bio, has_company, has_location, has_website
-
-**Engagement:** commits (in repo), total_commits, total_contributors, last_commit_days, prs_merged, prs_closed
-
-**Community:** followers, following, public_repos
-
-**Behavioral:** recent_pr_repo_count, forked_repos
-
-**Code Provenance:** unverified_commits, commits_verified
-
-**Membership:** org_member, trusted_org_member, suspended
-
-### Shallow vs Deep Scoring
-
-- **Shallow:** Local DB signals only (no GitHub API calls). Used for bulk scoring.
-- **Deep:** Full GitHub API enrichment (~5-6 concurrent API calls per author). Used for on-demand and scheduled rescoring.
-- Both use the same `score.Compute()` model — deep just has more signal data available.
-
-### Tiered Rescoring (from DevPulse)
-
-- Score < 0.5: rescore if stale > 7 days
-- Score >= 0.5: rescore if stale > 30 days
-- Never deep-scored: always eligible
-- Lowest scores rescored first
-
----
-
-## MVP Cut Line
-
-### In MVP
-
-- Single `/score/{username}` endpoint (plan-aware response)
-- GitHub OAuth + GitHub App installation
-- API token minting/revocation
-- Shallow + deep scoring (reputer v3.2.0 model)
-- Tier 1 AI sensing (metadata: commit trailers, bot signatures)
-- Basic license distribution (SPDX from merged PRs)
-- IP rate limiting (unauth) + token rate limiting (authed)
-- Quota enforcement (contributor cap per billing period)
-- PR comment GitHub Action
-- Landing page with 1 free full lookup
-- Score card with trend charts
-- Dashboard (plan, quota, tokens)
-- Admin service (tenants, pipeline, health)
-- PAT-backed GitHub client (dev) swapped to App installation (prod)
-- Free / Starter plans
-
-### Deferred
-
-- Batch API
-- Webhooks
-- Tier 2 AI sensing (behavioral heuristics)
-- Tier 3 AI sensing (Claude LLM analysis)
-- License annotations and copyleft flagging
-- Risk alerts (email/webhook)
-- Overage billing and spend caps
-- CSV/JSON export
-- Check status gating in GitHub Action
-- Pro / Enterprise plans
-- Historical trend beyond current data window
-- Billing/payment UI (use Stripe portal initially)
-
----
-
-## Build Phases
-
-**Phase 1 — API + Scoring Engine (PAT-backed, local dev)**
-
-Schema, scoring engine (copy reputer), REST API, rate limiting, quota enforcement. Local Postgres via docker-compose, your PAT for GitHub API calls, seeded test tenant.
-
-**Phase 2 — Auth + Registration**
-
-GitHub OAuth flow, GitHub App installation, token minting, swap PAT client for App installation client behind the same interface.
-
-**Phase 3 — UI**
-
-Landing page, score card, dashboard, trend charts. Server-rendered, same patterns as DevPulse.
-
-**Phase 4 — GitHub Action**
-
-Action that calls the API and posts PR comments. Published to GitHub Marketplace.
-
-**Phase 5 — Admin Service**
-
-Separate Cloud Run service for operator visibility. Tenant management, pipeline health, token pool monitoring.
-
----
-
-## Open Questions
-
-- Exact numeric limits per plan (contributors/month, rate limits)
-- Pricing per plan
-- Free lookup reset window (24h? weekly?)
-- Whether Free plan requires credit card
-- CLI scope and distribution (homebrew? go install?)
+See [SCOPE.md — Remaining Work](SCOPE.md#remaining-work) for the full list.
