@@ -2,6 +2,7 @@ package background
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -46,6 +47,10 @@ func StartBackgroundScorer(ctx context.Context, store *postgres.Store, gh ghclie
 }
 
 func runScorer(ctx context.Context, store *postgres.Store, gh ghclient.Client) {
+	// Phase 1: Drain scoring queue (P1 → P2 → P3).
+	drainQueue(ctx, store, gh)
+
+	// Phase 2: Rescore stale contributors.
 	lowDays := config.GetEnvAsInt("SCORER_LOW_STALE_DAYS", defaultLowDays)
 	highDays := config.GetEnvAsInt("SCORER_HIGH_STALE_DAYS", defaultHighDays)
 
@@ -62,26 +67,60 @@ func runScorer(ctx context.Context, store *postgres.Store, gh ghclient.Client) {
 
 	var scored int
 	for _, c := range stale {
-		signals, err := gh.FetchSignals(ctx, c.Username, "")
-		if err != nil {
-			slog.Warn("scorer fetch signals", "username", c.Username, "error", err)
+		if ctx.Err() != nil {
+			return
+		}
+		if err := scoreContributor(ctx, store, gh, c.Username, c.Provider); err != nil {
+			slog.Warn("score stale", "username", c.Username, "error", err)
 			continue
 		}
-
-		value := score.Compute(*signals)
-		grade := score.Grade(value)
-
-		if err := store.SaveScoreHistory(ctx, c.Username, c.Provider, value, grade, true); err != nil {
-			slog.Warn("scorer save history", "username", c.Username, "error", err)
-		}
-
-		if err := store.UpdateReputation(ctx, c.Username, c.Provider, value, grade, signals); err != nil {
-			slog.Warn("scorer update reputation", "username", c.Username, "error", err)
-			continue
-		}
-
 		scored++
 	}
 
 	slog.Info("background scorer complete", "scored", scored, "total", len(stale))
+}
+
+func drainQueue(ctx context.Context, store *postgres.Store, gh ghclient.Client) {
+	queued, err := store.DequeueForScoring(ctx, scorerBatchSize)
+	if err != nil {
+		slog.Error("dequeue for scoring", "error", err)
+		return
+	}
+	if len(queued) == 0 {
+		return
+	}
+
+	var scored int
+	for _, q := range queued {
+		if ctx.Err() != nil {
+			return
+		}
+		if err := scoreContributor(ctx, store, gh, q.Username, q.Provider); err != nil {
+			slog.Warn("score queued", "username", q.Username, "priority", q.Priority, "error", err)
+			continue
+		}
+		_ = store.RemoveFromQueue(ctx, q.Username, q.Provider)
+		scored++
+	}
+	slog.Info("queue scoring complete", "scored", scored, "total", len(queued))
+}
+
+// scoreContributor fetches signals, computes a score, and persists the result.
+func scoreContributor(ctx context.Context, store *postgres.Store, gh ghclient.Client,
+	username, provider string) error {
+	signals, err := gh.FetchSignals(ctx, username, "")
+	if err != nil {
+		return fmt.Errorf("fetch signals: %w", err)
+	}
+
+	value := score.Compute(*signals)
+	grade := score.Grade(value)
+
+	_ = store.UpsertContributor(ctx, username, provider)
+
+	if err := store.SaveScoreHistory(ctx, username, provider, value, grade, true); err != nil {
+		slog.Warn("save history", "username", username, "error", err)
+	}
+
+	return store.UpdateReputation(ctx, username, provider, value, grade, signals)
 }
