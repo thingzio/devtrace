@@ -49,6 +49,9 @@ func (a *Aggregator) Add(ev Event) {
 
 	switch ev.Type {
 	case EventPullRequest:
+		// Only "opened" and "closed" actions are tracked. "reopened" is
+		// intentionally ignored because it does not represent a new PR; counting
+		// it would inflate the contributor's PR velocity and distort scoring.
 		switch ev.Action {
 		case "opened":
 			s.PRsOpened++

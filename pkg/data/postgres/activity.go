@@ -32,6 +32,8 @@ type BehavioralSignals = model.Behavior
 
 // BatchUpsertActivity upserts hourly summaries into contributor_activity.
 // On conflict, counts are added to existing values. Returns the number of rows upserted.
+// All rows are written in a single transaction, so partial progress is impossible;
+// on error the entire batch is rolled back and count 0 is returned.
 func (s *Store) BatchUpsertActivity(ctx context.Context, summaries []HourlySummary) (int, error) {
 	const query = `INSERT INTO contributor_activity (username, provider, hour, prs_opened, prs_merged, prs_closed,
 		reviews_given, issue_comments, distinct_repos, repos)

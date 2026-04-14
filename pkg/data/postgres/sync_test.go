@@ -76,7 +76,7 @@ func TestSyncDeveloperToDevTrace(t *testing.T) {
 		UpdatedAt:         time.Now().UTC(),
 	}
 
-	if err := store.SyncDeveloperToDevTrace(ctx, dev, "A-"); err != nil {
+	if err := store.SyncDeveloperToDevTrace(ctx, dev, "A-", "3.2.0"); err != nil {
 		t.Fatalf("sync developer: %v", err)
 	}
 
@@ -122,7 +122,7 @@ func TestSyncDeveloperToDevTrace(t *testing.T) {
 
 	// Idempotent: call again with updated score.
 	dev.Reputation = 0.90
-	if err = store.SyncDeveloperToDevTrace(ctx, dev, "A"); err != nil {
+	if err = store.SyncDeveloperToDevTrace(ctx, dev, "A", "3.2.0"); err != nil {
 		t.Fatalf("sync developer (update): %v", err)
 	}
 

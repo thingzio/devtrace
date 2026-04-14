@@ -40,14 +40,17 @@ func (c *PoolClient) FetchUser(ctx context.Context, username string) (*UserProfi
 	}
 
 	profile, fetchErr := fetchUser(ctx, api, username)
-	if fetchErr != nil && isRateLimited(fetchErr) {
+	for fetchErr != nil && isRateLimited(fetchErr) {
 		c.pool.Exhaust(token)
+		if c.pool.ActiveCount() == 0 {
+			return nil, fmt.Errorf("all tokens exhausted: %w", fetchErr)
+		}
 		slog.Warn("token rate limited, retrying", "username", username)
-		api, _, err = c.ghClient(ctx)
+		api, token, err = c.ghClient(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("retry after rate limit: %w", err)
 		}
-		return fetchUser(ctx, api, username)
+		profile, fetchErr = fetchUser(ctx, api, username)
 	}
 	return profile, fetchErr
 }
@@ -60,14 +63,17 @@ func (c *PoolClient) FetchSignals(ctx context.Context, username, repo string, hi
 	}
 
 	signals, fetchErr := fetchSignals(ctx, api, username, repo, hints)
-	if fetchErr != nil && isRateLimited(fetchErr) {
+	for fetchErr != nil && isRateLimited(fetchErr) {
 		c.pool.Exhaust(token)
+		if c.pool.ActiveCount() == 0 {
+			return nil, fmt.Errorf("all tokens exhausted: %w", fetchErr)
+		}
 		slog.Warn("token rate limited, retrying", "username", username)
-		api, _, err = c.ghClient(ctx)
+		api, token, err = c.ghClient(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("retry after rate limit: %w", err)
 		}
-		return fetchSignals(ctx, api, username, repo, hints)
+		signals, fetchErr = fetchSignals(ctx, api, username, repo, hints)
 	}
 	return signals, fetchErr
 }
@@ -80,9 +86,12 @@ func (c *PoolClient) IsOrgMember(ctx context.Context, org, username string) (boo
 	}
 
 	isMember, _, fetchErr := api.Organizations.IsMember(ctx, org, username)
-	if fetchErr != nil && isRateLimited(fetchErr) {
+	for fetchErr != nil && isRateLimited(fetchErr) {
 		c.pool.Exhaust(token)
-		api, _, err = c.ghClient(ctx)
+		if c.pool.ActiveCount() == 0 {
+			return false, fmt.Errorf("all tokens exhausted: %w", fetchErr)
+		}
+		api, token, err = c.ghClient(ctx)
 		if err != nil {
 			return false, fmt.Errorf("retry after rate limit: %w", err)
 		}

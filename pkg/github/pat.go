@@ -14,9 +14,12 @@ type PATClient struct {
 }
 
 // NewPATClient returns a Client backed by a personal access token.
-func NewPATClient(ctx context.Context, token string) *PATClient {
+// The ctx parameter is accepted for API consistency but is not stored;
+// context.Background() is used for the oauth2 HTTP client because the
+// returned PATClient outlives any single request context.
+func NewPATClient(_ context.Context, token string) *PATClient {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
-	tc := oauth2.NewClient(ctx, ts)
+	tc := oauth2.NewClient(context.Background(), ts)
 	return &PATClient{api: gh.NewClient(tc)}
 }
 

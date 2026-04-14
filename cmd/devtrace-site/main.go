@@ -21,12 +21,16 @@ func main() {
 	logging.SetupLogger()
 	slog.Info("starting devtrace-site", "version", version, "commit", commit, "date", date)
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	err := server.Run(ctx, server.Options{Version: version, Commit: commit, Date: date})
-	stop()
+	os.Exit(run())
+}
 
-	if err != nil {
+func run() int {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := server.Run(ctx, server.Options{Version: version, Commit: commit, Date: date}); err != nil {
 		slog.Error("fatal error", "error", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }

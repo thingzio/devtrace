@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	syncStateKey   = "devpulse_sync"
-	defaultSyncSec = 1800 // 30 minutes
-	syncBatchSize  = 500
+	syncStateKey         = "devpulse_sync"
+	defaultSyncSec       = 1800 // 30 minutes
+	syncBatchSize        = 500
+	devpulseModelVersion = "3.2.0"
 )
 
 // StartDevPulseSync runs a background loop that copies developer scores
@@ -70,7 +71,7 @@ func runSync(ctx context.Context, store *postgres.Store) {
 
 	for _, d := range devs {
 		grade := score.Grade(d.Reputation)
-		if err := store.SyncDeveloperToDevTrace(ctx, d, grade); err != nil {
+		if err := store.SyncDeveloperToDevTrace(ctx, d, grade, devpulseModelVersion); err != nil {
 			slog.Error("sync developer", "username", d.Username, "error", err)
 			continue
 		}

@@ -70,8 +70,9 @@ func (s *Store) GetDevPulseUpdatedDevelopers(ctx context.Context, since time.Tim
 
 // SyncDeveloperToDevTrace upserts a DevPulse developer into DevTrace's
 // contributor, reputation, and reputation_history tables. The grade parameter
-// should be computed by the caller (e.g. via score.Grade).
-func (s *Store) SyncDeveloperToDevTrace(ctx context.Context, d DevPulseDeveloper, grade string) error {
+// should be computed by the caller (e.g. via score.Grade). modelVersion
+// identifies the scoring model that produced the reputation value.
+func (s *Store) SyncDeveloperToDevTrace(ctx context.Context, d DevPulseDeveloper, grade, modelVersion string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -94,7 +95,7 @@ func (s *Store) SyncDeveloperToDevTrace(ctx context.Context, d DevPulseDeveloper
 	// Upsert reputation.
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO reputation (username, provider, score, grade, model_version, deep, signals)
-		 VALUES ($1, 'github', $2, $3, '3.2.0', $4, $5::jsonb)
+		 VALUES ($1, 'github', $2, $3, $4, $5, $6::jsonb)
 		 ON CONFLICT (username, provider) DO UPDATE
 		    SET score         = EXCLUDED.score,
 		        grade         = EXCLUDED.grade,
@@ -102,7 +103,7 @@ func (s *Store) SyncDeveloperToDevTrace(ctx context.Context, d DevPulseDeveloper
 		        deep          = EXCLUDED.deep,
 		        signals       = EXCLUDED.signals,
 		        scored_at     = NOW()`,
-		d.Username, d.Reputation, grade, d.ReputationDeep, d.ReputationSignals); err != nil {
+		d.Username, d.Reputation, grade, modelVersion, d.ReputationDeep, d.ReputationSignals); err != nil {
 		return fmt.Errorf("upsert reputation: %w", err)
 	}
 

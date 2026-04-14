@@ -110,9 +110,18 @@ func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			maxContribs = limits.MaxContributors
 		}
 
-		used, _ := tenant.GetUsageCount(r.Context(), db, tn.ID, tenant.BillingPeriodStart())
-		tokens, _ := tenant.ListAPITokens(r.Context(), db, tn.ID)
-		recent, _ := tenant.GetRecentScored(r.Context(), db, tn.ID, 10)
+		used, err := tenant.GetUsageCount(r.Context(), db, tn.ID, tenant.BillingPeriodStart())
+		if err != nil {
+			slog.Error("dashboard: get usage count", "tenant", tn.ID, "error", err)
+		}
+		tokens, err := tenant.ListAPITokens(r.Context(), db, tn.ID)
+		if err != nil {
+			slog.Error("dashboard: list api tokens", "tenant", tn.ID, "error", err)
+		}
+		recent, err := tenant.GetRecentScored(r.Context(), db, tn.ID, 10)
+		if err != nil {
+			slog.Error("dashboard: get recent scored", "tenant", tn.ID, "error", err)
+		}
 
 		pct := 0
 		if maxContribs > 0 {

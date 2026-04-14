@@ -149,6 +149,8 @@ func extractBearerToken(r *http.Request) string {
 	return strings.TrimPrefix(auth, "Bearer ")
 }
 
+// writeJSON is intentionally duplicated from server.writeJSON because the
+// middleware package cannot import server (it would create a circular dependency).
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
