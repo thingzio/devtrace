@@ -54,7 +54,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 
 		if _, err := s.db.ExecContext(ctx,
-			"INSERT INTO schema_version (version) VALUES ($1) ON CONFLICT DO NOTHING", version); err != nil {
+			"INSERT INTO devtrace_schema_version (version) VALUES ($1) ON CONFLICT DO NOTHING", version); err != nil {
 			return fmt.Errorf("record migration %d: %w", version, err)
 		}
 	}
@@ -65,7 +65,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 func (s *Store) migrationApplied(ctx context.Context, version int) (bool, error) {
 	var exists bool
 	err := s.db.QueryRowContext(ctx,
-		"SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = 'schema_version')").Scan(&exists)
+		"SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = 'devtrace_schema_version')").Scan(&exists)
 	if err != nil {
 		return false, err
 	}
@@ -75,6 +75,6 @@ func (s *Store) migrationApplied(ctx context.Context, version int) (bool, error)
 
 	var count int
 	err = s.db.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM schema_version WHERE version = $1", version).Scan(&count)
+		"SELECT COUNT(*) FROM devtrace_schema_version WHERE version = $1", version).Scan(&count)
 	return count > 0, err
 }

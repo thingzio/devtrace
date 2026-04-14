@@ -1,6 +1,6 @@
 -- Hourly behavioral summaries from GH Archive.
 -- Sharding-ready: BIGSERIAL id + composite PK for AlloyDB compatibility.
-CREATE TABLE contributor_activity (
+CREATE TABLE IF NOT EXISTS contributor_activity (
     id BIGSERIAL,
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
@@ -15,13 +15,13 @@ CREATE TABLE contributor_activity (
     PRIMARY KEY (username, provider, hour)
 );
 
-CREATE INDEX idx_activity_hour ON contributor_activity(hour);
+CREATE INDEX IF NOT EXISTS idx_activity_hour ON contributor_activity(hour);
 
 -- Priority-based scoring queue.
 -- P1: new contributor in tenant repo
 -- P2: new contributor in any repo
 -- P3: stale contributor in tenant repo
-CREATE TABLE scoring_queue (
+CREATE TABLE IF NOT EXISTS scoring_queue (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
     priority INTEGER NOT NULL DEFAULT 2,
@@ -29,4 +29,4 @@ CREATE TABLE scoring_queue (
     PRIMARY KEY (username, provider)
 );
 
-CREATE INDEX idx_scoring_queue_priority ON scoring_queue(priority, queued_at);
+CREATE INDEX IF NOT EXISTS idx_scoring_queue_priority ON scoring_queue(priority, queued_at);

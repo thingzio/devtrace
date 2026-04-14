@@ -1,11 +1,11 @@
--- Schema version tracking
-CREATE TABLE IF NOT EXISTS schema_version (
+-- Schema version tracking (devtrace-scoped to avoid collision with DevPulse in shared DB)
+CREATE TABLE IF NOT EXISTS devtrace_schema_version (
     version INTEGER PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Contributor profiles (provider-agnostic identity)
-CREATE TABLE contributor (
+CREATE TABLE IF NOT EXISTS contributor (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
     display_name TEXT,
@@ -22,7 +22,7 @@ CREATE TABLE contributor (
 );
 
 -- Reputation scores
-CREATE TABLE reputation (
+CREATE TABLE IF NOT EXISTS reputation (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
     score REAL NOT NULL,
@@ -37,11 +37,11 @@ CREATE TABLE reputation (
     FOREIGN KEY (username, provider) REFERENCES contributor(username, provider) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_reputation_score ON reputation(score);
-CREATE INDEX idx_reputation_scored_at ON reputation(scored_at);
+CREATE INDEX IF NOT EXISTS idx_reputation_score ON reputation(score);
+CREATE INDEX IF NOT EXISTS idx_reputation_scored_at ON reputation(scored_at);
 
 -- Reputation history (for trend charts)
-CREATE TABLE reputation_history (
+CREATE TABLE IF NOT EXISTS reputation_history (
     id BIGSERIAL PRIMARY KEY,
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
@@ -52,10 +52,10 @@ CREATE TABLE reputation_history (
     FOREIGN KEY (username, provider) REFERENCES contributor(username, provider) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_reputation_history_lookup ON reputation_history(username, provider, scored_at);
+CREATE INDEX IF NOT EXISTS idx_reputation_history_lookup ON reputation_history(username, provider, scored_at);
 
 -- License profiles
-CREATE TABLE license_profile (
+CREATE TABLE IF NOT EXISTS license_profile (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
     total_repos_with_merged_prs INTEGER NOT NULL DEFAULT 0,
@@ -67,7 +67,7 @@ CREATE TABLE license_profile (
 );
 
 -- AI sensing signals
-CREATE TABLE ai_signal (
+CREATE TABLE IF NOT EXISTS ai_signal (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
     co_authored_commits INTEGER NOT NULL DEFAULT 0,
@@ -81,7 +81,7 @@ CREATE TABLE ai_signal (
 );
 
 -- Tenants (registered users)
-CREATE TABLE tenant (
+CREATE TABLE IF NOT EXISTS tenant (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     github_id BIGINT UNIQUE NOT NULL,
     username TEXT NOT NULL,
@@ -99,7 +99,7 @@ CREATE TABLE tenant (
 );
 
 -- API tokens (DevTrace-minted)
-CREATE TABLE api_token (
+CREATE TABLE IF NOT EXISTS api_token (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -108,11 +108,11 @@ CREATE TABLE api_token (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_api_token_hash ON api_token(token_hash);
-CREATE INDEX idx_api_token_tenant ON api_token(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_api_token_hash ON api_token(token_hash);
+CREATE INDEX IF NOT EXISTS idx_api_token_tenant ON api_token(tenant_id);
 
 -- Sessions (UI auth)
-CREATE TABLE session (
+CREATE TABLE IF NOT EXISTS session (
     id TEXT PRIMARY KEY,
     tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     expires_at TIMESTAMPTZ NOT NULL,
@@ -120,7 +120,7 @@ CREATE TABLE session (
 );
 
 -- GitHub App installations
-CREATE TABLE github_app_installation (
+CREATE TABLE IF NOT EXISTS github_app_installation (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     installation_id BIGINT UNIQUE NOT NULL,
@@ -132,7 +132,7 @@ CREATE TABLE github_app_installation (
 );
 
 -- Usage tracking (quota enforcement)
-CREATE TABLE usage_record (
+CREATE TABLE IF NOT EXISTS usage_record (
     id BIGSERIAL PRIMARY KEY,
     tenant_id UUID NOT NULL REFERENCES tenant(id) ON DELETE CASCADE,
     username_scored TEXT NOT NULL,
@@ -141,10 +141,10 @@ CREATE TABLE usage_record (
     scored_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_usage_tenant_period ON usage_record(tenant_id, scored_at);
+CREATE INDEX IF NOT EXISTS idx_usage_tenant_period ON usage_record(tenant_id, scored_at);
 
 -- Rate limit tracking (IP-based for unauth)
-CREATE TABLE rate_limit (
+CREATE TABLE IF NOT EXISTS rate_limit (
     key TEXT PRIMARY KEY,
     count INTEGER NOT NULL DEFAULT 0,
     window_start TIMESTAMPTZ NOT NULL DEFAULT NOW()
