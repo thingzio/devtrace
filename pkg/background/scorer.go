@@ -19,9 +19,19 @@ const (
 	defaultHighDays  = 30
 )
 
+// scorerStore defines the store operations needed by the background scorer.
+type scorerStore interface {
+	DequeueForScoring(ctx context.Context, limit int) ([]postgres.QueueEntry, error)
+	RemoveFromQueue(ctx context.Context, username, provider string) error
+	GetStaleContributors(ctx context.Context, lowDays, highDays, limit int) ([]postgres.StaleContributor, error)
+	UpsertContributor(ctx context.Context, username, provider string) error
+	SaveScoreHistory(ctx context.Context, username, provider string, value float64, grade string, deep bool) error
+	UpdateReputation(ctx context.Context, username, provider string, value float64, grade, version string, signals *score.InputSignals) error
+}
+
 // StartBackgroundScorer rescores stale contributors on a schedule.
 // Returns a cancel function to stop the loop.
-func StartBackgroundScorer(ctx context.Context, store *postgres.Store, gh ghclient.Client) func() {
+func StartBackgroundScorer(ctx context.Context, store *postgres.Store, gh ghclient.Client, version string) func() {
 	interval := time.Duration(config.GetEnvAsInt("SCORER_INTERVAL_SEC", defaultScorerSec)) * time.Second
 	slog.Info("starting background scorer", "interval", interval)
 
@@ -38,7 +48,7 @@ func StartBackgroundScorer(ctx context.Context, store *postgres.Store, gh ghclie
 				slog.Info("background scorer stopped")
 				return
 			case <-ticker.C:
-				runScorer(ctx, store, gh)
+				runScorer(ctx, store, gh, version)
 			}
 		}
 	}()
@@ -46,9 +56,9 @@ func StartBackgroundScorer(ctx context.Context, store *postgres.Store, gh ghclie
 	return cancel
 }
 
-func runScorer(ctx context.Context, store *postgres.Store, gh ghclient.Client) {
+func runScorer(ctx context.Context, store scorerStore, gh ghclient.Client, version string) {
 	// Phase 1: Drain scoring queue (P1 → P2 → P3).
-	drainQueue(ctx, store, gh)
+	drainQueue(ctx, store, gh, version)
 
 	// Phase 2: Rescore stale contributors.
 	lowDays := config.GetEnvAsInt("SCORER_LOW_STALE_DAYS", defaultLowDays)
@@ -70,7 +80,7 @@ func runScorer(ctx context.Context, store *postgres.Store, gh ghclient.Client) {
 		if ctx.Err() != nil {
 			return
 		}
-		if err := scoreContributor(ctx, store, gh, c.Username, c.Provider); err != nil {
+		if err := scoreContributor(ctx, store, gh, c.Username, c.Provider, version); err != nil {
 			slog.Warn("score stale", "username", c.Username, "error", err)
 			continue
 		}
@@ -80,7 +90,7 @@ func runScorer(ctx context.Context, store *postgres.Store, gh ghclient.Client) {
 	slog.Info("background scorer complete", "scored", scored, "total", len(stale))
 }
 
-func drainQueue(ctx context.Context, store *postgres.Store, gh ghclient.Client) {
+func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client, version string) {
 	queued, err := store.DequeueForScoring(ctx, scorerBatchSize)
 	if err != nil {
 		slog.Error("dequeue for scoring", "error", err)
@@ -95,7 +105,7 @@ func drainQueue(ctx context.Context, store *postgres.Store, gh ghclient.Client) 
 		if ctx.Err() != nil {
 			return
 		}
-		if err := scoreContributor(ctx, store, gh, q.Username, q.Provider); err != nil {
+		if err := scoreContributor(ctx, store, gh, q.Username, q.Provider, version); err != nil {
 			slog.Warn("score queued", "username", q.Username, "priority", q.Priority, "error", err)
 			continue
 		}
@@ -106,9 +116,9 @@ func drainQueue(ctx context.Context, store *postgres.Store, gh ghclient.Client) 
 }
 
 // scoreContributor fetches signals, computes a score, and persists the result.
-func scoreContributor(ctx context.Context, store *postgres.Store, gh ghclient.Client,
-	username, provider string) error {
-	signals, err := gh.FetchSignals(ctx, username, "")
+func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client,
+	username, provider, version string) error {
+	signals, err := gh.FetchSignals(ctx, username, "", nil)
 	if err != nil {
 		return fmt.Errorf("fetch signals: %w", err)
 	}
@@ -122,5 +132,5 @@ func scoreContributor(ctx context.Context, store *postgres.Store, gh ghclient.Cl
 		slog.Warn("save history", "username", username, "error", err)
 	}
 
-	return store.UpdateReputation(ctx, username, provider, value, grade, signals)
+	return store.UpdateReputation(ctx, username, provider, value, grade, version, signals)
 }
