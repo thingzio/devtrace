@@ -82,6 +82,14 @@ resource "google_cloud_run_v2_service" "serve" {
         value = "/secrets/github-app-key/key.pem"
       }
 
+      dynamic "env" {
+        for_each = var.github_token != "" ? [1] : []
+        content {
+          name  = "GITHUB_TOKEN"
+          value = var.github_token
+        }
+      }
+
       resources {
         limits = {
           cpu    = "1000m"

@@ -83,3 +83,10 @@ variable "db_name" {
   type        = string
   default     = "thingz"
 }
+
+variable "github_token" {
+  description = "GitHub PAT fallback for API calls (optional, used during bootstrap)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
