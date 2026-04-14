@@ -10,7 +10,23 @@ import (
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 )
 
-const syncStateKey = "gharchive_cursor"
+const (
+	syncStateKey     = "gharchive_cursor"
+	compactStateKey  = "activity_compacted"
+	compactInterval  = 24 * time.Hour
+	compactOlderThan = 30 * 24 * time.Hour // aggregate rows older than 30 days
+)
+
+// ingestStore defines the store operations needed by the ingest runner.
+type ingestStore interface {
+	GetSyncState(ctx context.Context, key string) (time.Time, error)
+	SaveSyncState(ctx context.Context, key string, val time.Time) error
+	GetTenantRepos(ctx context.Context) (map[string]bool, error)
+	BatchUpsertActivity(ctx context.Context, summaries []postgres.HourlySummary) (int, error)
+	EnqueueForScoring(ctx context.Context, username, provider string, priority int) error
+	ContributorExists(ctx context.Context, username, provider string) (bool, error)
+	CompactActivity(ctx context.Context, olderThan time.Duration) (int64, error)
+}
 
 // Run processes one or more hourly GH Archive dumps.
 func Run(ctx context.Context, store *postgres.Store) error {
@@ -19,7 +35,8 @@ func Run(ctx context.Context, store *postgres.Store) error {
 
 	cursor, _ := store.GetSyncState(ctx, syncStateKey)
 	lookback := config.GetEnvAsInt("GHARCHIVE_LOOKBACK_HOURS", 1)
-	hours := computeHours(cursor, lookback)
+	catchupMax := config.GetEnvAsInt("GHARCHIVE_CATCHUP_MAX_HOURS", 24)
+	hours := computeHours(cursor, lookback, catchupMax)
 
 	if len(hours) == 0 {
 		slog.Info("no hours to process")
@@ -42,20 +59,48 @@ func Run(ctx context.Context, store *postgres.Store) error {
 		}
 	}
 
+	// Compaction: aggregate old hourly rows into weekly buckets.
+	maybeCompact(ctx, store)
+
 	return nil
 }
 
+// maybeCompact runs activity compaction if it hasn't run in the last 24 hours.
+// Errors are logged but do not fail the ingest run.
+func maybeCompact(ctx context.Context, store ingestStore) {
+	lastCompact, _ := store.GetSyncState(ctx, compactStateKey)
+	if !lastCompact.IsZero() && time.Since(lastCompact) < compactInterval {
+		return
+	}
+
+	slog.Info("running activity compaction", "older_than", compactOlderThan)
+	deleted, err := store.CompactActivity(ctx, compactOlderThan)
+	if err != nil {
+		slog.Error("compaction failed", "error", err)
+		return
+	}
+
+	slog.Info("compaction complete", "rows_deleted", deleted)
+	if err := store.SaveSyncState(ctx, compactStateKey, time.Now().UTC()); err != nil {
+		slog.Error("save compaction state", "error", err)
+	}
+}
+
 // computeHours determines which hourly archive files to process.
-// It returns up to lookback hours between cursor+1h and lastAvailable (now-1h).
-func computeHours(cursor time.Time, lookback int) []time.Time {
+//   - No cursor (fresh install): returns up to lookback hours ending at now-1h.
+//   - With cursor (catching up): returns up to catchupMax hours from cursor+1h.
+func computeHours(cursor time.Time, lookback, catchupMax int) []time.Time {
 	now := time.Now().UTC().Truncate(time.Hour)
 	lastAvailable := now.Add(-time.Hour)
 
 	var start time.Time
+	var cap int
 	if cursor.IsZero() {
 		start = lastAvailable.Add(-time.Duration(lookback-1) * time.Hour)
+		cap = lookback
 	} else {
 		start = cursor.Add(time.Hour)
+		cap = catchupMax
 	}
 
 	if !start.Before(now) {
@@ -63,13 +108,13 @@ func computeHours(cursor time.Time, lookback int) []time.Time {
 	}
 
 	var hours []time.Time
-	for t := start; !t.After(lastAvailable) && len(hours) < lookback; t = t.Add(time.Hour) {
+	for t := start; !t.After(lastAvailable) && len(hours) < cap; t = t.Add(time.Hour) {
 		hours = append(hours, t)
 	}
 	return hours
 }
 
-func processHour(ctx context.Context, store *postgres.Store, reader *ArchiveReader,
+func processHour(ctx context.Context, store ingestStore, reader *ArchiveReader,
 	hour time.Time, tenantRepos map[string]bool) error {
 	slog.Info("processing archive", "hour", hour.Format("2006-01-02-15"))
 
@@ -119,7 +164,7 @@ func processHour(ctx context.Context, store *postgres.Store, reader *ArchiveRead
 	return nil
 }
 
-func queueContributors(ctx context.Context, store *postgres.Store,
+func queueContributors(ctx context.Context, store ingestStore,
 	summaries []Summary, tenantRepos map[string]bool) int {
 	var count int
 	for _, s := range summaries {

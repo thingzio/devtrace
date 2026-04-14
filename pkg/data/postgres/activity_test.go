@@ -159,3 +159,73 @@ func TestGetBehavioralSignals(t *testing.T) {
 		t.Errorf("pr_velocity_baseline: got %f, want > 0", sig.PRVelocityBaseline)
 	}
 }
+
+func TestCompactActivity(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	const user = "compact-test-user"
+
+	// Clean up from prior runs.
+	_, _ = store.DB().ExecContext(ctx,
+		`DELETE FROM contributor_activity WHERE username = $1`, user)
+
+	// Insert hourly rows across 45 days — old enough for 30-day compaction.
+	now := time.Now().UTC().Truncate(time.Hour)
+	var inserted int
+	for day := 0; day < 45; day++ {
+		for hour := 0; hour < 3; hour++ { // 3 rows per day
+			h := now.Add(-time.Duration(day)*24*time.Hour - time.Duration(hour)*time.Hour)
+			s := postgres.HourlySummary{
+				Username:      user,
+				Provider:      "github",
+				Hour:          h,
+				PRsOpened:     1,
+				ReviewsGiven:  1,
+				DistinctRepos: 1,
+				Repos:         []string{"org/repo1"},
+			}
+			if _, err := store.BatchUpsertActivity(ctx, []postgres.HourlySummary{s}); err != nil {
+				t.Fatalf("insert day %d hour %d: %v", day, hour, err)
+			}
+			inserted++
+		}
+	}
+
+	// Count rows before compaction.
+	var beforeCount int
+	_ = store.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM contributor_activity WHERE username = $1`, user).Scan(&beforeCount)
+	if beforeCount != inserted {
+		t.Fatalf("before compact: got %d rows, want %d", beforeCount, inserted)
+	}
+
+	// Compact rows older than 30 days.
+	deleted, err := store.CompactActivity(ctx, 30*24*time.Hour)
+	if err != nil {
+		t.Fatalf("compact: %v", err)
+	}
+	if deleted == 0 {
+		t.Fatal("expected some rows deleted")
+	}
+
+	// Rows after compaction should be fewer.
+	var afterCount int
+	_ = store.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM contributor_activity WHERE username = $1`, user).Scan(&afterCount)
+	if afterCount >= beforeCount {
+		t.Errorf("after compact: %d rows should be fewer than before: %d", afterCount, beforeCount)
+	}
+
+	// Totals should be preserved: sum of prs_opened should equal inserted count.
+	var totalPRs int
+	_ = store.DB().QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(prs_opened), 0) FROM contributor_activity WHERE username = $1`, user).Scan(&totalPRs)
+	if totalPRs != inserted {
+		t.Errorf("total prs_opened after compact: got %d, want %d", totalPRs, inserted)
+	}
+}
