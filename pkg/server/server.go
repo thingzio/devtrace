@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/thingzio/devtrace/pkg/background"
@@ -44,8 +45,9 @@ var templateFuncs = template.FuncMap{
 		}
 		return fmt.Sprintf("%d,%03d", n/1000, n%1000)
 	},
-	"mul": func(a, b float64) float64 { return a * b },
-	"int": func(n int64) int { return int(n) },
+	"mul":      func(a, b float64) float64 { return a * b },
+	"int":      func(n int64) int { return int(n) },
+	"prettify": func(s string) string { return strings.ReplaceAll(s, "_", " ") },
 }
 
 func init() {

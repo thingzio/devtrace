@@ -33,7 +33,7 @@
     <div class="category-bars">
       {{range $name, $val := .Categories}}
       <div class="category-bar">
-        <label>{{$name}}</label>
+        <label>{{prettify $name}}</label>
         <div class="bar-track">
           <div class="bar-fill" style="width: {{printf "%.0f" (mul $val 100.0)}}%"></div>
         </div>
