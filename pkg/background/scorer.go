@@ -38,7 +38,9 @@ func StartBackgroundScorer(ctx context.Context, store *postgres.Store, gh ghclie
 	ctx, cancel := context.WithCancel(ctx)
 
 	go func() {
-		// Don't run immediately — let sync populate first.
+		// Run once immediately to drain any pending queue.
+		runScorer(ctx, store, gh, version)
+
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 
