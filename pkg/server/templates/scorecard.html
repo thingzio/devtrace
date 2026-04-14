@@ -61,9 +61,8 @@
       <tr><td>Has company</td><td>{{if .Signals.HasCompany}}&#10003;{{else}}&#10007;{{end}}</td></tr>
       <tr><td>Has location</td><td>{{if .Signals.HasLocation}}&#10003;{{else}}&#10007;{{end}}</td></tr>
       <tr><td>Has website</td><td>{{if .Signals.HasWebsite}}&#10003;{{else}}&#10007;{{end}}</td></tr>
-      <tr><td>Org member</td><td>{{if .Signals.OrgMember}}&#10003;{{else}}&#10007;{{end}}</td></tr>
+      <tr><td>Has public email</td><td>{{if .Signals.HasPublicEmail}}&#10003;{{else}}&#10007;{{end}}</td></tr>
       <tr><td>Suspended</td><td>{{if .Signals.Suspended}}Yes{{else}}No{{end}}</td></tr>
-      <tr><td>Commits verified</td><td>{{if .Signals.CommitsVerified}}&#10003;{{else}}&#10007;{{end}}</td></tr>
     </table>
   </section>
   {{end}}
@@ -76,6 +75,7 @@
       <tr><td>Total repo commits</td><td>{{.RepoContext.TotalCommits}}</td></tr>
       <tr><td>Contributors</td><td>{{.RepoContext.TotalContributors}}</td></tr>
       <tr><td>Org member</td><td>{{if .RepoContext.OrgMember}}&#10003;{{else}}&#10007;{{end}}</td></tr>
+      <tr><td>Commits verified</td><td>{{if .RepoContext.CommitsVerified}}&#10003;{{else}}&#10007;{{end}}</td></tr>
       <tr><td>Association</td><td>{{.RepoContext.AuthorAssociation}}</td></tr>
     </table>
   </section>

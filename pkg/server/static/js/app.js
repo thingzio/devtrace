@@ -37,6 +37,12 @@
       e.preventDefault();
       var username = input.value.trim();
       if (!username) return;
+      var btn = form.querySelector('button');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Scoring\u2026';
+      }
+      input.disabled = true;
       window.location.href = '/score/' + encodeURIComponent(username);
     });
   }
