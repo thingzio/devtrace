@@ -3,17 +3,22 @@ package github
 import (
 	"strings"
 	"sync"
+	"time"
 )
+
+const tokenResetWindow = 50 * time.Minute // GitHub rate limits reset after 1 hour
 
 // TokenPool manages a pool of GitHub API tokens using round-robin selection.
 // Thread-safe. Supports marking tokens as exhausted after rate limit errors.
+// Exhausted tokens auto-reset after the rate limit window (1 hour).
 // Adapted from DevPulse pkg/data/ghutil/tokenpool.go.
 type TokenPool struct {
-	mu        sync.Mutex
-	tokens    []string
-	counts    []int
-	exhausted []bool
-	current   int
+	mu          sync.Mutex
+	tokens      []string
+	counts      []int
+	exhausted   []bool
+	exhaustedAt []time.Time
+	current     int
 }
 
 // NewTokenPool creates a pool from one or more tokens. Tokens can be passed
@@ -29,9 +34,10 @@ func NewTokenPool(tokens ...string) *TokenPool {
 		}
 	}
 	return &TokenPool{
-		tokens:    list,
-		counts:    make([]int, len(list)),
-		exhausted: make([]bool, len(list)),
+		tokens:      list,
+		counts:      make([]int, len(list)),
+		exhausted:   make([]bool, len(list)),
+		exhaustedAt: make([]time.Time, len(list)),
 	}
 }
 
@@ -46,9 +52,14 @@ func (p *TokenPool) Token() string {
 		return ""
 	}
 
+	now := time.Now()
 	for range n {
 		idx := p.current
 		p.current = (idx + 1) % n
+		// Auto-reset tokens whose rate limit window has passed.
+		if p.exhausted[idx] && now.Sub(p.exhaustedAt[idx]) > tokenResetWindow {
+			p.exhausted[idx] = false
+		}
 		if !p.exhausted[idx] {
 			p.counts[idx]++
 			return p.tokens[idx]
@@ -66,6 +77,7 @@ func (p *TokenPool) Exhaust(token string) {
 	for i, t := range p.tokens {
 		if t == token {
 			p.exhausted[i] = true
+			p.exhaustedAt[i] = time.Now()
 			return
 		}
 	}
@@ -76,9 +88,10 @@ func (p *TokenPool) ActiveCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	now := time.Now()
 	count := 0
 	for i := range p.tokens {
-		if !p.exhausted[i] {
+		if !p.exhausted[i] || now.Sub(p.exhaustedAt[i]) > tokenResetWindow {
 			count++
 		}
 	}

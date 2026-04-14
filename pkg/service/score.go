@@ -186,12 +186,13 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 		// Free gets categories, signals, risk summary, behavior, AI sensing Tier 1.
 		resp.License = nil
 		// AI sensing Tier 1 (metadata) is zero-cost — include for Free.
-		if resp.AISensing == nil {
-			resp.AISensing = &model.AISensing{}
-		}
-		// Strip Claude-powered fields (Starter+).
+		// Deep-copy to avoid mutating the cached original.
 		if resp.AISensing != nil {
-			resp.AISensing.PRAuthenticity = nil
+			aiCopy := *resp.AISensing
+			aiCopy.PRAuthenticity = nil // Strip Claude-powered fields (Starter+).
+			resp.AISensing = &aiCopy
+		} else {
+			resp.AISensing = &model.AISensing{}
 		}
 
 	case "starter", "pro":

@@ -182,7 +182,8 @@ func (c *Client) complete(ctx context.Context, system, userMessage string, maxTo
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	const maxResponseBytes = 1 << 16 // 64KB — Claude responses are short narratives
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return "", fmt.Errorf("read response: %w", err)
 	}

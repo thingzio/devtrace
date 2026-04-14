@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/thingzio/devtrace/pkg/middleware"
+	"github.com/thingzio/devtrace/pkg/plan"
 	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
@@ -23,6 +24,22 @@ func createTokenHandler(db *sql.DB) http.HandlerFunc {
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+			return
+		}
+
+		// Enforce MaxAPIKeys plan limit.
+		existing, err := tenant.ListAPITokens(r.Context(), db, tn.ID)
+		if err != nil {
+			slog.Error("list tokens for limit check", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to check token limit"})
+			return
+		}
+		p, ok := plan.Get(tn.Plan)
+		if !ok {
+			p = plan.Free()
+		}
+		if p.MaxAPIKeys > 0 && len(existing) >= p.MaxAPIKeys {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "API key limit reached for your plan"})
 			return
 		}
 

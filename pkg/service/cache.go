@@ -17,6 +17,7 @@ type scoreCache struct {
 	mu      sync.RWMutex
 	entries map[string]*cacheEntry
 	ttl     time.Duration
+	stop    chan struct{}
 }
 
 func newScoreCache() *scoreCache {
@@ -24,6 +25,7 @@ func newScoreCache() *scoreCache {
 	c := &scoreCache{
 		entries: make(map[string]*cacheEntry),
 		ttl:     time.Duration(ttlSec) * time.Second,
+		stop:    make(chan struct{}),
 	}
 	go c.evictLoop()
 	return c
@@ -65,14 +67,24 @@ func (c *scoreCache) evictLoop() {
 	ticker := time.NewTicker(c.ttl)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		c.mu.Lock()
-		now := time.Now()
-		for k, e := range c.entries {
-			if now.After(e.expiresAt) {
-				delete(c.entries, k)
+	for {
+		select {
+		case <-c.stop:
+			return
+		case <-ticker.C:
+			c.mu.Lock()
+			now := time.Now()
+			for k, e := range c.entries {
+				if now.After(e.expiresAt) {
+					delete(c.entries, k)
+				}
 			}
+			c.mu.Unlock()
 		}
-		c.mu.Unlock()
 	}
+}
+
+// Close stops the eviction loop.
+func (c *scoreCache) Close() {
+	close(c.stop)
 }

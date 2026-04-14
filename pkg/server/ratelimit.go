@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +55,10 @@ func (rl *ipRateLimiter) cleanup() {
 	}
 }
 
+func (rl *ipRateLimiter) close() {
+	close(rl.stop)
+}
+
 func (rl *ipRateLimiter) allow(ip string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
@@ -101,10 +106,11 @@ func (rl *ipRateLimiter) wrap(next http.Handler) http.Handler {
 	})
 }
 
+// extractIP returns the client IP. Trusts X-Forwarded-For only when
+// TRUST_PROXY=true (Cloud Run, load balancer). Otherwise uses RemoteAddr.
 func extractIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// First IP in the chain is the original client.
-		if ip := strings.TrimSpace(strings.SplitN(xff, ",", 2)[0]); ip != "" {
+	if trustProxy && r.Header.Get("X-Forwarded-For") != "" {
+		if ip := strings.TrimSpace(strings.SplitN(r.Header.Get("X-Forwarded-For"), ",", 2)[0]); ip != "" {
 			return ip
 		}
 	}
@@ -115,3 +121,5 @@ func extractIP(r *http.Request) string {
 	}
 	return host
 }
+
+var trustProxy = os.Getenv("TRUST_PROXY") == "true"

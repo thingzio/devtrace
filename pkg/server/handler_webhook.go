@@ -18,7 +18,8 @@ import (
 
 func webhookHandler(db *sql.DB, secret string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
+		const maxWebhookBytes = 1 << 20 // 1MB
+		body, err := io.ReadAll(io.LimitReader(r.Body, maxWebhookBytes))
 		if err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return

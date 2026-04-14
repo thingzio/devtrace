@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	"github.com/thingzio/devtrace/pkg/middleware"
@@ -15,10 +17,25 @@ import (
 	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
+var (
+	usernameRE = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\[bot\])?$`)
+	repoRE     = regexp.MustCompile(`^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$`)
+)
+
 func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := r.PathValue("username")
+		if username == "" || len(username) > 39 || !usernameRE.MatchString(username) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid username"})
+			return
+		}
+
 		repo := r.URL.Query().Get("repo")
+		if repo != "" && !repoRE.MatchString(repo) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid repo format, expected owner/repo"})
+			return
+		}
+
 		trustedOrgs := r.URL.Query()["trusted_orgs"]
 
 		planName := ""
@@ -29,44 +46,9 @@ func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) 
 
 		// Quota check for authenticated tenants.
 		if tn != nil && db != nil {
-			p, ok := plan.Get(tn.Plan)
-			if !ok {
-				p = plan.Free()
-			}
-
-			periodStart := tenant.BillingPeriodStart()
-			used, err := tenant.GetUsageCount(r.Context(), db, tn.ID, periodStart)
-			if err != nil {
-				slog.Error("quota check failed", "tenant", tn.ID, "error", err)
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "quota check failed"})
+			if exceeded := checkQuota(r.Context(), w, db, tn); exceeded {
 				return
 			}
-
-			maxC := p.MaxContributors
-			if tn.MaxContributors > 0 {
-				maxC = tn.MaxContributors
-			}
-
-			if maxC > 0 && used >= maxC {
-				resetTime := tenant.NextBillingPeriodStart()
-				writeJSON(w, http.StatusForbidden, map[string]any{
-					"error":       "contributor quota exceeded",
-					"quota_limit": maxC,
-					"quota_used":  used,
-					"quota_reset": resetTime.Format("2006-01-02T15:04:05Z"),
-				})
-				return
-			}
-
-			// Set quota headers (will be written with the response).
-			remaining := maxC - used
-			if remaining < 0 {
-				remaining = 0
-			}
-			resetTS := tenant.NextBillingPeriodStart().Unix()
-			w.Header().Set("X-Quota-Limit", strconv.Itoa(maxC))
-			w.Header().Set("X-Quota-Remaining", strconv.Itoa(remaining))
-			w.Header().Set("X-Quota-Reset", strconv.FormatInt(resetTS, 10))
 		}
 
 		resp, err := svc.Score(r.Context(), username, repo, planName, trustedOrgs)
@@ -85,10 +67,11 @@ func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) 
 		}
 
 		// Fire-and-forget: persist score history for trend charts.
-		// Uses background context intentionally — request may complete before save finishes.
+		// Bounded timeout prevents goroutine leak if DB is hung.
 		if store != nil {
 			go func() { //nolint:gosec // intentional: background ctx outlives request
-				ctx := context.Background()
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
 				if err := store.UpsertContributor(ctx, username, "github"); err != nil {
 					slog.Error("upsert contributor", "username", username, "error", err)
 					return
@@ -104,4 +87,47 @@ func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) 
 			slog.Error("encode response", "error", err)
 		}
 	}
+}
+
+// checkQuota verifies the tenant hasn't exceeded their contributor quota.
+// Returns true if the request should be rejected (quota exceeded or error).
+func checkQuota(ctx context.Context, w http.ResponseWriter, db *sql.DB, tn *tenant.Tenant) bool {
+	p, ok := plan.Get(tn.Plan)
+	if !ok {
+		p = plan.Free()
+	}
+
+	periodStart := tenant.BillingPeriodStart()
+	used, err := tenant.GetUsageCount(ctx, db, tn.ID, periodStart)
+	if err != nil {
+		slog.Error("quota check failed", "tenant", tn.ID, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "quota check failed"})
+		return true
+	}
+
+	maxC := p.MaxContributors
+	if tn.MaxContributors > 0 {
+		maxC = tn.MaxContributors
+	}
+
+	if maxC > 0 && used >= maxC {
+		resetTime := tenant.NextBillingPeriodStart()
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"error":       "contributor quota exceeded",
+			"quota_limit": maxC,
+			"quota_used":  used,
+			"quota_reset": resetTime.Format("2006-01-02T15:04:05Z"),
+		})
+		return true
+	}
+
+	remaining := maxC - used
+	if remaining < 0 {
+		remaining = 0
+	}
+	resetTS := tenant.NextBillingPeriodStart().Unix()
+	w.Header().Set("X-Quota-Limit", strconv.Itoa(maxC))
+	w.Header().Set("X-Quota-Remaining", strconv.Itoa(remaining))
+	w.Header().Set("X-Quota-Reset", strconv.FormatInt(resetTS, 10))
+	return false
 }

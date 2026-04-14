@@ -38,7 +38,8 @@ func (s *Store) DequeueForScoring(ctx context.Context, limit int) ([]QueueEntry,
 		`SELECT username, provider, priority, queued_at
 		 FROM scoring_queue
 		 ORDER BY priority ASC, queued_at ASC
-		 LIMIT $1`, limit)
+		 LIMIT $1
+		 FOR UPDATE SKIP LOCKED`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("dequeue for scoring: %w", err)
 	}

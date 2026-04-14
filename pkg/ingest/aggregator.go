@@ -53,7 +53,11 @@ func (a *Aggregator) Add(ev Event) {
 		case "opened":
 			s.PRsOpened++
 		case "closed":
-			s.PRsClosed++
+			if ev.Merged {
+				s.PRsMerged++
+			} else {
+				s.PRsClosed++
+			}
 		}
 	case EventPullRequestReview:
 		s.ReviewsGiven++

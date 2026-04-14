@@ -94,7 +94,8 @@ func TestScoreHandlerSecurityHeaders(t *testing.T) {
 	}
 
 	svc := service.NewScoreService(mock, nil, "v0.0.1-test")
-	mux := makeRouter(nil, svc, nil, Options{})
+	mux, cleanup := makeRouter(nil, svc, nil, Options{})
+	defer cleanup()
 	handler := securityHeaders(mux)
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/score/u", nil)

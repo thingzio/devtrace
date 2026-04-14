@@ -45,21 +45,31 @@ func (s *Store) BatchUpsertActivity(ctx context.Context, summaries []HourlySumma
 		distinct_repos = EXCLUDED.distinct_repos,
 		repos = EXCLUDED.repos`
 
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("begin batch upsert tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	var count int
 	for _, h := range summaries {
 		reposJSON, err := json.Marshal(h.Repos)
 		if err != nil {
-			return count, fmt.Errorf("marshal repos: %w", err)
+			return 0, fmt.Errorf("marshal repos: %w", err)
 		}
-		_, err = s.db.ExecContext(ctx, query,
+		_, err = tx.ExecContext(ctx, query,
 			h.Username, h.Provider, h.Hour,
 			h.PRsOpened, h.PRsMerged, h.PRsClosed,
 			h.ReviewsGiven, h.IssueComments, h.DistinctRepos,
 			reposJSON)
 		if err != nil {
-			return count, fmt.Errorf("upsert activity row %d: %w", count, err)
+			return 0, fmt.Errorf("upsert activity row %d: %w", count, err)
 		}
 		count++
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit batch upsert: %w", err)
 	}
 	return count, nil
 }

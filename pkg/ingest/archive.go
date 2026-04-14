@@ -24,6 +24,7 @@ type Event struct {
 	Action    string
 	Actor     string
 	Repo      string
+	Merged    bool // PullRequestEvent: true if PR was merged (action=closed + merged=true)
 	CreatedAt time.Time
 }
 
@@ -105,7 +106,10 @@ func parseEvent(line []byte) (Event, bool) {
 		return Event{}, false
 	}
 	var payload struct {
-		Action string `json:"action"`
+		Action      string `json:"action"`
+		PullRequest struct {
+			Merged bool `json:"merged"`
+		} `json:"pull_request"`
 	}
 	_ = json.Unmarshal(raw.Payload, &payload)
 	t, _ := time.Parse(time.RFC3339, raw.CreatedAt)
@@ -114,6 +118,7 @@ func parseEvent(line []byte) (Event, bool) {
 		Action:    payload.Action,
 		Actor:     raw.Actor.Login,
 		Repo:      raw.Repo.Name,
+		Merged:    payload.PullRequest.Merged,
 		CreatedAt: t,
 	}, raw.Actor.Login != "" && raw.Repo.Name != ""
 }

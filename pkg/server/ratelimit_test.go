@@ -98,6 +98,11 @@ func TestExtractIP(t *testing.T) {
 		},
 	}
 
+	// Enable proxy trust for XFF tests.
+	origTrust := trustProxy
+	trustProxy = true
+	defer func() { trustProxy = origTrust }()
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
@@ -110,5 +115,20 @@ func TestExtractIP(t *testing.T) {
 				t.Errorf("extractIP() = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestExtractIPNoTrustProxy(t *testing.T) {
+	origTrust := trustProxy
+	trustProxy = false
+	defer func() { trustProxy = origTrust }()
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	req.RemoteAddr = "10.0.0.1:9999"
+	req.Header.Set("X-Forwarded-For", "203.0.113.50")
+
+	got := extractIP(req)
+	if got != "10.0.0.1" {
+		t.Errorf("without TRUST_PROXY, XFF should be ignored: got %q, want 10.0.0.1", got)
 	}
 }

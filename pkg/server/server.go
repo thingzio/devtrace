@@ -128,7 +128,8 @@ func Run(ctx context.Context, opts Options) error {
 		RedirectURL:  config.GetEnv("BASE_URL", "http://localhost:8080") + "/auth/github/callback",
 	}
 
-	mux := makeRouter(store, scoreSvc, oauthCfg, opts)
+	mux, routerCleanup := makeRouter(store, scoreSvc, oauthCfg, opts)
+	defer routerCleanup()
 
 	port := config.GetEnv("PORT", "8080")
 	srv := &http.Server{
@@ -219,7 +220,7 @@ func buildGitHubClient(ctx context.Context, store *postgres.Store) (ghclient.Cli
 	return ghclient.NewPATClient(ctx, token), nil
 }
 
-func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg *oauth.Config, opts Options) *http.ServeMux {
+func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg *oauth.Config, opts Options) (*http.ServeMux, func()) {
 	var db *sql.DB
 	if store != nil {
 		db = store.DB()
@@ -280,7 +281,11 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 		mux.HandleFunc("POST /webhook/github", webhookHandler(db, webhookSecret))
 	}
 
-	return mux
+	cleanup := func() {
+		scoreRL.close()
+		oauthRL.close()
+	}
+	return mux, cleanup
 }
 
 func securityHeaders(next http.Handler) http.Handler {
