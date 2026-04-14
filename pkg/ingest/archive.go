@@ -12,6 +12,13 @@ import (
 
 const defaultBaseURL = "https://data.gharchive.org"
 
+// GitHub event type constants.
+const (
+	EventPullRequest       = "PullRequestEvent"
+	EventPullRequestReview = "PullRequestReviewEvent"
+	EventIssueComment      = "IssueCommentEvent"
+)
+
 type Event struct {
 	Type      string
 	Action    string
@@ -93,7 +100,7 @@ func parseEvent(line []byte) (Event, bool) {
 		return Event{}, false
 	}
 	switch raw.Type {
-	case "PullRequestEvent", "PullRequestReviewEvent", "IssueCommentEvent":
+	case EventPullRequest, EventPullRequestReview, EventIssueComment:
 	default:
 		return Event{}, false
 	}

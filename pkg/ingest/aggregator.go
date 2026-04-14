@@ -1,0 +1,74 @@
+package ingest
+
+import "time"
+
+// Summary is the per-contributor hourly aggregation result.
+type Summary struct {
+	Username      string
+	PRsOpened     int
+	PRsMerged     int
+	PRsClosed     int
+	ReviewsGiven  int
+	IssueComments int
+	Repos         map[string]bool
+}
+
+// Aggregator collects events into per-contributor hourly summaries.
+type Aggregator struct {
+	hour      time.Time
+	summaries map[string]*Summary // key: username
+}
+
+// NewAggregator creates an aggregator for the given hour (truncated to the hour boundary).
+func NewAggregator(hour time.Time) *Aggregator {
+	return &Aggregator{
+		hour:      hour.Truncate(time.Hour),
+		summaries: make(map[string]*Summary),
+	}
+}
+
+// Add processes a single event.
+func (a *Aggregator) Add(ev Event) {
+	s, ok := a.summaries[ev.Actor]
+	if !ok {
+		s = &Summary{
+			Username: ev.Actor,
+			Repos:    make(map[string]bool),
+		}
+		a.summaries[ev.Actor] = s
+	}
+	s.Repos[ev.Repo] = true
+
+	switch ev.Type {
+	case EventPullRequest:
+		switch ev.Action {
+		case "opened":
+			s.PRsOpened++
+		case "closed":
+			s.PRsClosed++
+		}
+	case EventPullRequestReview:
+		s.ReviewsGiven++
+	case EventIssueComment:
+		s.IssueComments++
+	}
+}
+
+// Hour returns the hour this aggregator is collecting for.
+func (a *Aggregator) Hour() time.Time {
+	return a.hour
+}
+
+// Results returns all summaries.
+func (a *Aggregator) Results() []Summary {
+	results := make([]Summary, 0, len(a.summaries))
+	for _, s := range a.summaries {
+		results = append(results, *s)
+	}
+	return results
+}
+
+// Count returns the number of unique contributors aggregated.
+func (a *Aggregator) Count() int {
+	return len(a.summaries)
+}
