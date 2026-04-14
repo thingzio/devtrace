@@ -215,9 +215,18 @@ make qualify
 ## Cleanup
 
 ```bash
+# Stop Postgres (preserves data)
 make db-down
+
+# Full reset (destroys all data, useful for migration testing)
+docker compose down -v
+
 rm -f devtrace-site devtrace-ingest
 ```
+
+## Known Test Interactions
+
+- **TestNewClientNoKey**: This test asserts that the Claude client is nil when no API key is configured. If `DEVTRACE_ANTHROPIC_API_KEY` is set in your shell environment, the test will fail because the client initializes successfully. Unset the variable or run tests in a clean env.
 
 ## Environment Variables
 
@@ -231,6 +240,7 @@ rm -f devtrace-site devtrace-ingest
 | `SCORE_RATE_LIMIT` | `60` | Requests/hour (unauth) |
 | `OAUTH_RATE_LIMIT` | `20` | OAuth starts/minute per IP |
 | `SCORE_CACHE_TTL_SEC` | `300` | Score cache TTL (5 min) |
+| `TRUST_PROXY` | `false` | Trust X-Forwarded-For for rate limiting (required on Cloud Run) |
 | `ENABLE_BACKGROUND_OPS` | `false` | Enable sync + scorer background routines |
 | `SCORER_INTERVAL_SEC` | `3600` | Background scorer interval |
 | `SCORER_LOW_STALE_DAYS` | `7` | Rescore low-score contributors after N days |

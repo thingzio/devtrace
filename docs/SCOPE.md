@@ -145,6 +145,10 @@ Native to DevTrace (`pkg/score/`). Version tracked by DevTrace release tags.
 - **Quota headers** — `X-RateLimit-*` and `X-Quota-*` in API responses
 - **Overage billing** — per-request pricing beyond plan quota
 
+### Completed
+
+- **Deployment and bootstrap** — Cloud Run service + ingest job deployed, Terraform infra, CI/CD pipelines, DNS, secrets, domain mapping, first release (see [BOOTSTRAP.md](BOOTSTRAP.md))
+
 ### Future
 
 - Tier 2 AI sensing (behavioral heuristics computed from GH Archive data)

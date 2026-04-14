@@ -255,3 +255,33 @@ If any secrets were exposed during setup:
 1. Regenerate in GitHub (OAuth App settings / GitHub App settings)
 2. Update in Secret Manager: `gcloud secrets versions add <secret-name> --data-file=-`
 3. Redeploy: `make bump-patch`
+
+---
+
+## Lessons Learned
+
+Hard-won notes from the first production deployment.
+
+### Shared DB with DevPulse
+
+DevTrace uses its own `devtrace_tenant` table, not the shared DevPulse `tenant` table. The `devtrace_schema_version` table tracks migration state independently to avoid collision with DevPulse's `schema_version`.
+
+### GitHub App Installation Filtering
+
+GitHub App installations stored in the shared DB belong to whichever app created them. Querying all rows returns DevPulse installations that 404 when DevTrace tries to use them. Fix: filter by `app_id` in all installation queries.
+
+### gcloud run services update --set-env-vars Replaces All Env Vars
+
+`--set-env-vars` is a full replacement, not a merge. Running it wipes every env var not in the new list. Use `--update-env-vars` for incremental changes, or manage all env vars in Terraform to avoid drift.
+
+### TRUST_PROXY Required for Cloud Run
+
+Cloud Run sits behind Google's HTTPS load balancer. Without `TRUST_PROXY=true`, the rate limiter sees the LB IP instead of the real client IP, causing all requests to share a single rate-limit bucket.
+
+### OAuth Callback URL Must Match BASE_URL
+
+The OAuth callback URL registered in the GitHub OAuth App must exactly match `${BASE_URL}/auth/github/callback`. A mismatch (e.g., bare Cloud Run URL vs custom domain) causes a redirect_uri mismatch error during login.
+
+### Webhook Deliveries Fail Until Certificate Provisioned
+
+Cloud Run domain mappings need time for the managed TLS certificate to provision. Webhook deliveries sent before the cert is ready will fail. After the cert is live, redeliver failed webhooks from the GitHub App settings page (Advanced → Recent Deliveries).

@@ -26,6 +26,10 @@ Background scorer (queue drain + stale rescoring), DevPulse sync, Claude API int
 
 Hourly Cloud Run Job, event aggregation, behavioral signals, activity compaction, hybrid scoring path, bot filtering, token pool.
 
+### Phase 5.5 — Deployment & Bootstrap ✅
+
+Terraform infra (Cloud Run, Artifact Registry, secrets, IAM, WIF), CI/CD pipelines (test-on-push, release-on-tag), DNS domain mapping, first production release. See [BOOTSTRAP.md](BOOTSTRAP.md) for the full runbook.
+
 ### Phase 6 — Admin Service (next)
 
 Operator visibility: tenant management, pipeline health, token pool monitoring, scoring metrics.

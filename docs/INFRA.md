@@ -13,6 +13,8 @@ DevTrace shares the same GCP project, VPC, and Cloud SQL instance as DevPulse. I
 | `devtrace-saas-serve` | Service | Web UI + REST API (auto-scaling 0-10) |
 | `devtrace-saas-ingest` | Job | Hourly GH Archive ingest (1 task, 55min timeout) |
 
+`devtrace-saas-serve` requires `TRUST_PROXY=true` in production — Cloud Run sits behind Google's LB, and the rate limiter needs the real client IP from `X-Forwarded-For`.
+
 ### Supporting Resources
 
 | Resource | Type | Description |
@@ -33,6 +35,14 @@ DevTrace shares the same GCP project, VPC, and Cloud SQL instance as DevPulse. I
 | `devtrace-saas-anthropic-api-key` | serve + ingest (Claude API) |
 
 All secret names are prefixed with `${var.prefix}` (`devtrace-saas`) to avoid collision with DevPulse secrets. Same env var names inside containers (e.g. `ANTHROPIC_API_KEY`), different GCP secret resources.
+
+### Terraform Bootstrap Variables
+
+| Variable | Purpose |
+|----------|---------|
+| `github_oauth_client_id` | OAuth App client ID (persisted in Cloud Run env) |
+| `github_app_id` | GitHub App ID (persisted in Cloud Run env) |
+| `github_token` | Bootstrap only — container registry auth during first apply. Not stored in state. |
 
 ### Shared Resources (from DevPulse/thingzio project)
 
