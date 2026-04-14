@@ -1,12 +1,12 @@
-# Phase 5: GH Archive Ingest — Implementation Plan
+# Phase 5: GH Archive Ingest + Claude API Integration — Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Ingest hourly GH Archive dumps to populate contributor behavioral summaries, queue discovered contributors for API scoring by priority, and extend the background scorer to drain the queue.
+**Goal:** Ingest hourly GH Archive dumps to populate contributor behavioral summaries, queue discovered contributors for API scoring by priority, extend the background scorer to drain the queue, and integrate Claude API for intelligent risk narratives and PR authenticity analysis.
 
-**Architecture:** New `devtrace-ingest` Cloud Run Job binary downloads hourly GH Archive dumps, stream-processes NDJSON, aggregates per-contributor hourly summaries into `contributor_activity`, and queues new/relevant contributors for scoring. The existing background scorer is extended to drain the `scoring_queue` by priority before rescoring stale contributors.
+**Architecture:** New `devtrace-ingest` Cloud Run Job binary downloads hourly GH Archive dumps, stream-processes NDJSON, aggregates per-contributor hourly summaries into `contributor_activity`, and queues new/relevant contributors for scoring. The existing background scorer is extended to drain the `scoring_queue` by priority. A new `pkg/claude/` package wraps the Anthropic API for risk narrative generation (Haiku, all plans) and PR authenticity classification (Haiku, Starter+). Results are cached in the reputation table.
 
-**Tech Stack:** Go 1.26, `compress/gzip` + `bufio.Scanner` for streaming, `encoding/json` for NDJSON parsing, PostgreSQL batch inserts. Same build toolchain as `devtrace-site`.
+**Tech Stack:** Go 1.26, `compress/gzip` + `bufio.Scanner` for streaming, `encoding/json` for NDJSON parsing, `github.com/anthropics/anthropic-sdk-go` for Claude API, PostgreSQL batch inserts. Same build toolchain as `devtrace-site`.
 
 ---
 
@@ -791,7 +791,241 @@ git commit -S -m "Add behavioral signals to API response from contributor_activi
 
 ---
 
-## Task 9: Terraform + CI/CD for Ingest Job
+## Task 9: Claude API Client Package
+
+Wrap the Anthropic API for risk narrative generation and PR authenticity classification.
+
+**Files:**
+- Create: `pkg/claude/client.go`
+- Create: `pkg/claude/client_test.go`
+
+### client.go
+
+```go
+package claude
+
+import (
+    "context"
+    "fmt"
+    "os"
+
+    "github.com/anthropics/anthropic-sdk-go"
+)
+
+// Client wraps the Anthropic API for DevTrace analysis tasks.
+type Client struct {
+    api    *anthropic.Client
+    model  string
+}
+
+// New creates a Claude client. Returns nil if ANTHROPIC_API_KEY is not set
+// (allows graceful degradation when Claude is not configured).
+func New() *Client {
+    key := os.Getenv("ANTHROPIC_API_KEY")
+    if key == "" {
+        return nil
+    }
+    model := os.Getenv("ANTHROPIC_MODEL")
+    if model == "" {
+        model = "claude-haiku-4-5-20251001" // Haiku for classification + short narratives
+    }
+    return &Client{
+        api:   anthropic.NewClient(anthropic.WithAPIKey(key)),
+        model: model,
+    }
+}
+
+// GenerateRiskNarrative produces a 1-2 sentence risk assessment from score data.
+// Uses Haiku for speed and cost efficiency (~$0.0005/request).
+func (c *Client) GenerateRiskNarrative(ctx context.Context, input RiskInput) (string, error)
+
+// ClassifyPRAuthenticity classifies PR descriptions as likely human vs AI-generated.
+// Returns a classification with confidence score.
+func (c *Client) ClassifyPRAuthenticity(ctx context.Context, descriptions []string) (*AuthenticityResult, error)
+
+type RiskInput struct {
+    Username        string
+    Score           float64
+    Grade           string
+    Signals         map[string]any  // flat signal map
+    Categories      map[string]float64
+    RepoContext     string          // optional repo
+    Behavior        map[string]any  // optional behavioral data
+}
+
+type AuthenticityResult struct {
+    Classification string  // "human", "ai_assisted", "ai_generated", "uncertain"
+    Confidence     float64 // 0.0-1.0
+    Reasoning      string  // brief explanation
+}
+```
+
+### GenerateRiskNarrative implementation
+
+System prompt (cached via Anthropic prompt caching — identical for every request):
+```
+You are a security analyst assessing open source contributor reputation.
+Given a contributor's scoring signals, produce a 1-2 sentence risk assessment.
+Focus on actionable insight: what should a maintainer do with this PR?
+Be specific about which signals drive your assessment.
+Do not use jargon. Do not hedge excessively.
+```
+
+User message: JSON of the RiskInput struct.
+
+Parse the response text as the narrative string. If API call fails, return empty string (caller falls back to the existing template-based summary).
+
+### ClassifyPRAuthenticity implementation
+
+System prompt:
+```
+Classify the following PR descriptions as: human, ai_assisted, ai_generated, or uncertain.
+AI-generated descriptions tend to: use bullet points exhaustively, explain "what" but omit "why",
+follow templates, and use overly formal language.
+Return JSON: {"classification": "...", "confidence": 0.0-1.0, "reasoning": "..."}
+```
+
+User message: the PR descriptions (up to 5 recent ones concatenated).
+
+### Tests
+
+- `TestNewClientNoKey` — returns nil when ANTHROPIC_API_KEY not set
+- `TestNewClientWithKey` — returns non-nil (set env in test)
+- `TestGenerateRiskNarrative` — mock HTTP server returning a canned response, verify parsing
+- `TestClassifyPRAuthenticity` — mock HTTP server, verify classification parsing
+- `TestFallbackOnError` — verify empty string returned on API error
+
+### Dependencies
+
+```bash
+go get github.com/anthropics/anthropic-sdk-go
+```
+
+### Commit
+
+```bash
+git add pkg/claude/ go.mod go.sum
+git commit -S -m "Add Claude API client for risk narratives and PR authenticity"
+```
+
+---
+
+## Task 10: Integrate Claude into Score Service
+
+Replace the template-based `generateRiskSummary` with Claude-powered narratives. Fall back to templates when Claude is unavailable.
+
+**Files:**
+- Modify: `pkg/service/score.go` — accept Claude client, call for risk narrative
+- Modify: `pkg/server/server.go` — create Claude client, pass to ScoreService
+
+### ScoreService changes
+
+Add Claude client to the service:
+```go
+type ScoreService struct {
+    gh      ghclient.Client
+    store   ScoreStore
+    cache   *scoreCache
+    claude  *claude.Client // nil = fallback to templates
+}
+
+func NewScoreService(gh ghclient.Client, store ScoreStore, claude *claude.Client) *ScoreService
+```
+
+In the `Score` method, after computing signals and score:
+```go
+// Generate risk narrative
+if s.claude != nil && plan != "" {
+    input := claude.RiskInput{
+        Username:   username,
+        Score:      value,
+        Grade:      grade,
+        Signals:    signalsToMap(signals),
+        Categories: score.Categories(*signals),
+        RepoContext: repo,
+    }
+    if narrative, err := s.claude.GenerateRiskNarrative(ctx, input); err == nil && narrative != "" {
+        resp.RiskSummary = narrative
+    }
+}
+// Fall back to template if Claude didn't produce a narrative
+if resp.RiskSummary == "" {
+    resp.RiskSummary = generateRiskSummary(signals, value)
+}
+```
+
+The Claude narrative is cached along with the rest of the score response (5 min TTL). So the Claude API is called at most once per contributor per cache window.
+
+### server.go changes
+
+```go
+claudeClient := claude.New() // nil if ANTHROPIC_API_KEY not set
+if claudeClient != nil {
+    slog.Info("claude API enabled")
+}
+scoreSvc := service.NewScoreService(ghClient, nil, claudeClient)
+```
+
+### Update existing tests
+
+All `NewScoreService` calls need the third `nil` argument for Claude client. Update tests.
+
+### Commit
+
+```bash
+git add pkg/service/ pkg/server/
+git commit -S -m "Integrate Claude risk narratives into score service"
+```
+
+---
+
+## Task 11: Claude-Powered PR Authenticity in AI Sensing
+
+Add PR authenticity classification to the AI sensing response field. Uses GH Archive data (PR descriptions) when available.
+
+**Files:**
+- Modify: `pkg/service/score.go` — call ClassifyPRAuthenticity for Starter+ plans
+- Modify: `pkg/model/types.go` — extend AISensing struct
+
+### AISensing extension
+
+```go
+type AISensing struct {
+    CoAuthoredCommits    int      `json:"co_authored_commits"`
+    BotAssociatedPRs     int      `json:"bot_associated_prs"`
+    KnownToolSignatures  []string `json:"known_tool_signatures"`
+    TotalCommitsAnalyzed int      `json:"total_commits_analyzed"`
+    AIAssociatedRatio    float64  `json:"ai_associated_ratio"`
+    // Claude-powered (Starter+)
+    PRAuthenticity       *AuthenticityAssessment `json:"pr_authenticity,omitempty"`
+}
+
+type AuthenticityAssessment struct {
+    Classification string  `json:"classification"` // human, ai_assisted, ai_generated, uncertain
+    Confidence     float64 `json:"confidence"`
+    Reasoning      string  `json:"reasoning"`
+}
+```
+
+### Score service integration
+
+For Starter+ plans, when Claude client is available:
+1. Fetch recent PR descriptions from `contributor_activity.repos` (if GH Archive data exists)
+2. Call `claude.ClassifyPRAuthenticity`
+3. Attach to `resp.AISensing.PRAuthenticity`
+
+This is best-effort — if no archive data or Claude is unavailable, the field is omitted.
+
+### Commit
+
+```bash
+git add pkg/model/ pkg/service/
+git commit -S -m "Add Claude-powered PR authenticity to AI sensing"
+```
+
+---
+
+## Task 12: Terraform + CI/CD for Ingest Job
 
 Add Cloud Run Job and Cloud Scheduler for the ingest pipeline.
 
@@ -846,7 +1080,7 @@ git commit -S -m "Add Terraform and CI/CD for ingest Cloud Run Job"
 
 ---
 
-## Task 10: End-to-End Verification
+## Task 13: End-to-End Verification
 
 **Step 1: Run full test suite**
 
@@ -907,65 +1141,21 @@ git commit -S -m "Phase 5 end-to-end verification fixes"
 - [ ] Ingest binary: `devtrace-ingest` with goreleaser + Makefile
 - [ ] Background scorer: drains queue before rescoring stale
 - [ ] Behavioral signals: `behavior` field in API response
-- [ ] Terraform: Cloud Run Job + Scheduler for hourly ingest
+- [ ] Claude API client: risk narratives (Haiku, all plans) + PR authenticity (Haiku, Starter+)
+- [ ] Claude integration in score service with template fallback
+- [ ] PR authenticity in AI sensing response
+- [ ] Terraform: Cloud Run Job + Scheduler for hourly ingest + Anthropic API key secret
 - [ ] All tests pass, lint clean
 
 ---
 
----
+## Future Claude Extensions (Post Phase 5)
 
-## Claude API Integration Points (Tier 3 — Future)
+Tasks 9-11 implement risk narratives and PR authenticity. These additional Claude use cases can be added later:
 
-The behavioral data from GH Archive combined with API-sourced signals creates rich context for Claude-powered analysis. These are the places where LLM analysis adds insight beyond what metrics alone can show. Stub these as interfaces/extension points during implementation.
-
-### 1. Risk Narrative Generation
-
-**Input:** Full `ScoreResponse` + `BehavioralSignals` for a contributor.
-
-**What Claude adds:** A natural language risk assessment that synthesizes multiple weak signals into a coherent narrative. Example: "This contributor's PR velocity tripled in March 2026 while their review-to-author ratio dropped to zero — consistent with AI-assisted bulk contributions without code review engagement."
-
-**Where to stub:** `pkg/service/score.go` — after computing score + behavioral signals, optionally call a `RiskNarrative(resp) string` function. Return empty string if Claude not configured.
-
-### 2. PR Description Authenticity
-
-**Input:** PR titles and descriptions from GH Archive events (available in the payload).
-
-**What Claude adds:** Classify PR descriptions as likely human-written vs AI-generated. AI descriptions tend to be more structured, use bullet points, and explain "what" exhaustively while omitting "why." This feeds into the AI sensing dimension.
-
-**Where to stub:** `pkg/ingest/aggregator.go` — extract PR title/description from event payload during aggregation. Store as optional fields in `contributor_activity`. The analysis itself runs as a batch job (Tier 3, Claude Haiku for classification).
-
-### 3. Contribution Pattern Anomaly Detection
-
-**Input:** 180 days of `contributor_activity` hourly summaries for a contributor.
-
-**What Claude adds:** Detect non-obvious behavioral shifts. A sudden change in contribution style, timing, or repo breadth may indicate account compromise, organizational changes, or transition to AI-assisted development. Metrics can detect velocity changes; Claude can assess whether the pattern is concerning.
-
-**Where to stub:** `pkg/data/postgres/activity.go` → `GetBehavioralSignals` already computes velocity and consistency. Add an `AnomalyContext` struct that packages the raw time-series data for Claude analysis. The analysis endpoint calls Claude only when Tier 2 heuristics flag ambiguity.
-
-### 4. Cross-Contributor Correlation
-
-**Input:** Activity patterns for all contributors to a specific repo.
-
-**What Claude adds:** Identify coordinated behavior — multiple accounts with similar timing, PR patterns, or description templates. This is relevant for supply chain security: detecting sybil-style contribution campaigns.
-
-**Where to stub:** This is a repo-level analysis, not contributor-level. Add a future `pkg/analysis/` package with an interface for repo-level risk assessment. The ingest pipeline already captures per-repo contributor activity.
-
-### 5. License Risk Interpretation
-
-**Input:** A contributor's license distribution (from license analysis) + their behavioral profile.
-
-**What Claude adds:** Contextual risk assessment. A contributor who actively contributes to GPL-3.0 repos and then submits code to your Apache-2.0 project may warrant attention — not because of a violation, but because of provenance ambiguity. Claude can articulate the nuance that a license distribution table alone cannot.
-
-**Where to stub:** `pkg/service/score.go` — when license data and behavioral data are both present, an optional `LicenseRiskAssessment` function can synthesize them via Claude.
-
-### Cost Control
-
-All Claude integration follows the design from `docs/SCOPE.md`:
-- **Haiku** for classification tasks (PR description, yes/no + confidence)
-- **Sonnet** for narrative generation (risk summaries, anomaly explanations)
-- **Batch API** (50% cost reduction) for non-real-time analysis
-- **Cache results** with configurable TTL (7 days active, 30 days inactive)
-- **Free/Starter tiers never trigger Claude** — Pro/Enterprise only
+- **Anomaly explanation** (Sonnet, Pro) — when Tier 2 heuristics flag ambiguous behavioral shifts, Claude explains whether the pattern is concerning
+- **Cross-contributor correlation** — detect coordinated sybil-style contribution campaigns across a repo's contributor set
+- **License risk interpretation** — synthesize license distribution + behavioral profile into contextual risk assessment
 
 ---
 
@@ -974,4 +1164,3 @@ All Claude integration follows the design from `docs/SCOPE.md`:
 - **Phase 5 follow-up:** Compaction job for `contributor_activity` (weekly aggregation of old rows)
 - **Phase 6:** Admin service for operator visibility
 - **GitHub Action:** `thingzio/devtrace-action` (separate repo)
-- **Claude API integration:** Implement Tier 3 analysis behind the stubbed interfaces
