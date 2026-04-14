@@ -56,7 +56,7 @@ Permissions:
 - **Repository**: Metadata (Read-only), Contents (Read-only), Pull requests (Read-only)
 - **Organization**: Members (Read-only) — required for org membership checks and trusted_orgs
 
-Subscribe to events: **Installation**, **Installation repositories**
+Subscribe to events: none required. Installation events (create/delete/suspend) are sent automatically for all GitHub Apps — no checkbox needed.
 
 After creating: note the **App ID**, download the **private key** (.pem), note the **webhook secret**.
 
