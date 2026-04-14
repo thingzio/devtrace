@@ -203,66 +203,45 @@ func fetchSignals(ctx context.Context, api *gh.Client, username, repo string, hi
 			}()
 
 			// Contributor stats for this repo (commits, total, recency).
+			// Primary: ListContributorsStats (rich data but returns 202 for cold repos).
+			// Fallback: ListCommits by author (always works, less data).
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				// GitHub returns 202 when stats are being computed.
-				// Retry with backoff (2s, 4s, 8s) up to 3 times.
-				var stats []*gh.ContributorStats
-				for attempt := range 4 {
-					var resp *gh.Response
-					var e error
-					stats, resp, e = api.Repositories.ListContributorsStats(ctx, org, parts[1])
-					if e != nil {
-						results <- result{"repo_stats", e}
-						return
-					}
-					if resp.StatusCode != http.StatusAccepted {
-						break
-					}
-					if attempt == 3 {
-						slog.Debug("repo stats still computing after retries", "repo", repo)
-						return
-					}
-					wait := time.Duration(2<<attempt) * time.Second
-					select {
-					case <-ctx.Done():
-						return
-					case <-time.After(wait):
-					}
+
+				if fetchContributorStats(ctx, api, org, parts[1], username, &mu,
+					&repoCommits, &repoTotal, &repoContribs, &repoLastDays, &repoUnverified) {
+					return
 				}
 
-				var total int64
-				var userCommits int64
-				var userLastWeek int64
-				var unverified int64
+				// Fallback: count user's commits via the commits API.
+				// PerPage:1 + resp.LastPage gives the total count cheaply.
+				slog.Debug("falling back to commits API", "repo", repo)
+				_, userResp, e := api.Repositories.ListCommits(ctx, org, parts[1], &gh.CommitsListOptions{
+					Author:      username,
+					ListOptions: gh.ListOptions{PerPage: 1},
+				})
+				if e != nil {
+					results <- result{"repo_commits_fallback", e}
+					return
+				}
+				userCount := int64(userResp.LastPage)
+				if userCount == 0 {
+					userCount = 1 // at least the one commit we got
+				}
 
-				for _, cs := range stats {
-					if cs.Author == nil {
-						continue
-					}
-					authorTotal := int64(cs.GetTotal())
-					total += authorTotal
-					if strings.EqualFold(cs.Author.GetLogin(), username) {
-						userCommits = authorTotal
-						// Find last active week (most recent non-zero week).
-						for i := len(cs.Weeks) - 1; i >= 0; i-- {
-							if cs.Weeks[i].GetCommits() > 0 {
-								userLastWeek = cs.Weeks[i].GetWeek().Unix()
-								break
-							}
-						}
-					}
+				_, allResp, e2 := api.Repositories.ListCommits(ctx, org, parts[1], &gh.CommitsListOptions{
+					ListOptions: gh.ListOptions{PerPage: 1},
+				})
+				totalCount := userCount
+				if e2 == nil && allResp.LastPage > 0 {
+					totalCount = int64(allResp.LastPage)
 				}
 
 				mu.Lock()
-				repoCommits = userCommits
-				repoTotal = total
-				repoContribs = len(stats)
-				repoUnverified = unverified
-				if userLastWeek > 0 {
-					repoLastDays = int64(time.Since(time.Unix(userLastWeek, 0)).Hours() / 24)
-				}
+				repoCommits = userCount
+				repoTotal = totalCount
+				repoContribs = 1
 				mu.Unlock()
 			}()
 		}
@@ -299,6 +278,68 @@ func fetchSignals(ctx context.Context, api *gh.Client, username, repo string, hi
 	}
 
 	return signals, nil
+}
+
+// fetchContributorStats tries ListContributorsStats with retry for 202.
+// Returns true if stats were successfully fetched, false if caller should fallback.
+func fetchContributorStats(ctx context.Context, api *gh.Client, org, repo, username string,
+	mu *sync.Mutex, commits, total *int64, contribs *int, lastDays, unverified *int64) bool {
+	var stats []*gh.ContributorStats
+	for attempt := range 4 {
+		resp, e := func() (*gh.Response, error) {
+			s, r, err := api.Repositories.ListContributorsStats(ctx, org, repo)
+			stats = s
+			return r, err
+		}()
+		if e != nil {
+			return false
+		}
+		if resp.StatusCode != http.StatusAccepted {
+			break
+		}
+		if attempt == 3 {
+			return false
+		}
+		wait := time.Duration(2<<attempt) * time.Second
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(wait):
+		}
+	}
+
+	if len(stats) == 0 {
+		return false
+	}
+
+	var t, uc, ulw, uv int64
+	for _, cs := range stats {
+		if cs.Author == nil {
+			continue
+		}
+		authorTotal := int64(cs.GetTotal())
+		t += authorTotal
+		if strings.EqualFold(cs.Author.GetLogin(), username) {
+			uc = authorTotal
+			for i := len(cs.Weeks) - 1; i >= 0; i-- {
+				if cs.Weeks[i].GetCommits() > 0 {
+					ulw = cs.Weeks[i].GetWeek().Unix()
+					break
+				}
+			}
+		}
+	}
+
+	mu.Lock()
+	*commits = uc
+	*total = t
+	*contribs = len(stats)
+	*unverified = uv
+	if ulw > 0 {
+		*lastDays = int64(time.Since(time.Unix(ulw, 0)).Hours() / 24)
+	}
+	mu.Unlock()
+	return true
 }
 
 // mapUser converts a go-github User to a UserProfile.
