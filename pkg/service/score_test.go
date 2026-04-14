@@ -129,8 +129,8 @@ func TestScoreContributorPlanAware(t *testing.T) {
 		if resp.License != nil {
 			t.Error("free plan should not have license")
 		}
-		if resp.AISensing != nil {
-			t.Error("free plan should not have ai_sensing")
+		if resp.AISensing == nil {
+			t.Error("free plan should have ai_sensing (Tier 1)")
 		}
 	})
 

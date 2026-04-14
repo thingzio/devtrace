@@ -172,13 +172,18 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 		resp.CachedAt = &now
 
 	case "free":
-		// Free gets categories, signals, risk summary, behavior — no license/AI sensing.
+		// Free gets categories, signals, risk summary, behavior, AI sensing Tier 1.
 		resp.License = nil
-		resp.AISensing = nil
+		// AI sensing Tier 1 (metadata) is zero-cost — include for Free.
+		if resp.AISensing == nil {
+			resp.AISensing = &model.AISensing{}
+		}
+		// Strip Claude-powered fields (Starter+).
+		if resp.AISensing != nil {
+			resp.AISensing.PRAuthenticity = nil
+		}
 
 	case "starter", "pro":
-		// Initialize AISensing placeholder for Starter+ (Tier 1 metadata signals).
-		// PRAuthenticity will be populated when GH Archive captures PR descriptions.
 		if resp.AISensing == nil {
 			resp.AISensing = &model.AISensing{}
 		}

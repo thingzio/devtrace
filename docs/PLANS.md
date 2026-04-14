@@ -12,8 +12,9 @@ GitHub OAuth sign-up required. Base scoring with generous limits for individual 
 | Risk summary | Template-based (no Claude) |
 | Rate limit | 60 requests/hour per IP |
 | Behavioral signals | From GH Archive (when available) |
+| AI sensing | Tier 1 (metadata: bot detection, commit trailers, tool signatures) |
+| Score history | 30 days |
 | License analysis | Not available |
-| AI sensing | Not available |
 | API keys | 1 |
 
 ### Starter (Paid)
@@ -24,9 +25,9 @@ Everything in Free plus AI-powered analysis and higher limits.
 |-----------|---------|
 | Contributor scoring | Full signals + Claude risk narratives |
 | Risk summary | Claude-powered (Haiku) with template fallback |
-| AI sensing | Tier 1 (metadata: bot detection, commit trailers) |
-| PR authenticity | Claude-powered classification (Starter+) |
+| AI sensing | Tier 1 (metadata) + PR authenticity (Claude-powered) |
 | License analysis | Basic distribution (when implemented) |
+| Score history | 90 days |
 | Rate limit | Higher (TBD) |
 | API keys | Multiple |
 
@@ -54,9 +55,10 @@ Everything in Starter plus deep analysis and integration features.
 | Risk summary (template) | Yes | Yes | Yes |
 | Risk summary (Claude) | - | Yes | Yes |
 | Behavioral signals | Yes | Yes | Yes |
-| AI sensing (Tier 1) | - | Yes | Yes |
+| AI sensing (Tier 1) | Yes | Yes | Yes |
 | PR authenticity (Claude) | - | Yes | Yes |
 | Repo context signals | Yes | Yes | Yes |
+| Score history | 30 days | 90 days | 365 days |
 | API keys | 1 | Multiple | Multiple |
 
 ### Deferred Features

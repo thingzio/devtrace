@@ -258,6 +258,25 @@ func TestScoreHandlerAuthenticatedFullResponse(t *testing.T) {
 	if resp.RiskSummary == "" {
 		t.Error("free plan should have risk_summary")
 	}
+	if resp.AISensing == nil {
+		t.Error("free plan should have ai_sensing (Tier 1)")
+	}
+	if resp.License != nil {
+		t.Error("free plan should not have license")
+	}
+}
+
+func TestScoreHandlerFreeNoClaudeFeatures(t *testing.T) {
+	svc := newTestService(defaultMock())
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/score/{username}", scoreHandler(nil, nil, svc))
+
+	tn := &tenant.Tenant{ID: "test-tenant", Plan: "free"}
+	resp := decodeScore(t, scoreRequestWithTenant(t, mux, "/api/v1/score/testuser", tn))
+
+	if resp.AISensing != nil && resp.AISensing.PRAuthenticity != nil {
+		t.Error("free plan should not have PR authenticity (Claude-powered, Starter+)")
+	}
 }
 
 func TestScoreHandlerGlobalSignalsNoNulls(t *testing.T) {
