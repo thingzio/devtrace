@@ -27,9 +27,13 @@ type Client struct {
 }
 
 // New creates a Claude client from environment variables.
-// Returns nil if ANTHROPIC_API_KEY is not set.
+// Checks DEVTRACE_ANTHROPIC_API_KEY first (service-scoped), then ANTHROPIC_API_KEY.
+// Returns nil if neither is set.
 func New() *Client {
-	key := os.Getenv("ANTHROPIC_API_KEY")
+	key := os.Getenv("DEVTRACE_ANTHROPIC_API_KEY")
+	if key == "" {
+		key = os.Getenv("ANTHROPIC_API_KEY")
+	}
 	if key == "" {
 		return nil
 	}
