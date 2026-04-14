@@ -24,6 +24,7 @@ type scorerStore interface {
 	DequeueForScoring(ctx context.Context, limit int) ([]postgres.QueueEntry, error)
 	RemoveFromQueue(ctx context.Context, username, provider string) error
 	GetStaleContributors(ctx context.Context, lowDays, highDays, limit int) ([]postgres.StaleContributor, error)
+	GetBehavioralSignals(ctx context.Context, username, provider string) (*postgres.BehavioralSignals, error)
 	UpsertContributor(ctx context.Context, username, provider string) error
 	SaveScoreHistory(ctx context.Context, username, provider string, value float64, grade string, deep bool) error
 	UpdateReputation(ctx context.Context, username, provider string, value float64, grade, version string, signals *score.InputSignals) error
@@ -120,7 +121,17 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client, vers
 // scoreContributor fetches signals, computes a score, and persists the result.
 func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client,
 	username, provider, version string) error {
-	signals, err := gh.FetchSignals(ctx, username, "", nil)
+	// Build archive hints from activity data to avoid GitHub Search API calls.
+	var hints *ghclient.ArchiveHints
+	if beh, err := store.GetBehavioralSignals(ctx, username, provider); err == nil && beh != nil {
+		hints = &ghclient.ArchiveHints{
+			PRsMerged:         int64(beh.TotalPRsMerged),
+			PRsClosed:         int64(beh.TotalPRsClosed),
+			RecentPRRepoCount: int64(beh.DistinctRepos90d),
+		}
+	}
+
+	signals, err := gh.FetchSignals(ctx, username, "", hints)
 	if err != nil {
 		return fmt.Errorf("fetch signals: %w", err)
 	}

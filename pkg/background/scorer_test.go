@@ -58,6 +58,10 @@ func (m *mockScorerStore) RemoveFromQueue(_ context.Context, username, _ string)
 	return nil
 }
 
+func (m *mockScorerStore) GetBehavioralSignals(_ context.Context, _, _ string) (*postgres.BehavioralSignals, error) {
+	return nil, nil
+}
+
 func (m *mockScorerStore) GetStaleContributors(_ context.Context, _, _, limit int) ([]postgres.StaleContributor, error) {
 	if m.staleErr != nil {
 		return nil, m.staleErr
