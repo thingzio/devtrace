@@ -1,0 +1,138 @@
+package postgres
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"math"
+	"time"
+)
+
+// HourlySummary represents one hour of aggregated contributor activity from GH Archive.
+type HourlySummary struct {
+	Username      string
+	Provider      string
+	Hour          time.Time
+	PRsOpened     int
+	PRsMerged     int
+	PRsClosed     int
+	ReviewsGiven  int
+	IssueComments int
+	DistinctRepos int
+	Repos         []string
+}
+
+// BehavioralSignals holds derived behavioral metrics for a contributor.
+type BehavioralSignals struct {
+	PRVelocity30d      int       `json:"pr_velocity_30d"`
+	PRVelocityBaseline float64   `json:"pr_velocity_baseline"`
+	ReviewsGiven30d    int       `json:"reviews_given_30d"`
+	IssueComments30d   int       `json:"issue_comments_30d"`
+	DistinctRepos90d   int       `json:"distinct_repos_90d"`
+	ConsistencyScore   float64   `json:"consistency_score"`
+	ActiveSince        time.Time `json:"active_since,omitempty"`
+}
+
+// BatchUpsertActivity upserts hourly summaries into contributor_activity.
+// On conflict, counts are added to existing values. Returns the number of rows upserted.
+func (s *Store) BatchUpsertActivity(ctx context.Context, summaries []HourlySummary) (int, error) {
+	const query = `INSERT INTO contributor_activity (username, provider, hour, prs_opened, prs_merged, prs_closed,
+		reviews_given, issue_comments, distinct_repos, repos)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+	ON CONFLICT (username, provider, hour) DO UPDATE SET
+		prs_opened = contributor_activity.prs_opened + EXCLUDED.prs_opened,
+		prs_merged = contributor_activity.prs_merged + EXCLUDED.prs_merged,
+		prs_closed = contributor_activity.prs_closed + EXCLUDED.prs_closed,
+		reviews_given = contributor_activity.reviews_given + EXCLUDED.reviews_given,
+		issue_comments = contributor_activity.issue_comments + EXCLUDED.issue_comments,
+		distinct_repos = EXCLUDED.distinct_repos,
+		repos = EXCLUDED.repos`
+
+	var count int
+	for _, h := range summaries {
+		reposJSON, err := json.Marshal(h.Repos)
+		if err != nil {
+			return count, fmt.Errorf("marshal repos: %w", err)
+		}
+		_, err = s.db.ExecContext(ctx, query,
+			h.Username, h.Provider, h.Hour,
+			h.PRsOpened, h.PRsMerged, h.PRsClosed,
+			h.ReviewsGiven, h.IssueComments, h.DistinctRepos,
+			reposJSON)
+		if err != nil {
+			return count, fmt.Errorf("upsert activity row %d: %w", count, err)
+		}
+		count++
+	}
+	return count, nil
+}
+
+// GetBehavioralSignals computes behavioral metrics from the last 180 days of contributor_activity.
+// Returns nil when no data exists for the contributor.
+func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider string) (*BehavioralSignals, error) {
+	var (
+		prVelocity30d    int
+		totalPRs         int
+		reviewsGiven30d  int
+		issueComments30d int
+		activeWeeks      int
+		minHour          sql.NullTime
+		monthsInWindow   sql.NullFloat64
+	)
+
+	err := s.db.QueryRowContext(ctx,
+		`SELECT
+			COALESCE(SUM(CASE WHEN hour > NOW() - INTERVAL '30 days' THEN prs_opened ELSE 0 END), 0),
+			COALESCE(SUM(prs_opened), 0),
+			COALESCE(SUM(CASE WHEN hour > NOW() - INTERVAL '30 days' THEN reviews_given ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN hour > NOW() - INTERVAL '30 days' THEN issue_comments ELSE 0 END), 0),
+			COUNT(DISTINCT date_trunc('week', hour)),
+			MIN(hour),
+			EXTRACT(EPOCH FROM NOW() - MIN(hour)) / 2592000.0
+		FROM contributor_activity
+		WHERE username = $1 AND provider = $2 AND hour > NOW() - INTERVAL '180 days'`,
+		username, provider,
+	).Scan(&prVelocity30d, &totalPRs, &reviewsGiven30d, &issueComments30d,
+		&activeWeeks, &minHour, &monthsInWindow)
+	if err != nil {
+		return nil, fmt.Errorf("get behavioral signals: %w", err)
+	}
+
+	// No data for this contributor.
+	if !minHour.Valid {
+		return nil, nil
+	}
+
+	// Distinct repos in last 90 days via JSONB expansion.
+	var distinctRepos90d int
+	err = s.db.QueryRowContext(ctx,
+		`SELECT COUNT(DISTINCT r)
+		 FROM contributor_activity, jsonb_array_elements_text(repos) r
+		 WHERE username = $1 AND provider = $2 AND hour > NOW() - INTERVAL '90 days'`,
+		username, provider,
+	).Scan(&distinctRepos90d)
+	if err != nil {
+		return nil, fmt.Errorf("get distinct repos: %w", err)
+	}
+
+	// Total weeks in the 180-day window.
+	totalWeeks := 180.0 / 7.0
+	consistency := float64(activeWeeks) / totalWeeks
+	consistency = math.Min(consistency, 1.0)
+
+	var baseline float64
+	if monthsInWindow.Valid && monthsInWindow.Float64 > 0 {
+		baseline = float64(totalPRs) / monthsInWindow.Float64
+	}
+
+	return &BehavioralSignals{
+		PRVelocity30d:      prVelocity30d,
+		PRVelocityBaseline: baseline,
+		ReviewsGiven30d:    reviewsGiven30d,
+		IssueComments30d:   issueComments30d,
+		DistinctRepos90d:   distinctRepos90d,
+		ConsistencyScore:   consistency,
+		ActiveSince:        minHour.Time,
+	}, nil
+}
