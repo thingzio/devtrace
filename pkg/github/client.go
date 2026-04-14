@@ -7,10 +7,19 @@ import (
 	"github.com/thingzio/devtrace/pkg/score"
 )
 
+// ArchiveHints provides pre-computed signals from GH Archive data,
+// allowing fetchSignals to skip redundant GitHub Search API calls.
+// When nil, all signals are fetched from the GitHub API.
+type ArchiveHints struct {
+	PRsMerged         int64
+	PRsClosed         int64
+	RecentPRRepoCount int64
+}
+
 // Client abstracts GitHub API access.
 type Client interface {
 	FetchUser(ctx context.Context, username string) (*UserProfile, error)
-	FetchSignals(ctx context.Context, username, repo string) (*score.InputSignals, error)
+	FetchSignals(ctx context.Context, username, repo string, hints *ArchiveHints) (*score.InputSignals, error)
 }
 
 // UserProfile holds GitHub user metadata.
@@ -22,6 +31,7 @@ type UserProfile struct {
 	Company     string
 	Location    string
 	Bio         string
+	Website     string
 	CreatedAt   time.Time
 	Suspended   bool
 	Followers   int64

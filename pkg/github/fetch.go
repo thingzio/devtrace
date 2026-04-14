@@ -25,7 +25,7 @@ func fetchUser(ctx context.Context, api *gh.Client, username string) (*UserProfi
 // fetchSignals retrieves scoring signals for the given user, optionally scoped to a repo.
 //
 //nolint:funlen,gocyclo // concurrent API calls inflate length and cyclomatic complexity; splitting hurts readability
-func fetchSignals(ctx context.Context, api *gh.Client, username, repo string) (*score.InputSignals, error) {
+func fetchSignals(ctx context.Context, api *gh.Client, username, repo string, hints *ArchiveHints) (*score.InputSignals, error) {
 	u, _, err := api.Users.Get(ctx, username)
 	if err != nil {
 		return nil, fmt.Errorf("fetch user %s: %w", username, err)
@@ -33,14 +33,16 @@ func fetchSignals(ctx context.Context, api *gh.Client, username, repo string) (*
 
 	profile := mapUser(u)
 	signals := &score.InputSignals{
-		AgeDays:     int64(time.Since(profile.CreatedAt).Hours() / 24),
-		HasBio:      profile.Bio != "",
-		HasCompany:  profile.Company != "",
-		HasLocation: profile.Location != "",
-		Followers:   profile.Followers,
-		Following:   profile.Following,
-		PublicRepos: profile.PublicRepos,
-		Suspended:   profile.Suspended,
+		AgeDays:          int64(time.Since(profile.CreatedAt).Hours() / 24),
+		HasBio:           profile.Bio != "",
+		HasCompany:       profile.Company != "",
+		HasLocation:      profile.Location != "",
+		HasWebsite:       profile.Website != "",
+		HasVerifiedEmail: profile.Email != "",
+		Followers:        profile.Followers,
+		Following:        profile.Following,
+		PublicRepos:      profile.PublicRepos,
+		Suspended:        profile.Suspended,
 	}
 
 	// Suspended accounts: return early with basic profile data only.
@@ -72,88 +74,88 @@ func fetchSignals(ctx context.Context, api *gh.Client, username, repo string) (*
 	var wg sync.WaitGroup
 	results := make(chan result, 6)
 
-	// 1. Merged PRs.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		q := fmt.Sprintf("type:pr author:%s is:merged", username)
-		sr, _, e := api.Search.Issues(ctx, q, &gh.SearchOptions{
-			ListOptions: gh.ListOptions{PerPage: 1},
-		})
-		if e != nil {
-			results <- result{"merged_prs", e}
-			return
-		}
-		mu.Lock()
-		mergedPRs = int64(sr.GetTotal())
-		mu.Unlock()
-	}()
-
-	// 2. Closed (unmerged) PRs.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		q := fmt.Sprintf("type:pr author:%s is:unmerged is:closed", username)
-		sr, _, e := api.Search.Issues(ctx, q, &gh.SearchOptions{
-			ListOptions: gh.ListOptions{PerPage: 1},
-		})
-		if e != nil {
-			results <- result{"closed_prs", e}
-			return
-		}
-		mu.Lock()
-		closedPRs = int64(sr.GetTotal())
-		mu.Unlock()
-	}()
-
-	// 3. Recent PRs (last 90 days) — count distinct repos.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		since := time.Now().AddDate(0, 0, -90).Format("2006-01-02")
-		q := fmt.Sprintf("type:pr author:%s created:>=%s", username, since)
-		sr, _, e := api.Search.Issues(ctx, q, &gh.SearchOptions{
-			ListOptions: gh.ListOptions{PerPage: 100},
-		})
-		if e != nil {
-			results <- result{"recent_prs", e}
-			return
-		}
-		repos := make(map[string]struct{})
-		for _, issue := range sr.Issues {
-			if url := issue.GetRepositoryURL(); url != "" {
-				repos[url] = struct{}{}
-			}
-		}
-		mu.Lock()
-		recentRepos = int64(len(repos))
-		mu.Unlock()
-	}()
-
-	// 4. Forked repos.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		opt := &gh.RepositoryListByUserOptions{
-			Type:        "owner",
-			ListOptions: gh.ListOptions{PerPage: 100},
-		}
-		var forks int64
-		for {
-			repos, resp, e := api.Repositories.ListByUser(ctx, username, opt)
+	// When archive hints are available, use them instead of calling the GitHub Search API.
+	if hints != nil {
+		mergedPRs = hints.PRsMerged
+		closedPRs = hints.PRsClosed
+		recentRepos = hints.RecentPRRepoCount
+	} else {
+		// 1. Merged PRs.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			q := fmt.Sprintf("type:pr author:%s is:merged", username)
+			sr, _, e := api.Search.Issues(ctx, q, &gh.SearchOptions{
+				ListOptions: gh.ListOptions{PerPage: 1},
+			})
 			if e != nil {
-				results <- result{"forked_repos", e}
+				results <- result{"merged_prs", e}
 				return
 			}
-			for _, r := range repos {
-				if r.GetFork() {
-					forks++
+			mu.Lock()
+			mergedPRs = int64(sr.GetTotal())
+			mu.Unlock()
+		}()
+
+		// 2. Closed (unmerged) PRs.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			q := fmt.Sprintf("type:pr author:%s is:unmerged is:closed", username)
+			sr, _, e := api.Search.Issues(ctx, q, &gh.SearchOptions{
+				ListOptions: gh.ListOptions{PerPage: 1},
+			})
+			if e != nil {
+				results <- result{"closed_prs", e}
+				return
+			}
+			mu.Lock()
+			closedPRs = int64(sr.GetTotal())
+			mu.Unlock()
+		}()
+
+		// 3. Recent PRs (last 90 days) — count distinct repos.
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			since := time.Now().AddDate(0, 0, -90).Format("2006-01-02")
+			q := fmt.Sprintf("type:pr author:%s created:>=%s", username, since)
+			sr, _, e := api.Search.Issues(ctx, q, &gh.SearchOptions{
+				ListOptions: gh.ListOptions{PerPage: 100},
+			})
+			if e != nil {
+				results <- result{"recent_prs", e}
+				return
+			}
+			repos := make(map[string]struct{})
+			for _, issue := range sr.Issues {
+				if url := issue.GetRepositoryURL(); url != "" {
+					repos[url] = struct{}{}
 				}
 			}
-			if resp.NextPage == 0 {
-				break
+			mu.Lock()
+			recentRepos = int64(len(repos))
+			mu.Unlock()
+		}()
+	}
+
+	// 4. Forked repos (single page — exact for <100 repos, lower bound for 100+).
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		repos, _, e := api.Repositories.ListByUser(ctx, username, &gh.RepositoryListByUserOptions{
+			Type:        "owner",
+			ListOptions: gh.ListOptions{PerPage: 100},
+		})
+		if e != nil {
+			results <- result{"forked_repos", e}
+			return
+		}
+		var forks int64
+		for _, r := range repos {
+			if r.GetFork() {
+				forks++
 			}
-			opt.Page = resp.NextPage
 		}
 		mu.Lock()
 		forkedRepos = forks
@@ -298,6 +300,7 @@ func mapUser(u *gh.User) *UserProfile {
 		Company:     u.GetCompany(),
 		Location:    u.GetLocation(),
 		Bio:         u.GetBio(),
+		Website:     u.GetBlog(),
 		Followers:   int64(u.GetFollowers()),
 		Following:   int64(u.GetFollowing()),
 		PublicRepos: int64(u.GetPublicRepos()),

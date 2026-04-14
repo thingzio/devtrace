@@ -67,10 +67,10 @@ func (c *InstallationClient) FetchUser(ctx context.Context, username string) (*U
 }
 
 // FetchSignals retrieves scoring signals for the given user, optionally scoped to a repo.
-func (c *InstallationClient) FetchSignals(ctx context.Context, username, repo string) (*score.InputSignals, error) {
+func (c *InstallationClient) FetchSignals(ctx context.Context, username, repo string, hints *ArchiveHints) (*score.InputSignals, error) {
 	api, err := c.ghClient(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return fetchSignals(ctx, api, username, repo)
+	return fetchSignals(ctx, api, username, repo, hints)
 }

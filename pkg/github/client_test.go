@@ -19,7 +19,7 @@ func (m *MockClient) FetchUser(_ context.Context, _ string) (*UserProfile, error
 	return m.UserProfile, m.Err
 }
 
-func (m *MockClient) FetchSignals(_ context.Context, _, _ string) (*score.InputSignals, error) {
+func (m *MockClient) FetchSignals(_ context.Context, _, _ string, _ *ArchiveHints) (*score.InputSignals, error) {
 	return m.Signals, m.Err
 }
 
@@ -60,7 +60,7 @@ func TestMockClientReturnsConfiguredValues(t *testing.T) {
 		t.Errorf("want followers 42, got %d", gotProfile.Followers)
 	}
 
-	gotSignals, err := mc.FetchSignals(ctx, "testuser", "org/repo")
+	gotSignals, err := mc.FetchSignals(ctx, "testuser", "org/repo", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

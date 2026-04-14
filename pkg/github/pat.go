@@ -26,6 +26,6 @@ func (c *PATClient) FetchUser(ctx context.Context, username string) (*UserProfil
 }
 
 // FetchSignals retrieves scoring signals for the given user, optionally scoped to a repo.
-func (c *PATClient) FetchSignals(ctx context.Context, username, repo string) (*score.InputSignals, error) {
-	return fetchSignals(ctx, c.api, username, repo)
+func (c *PATClient) FetchSignals(ctx context.Context, username, repo string, hints *ArchiveHints) (*score.InputSignals, error) {
+	return fetchSignals(ctx, c.api, username, repo, hints)
 }
