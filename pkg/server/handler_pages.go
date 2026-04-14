@@ -86,20 +86,20 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 		showSignUp := tn == nil
 
 		renderTemplate(w, "scorecard.html", map[string]any{
-			"Title":       username,
-			"Username":    username,
-			"Profile":     resp.Profile,
-			"Grade":       resp.Score.Grade,
-			"Value":       resp.Score.Value,
+			"Title":        username,
+			"Username":     username,
+			"Profile":      resp.Profile,
+			"Grade":        resp.Score.Grade,
+			"Value":        resp.Score.Value,
 			"ModelVersion": resp.Version,
 			"Version":      opts.Version,
-			"ScoringMode": resp.ScoringMode,
-			"GradeClass":  gradeClass,
-			"Categories":  resp.Score.Categories,
-			"Signals":     resp.Signals,
-			"RiskSummary": resp.RiskSummary,
-			"RepoContext": resp.RepoContext,
-			"ShowSignUp":  showSignUp,
+			"ScoringMode":  resp.ScoringMode,
+			"GradeClass":   gradeClass,
+			"Categories":   resp.Score.Categories,
+			"Signals":      resp.Signals,
+			"RiskSummary":  resp.RiskSummary,
+			"RepoContext":  resp.RepoContext,
+			"ShowSignUp":   showSignUp,
 		})
 	}
 }
