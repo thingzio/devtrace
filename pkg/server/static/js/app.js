@@ -28,6 +28,84 @@
     getTheme: getTheme,
   };
 
+  window.generateToken = function() {
+    var input = document.getElementById('token-name-input');
+    var name = input ? input.value.trim() : '';
+    if (!name) {
+      if (input) input.focus();
+      return;
+    }
+    var modal = document.getElementById('token-modal');
+    fetch('/api/v1/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name }),
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (modal) modal.style.display = 'none';
+        if (input) input.value = '';
+        if (data.token) {
+          var msg = document.getElementById('new-token-msg');
+          var val = document.getElementById('new-token-value');
+          if (msg && val) {
+            val.textContent = data.token;
+            msg.style.display = 'block';
+          }
+          var table = document.getElementById('token-table');
+          var noTokens = document.getElementById('no-tokens');
+          if (table) {
+            table.style.display = '';
+            var tbody = table.querySelector('tbody');
+            var tr = document.createElement('tr');
+            tr.innerHTML = '<td>' + data.name + '</td><td>Never</td><td>just now</td><td></td>';
+            tbody.appendChild(tr);
+          }
+          if (noTokens) noTokens.style.display = 'none';
+        } else {
+          var errEl = document.getElementById('token-error');
+          if (errEl) {
+            errEl.textContent = data.error || 'Unknown error';
+            errEl.style.display = 'block';
+          }
+        }
+      });
+  };
+
+  window.revokeToken = function(id) {
+    var row = document.getElementById('token-' + id);
+    if (!row) return;
+    var cell = row.querySelector('td:last-child');
+    var original = cell.innerHTML;
+    cell.innerHTML = '<span style="font-size:0.8rem;margin-right:0.5rem;">Revoke?</span>' +
+      '<button class="btn btn-sm btn-danger" onclick="confirmRevoke(\'' + id + '\')">Yes</button> ' +
+      '<button class="btn btn-sm" onclick="cancelRevoke(\'' + id + '\')">No</button>';
+    cell.dataset.original = original;
+  };
+
+  window.cancelRevoke = function(id) {
+    var row = document.getElementById('token-' + id);
+    if (!row) return;
+    var cell = row.querySelector('td:last-child');
+    cell.innerHTML = cell.dataset.original;
+  };
+
+  window.confirmRevoke = function(id) {
+    fetch('/api/v1/token/' + id, { method: 'DELETE' })
+      .then(function(r) {
+        if (r.ok) {
+          var row = document.getElementById('token-' + id);
+          if (row) row.remove();
+          var tbody = document.querySelector('#token-table tbody');
+          if (tbody && tbody.children.length === 0) {
+            document.getElementById('token-table').style.display = 'none';
+            var noTokens = document.getElementById('no-tokens');
+            if (noTokens) noTokens.style.display = '';
+          }
+        }
+      });
+  };
+
   function initSearch() {
     var form = document.getElementById('try-search');
     var input = document.getElementById('try-username');

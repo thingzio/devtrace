@@ -1,9 +1,9 @@
 {{define "content"}}
 <div class="scorecard">
   <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">
-    <a href="/" class="back-link" style="margin:0;">&larr; Back</a>
+    <a href="javascript:history.back()" class="back-link" style="margin:0;">&larr; Back</a>
     <form id="try-search" class="search-form" style="margin:0;flex:1;" onsubmit="return false;">
-      <input id="try-username" type="text" placeholder="Score another contributor..." autocomplete="off"
+      <input id="try-username" type="search" role="searchbox" placeholder="Score another contributor..." autocomplete="off" name="q" data-1p-ignore data-lpignore="true" data-form-type="other"
         onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('try-search').dispatchEvent(new Event('submit'));}">
       <button type="button" onclick="document.getElementById('try-search').dispatchEvent(new Event('submit'));">Score</button>
     </form>
@@ -31,7 +31,7 @@
       <span class="grade-badge {{.GradeClass}}">{{.Grade}}</span>
       <div style="display:flex;flex-direction:column;margin-left:0.75rem;">
         <span class="grade-score">{{printf "%.2f" .Value}}</span>
-        <span class="grade-model-label">{{.Version}} · {{.ScoringMode}}</span>
+        <span class="grade-model-label">{{.ModelVersion}} · {{.ScoringMode}}</span>
       </div>
     </div>
   </div>

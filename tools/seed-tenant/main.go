@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	_ "github.com/lib/pq"
 
@@ -46,12 +47,19 @@ func run() error {
 		return fmt.Errorf("create token: %w", err)
 	}
 
+	sessionToken, err := tenant.CreateSession(ctx, db, tn.ID, 24*time.Hour)
+	if err != nil {
+		return fmt.Errorf("create session: %w", err)
+	}
+
 	fmt.Printf("Tenant ID:  %s\n", tn.ID)
 	fmt.Printf("Username:   %s\n", tn.Username)
 	fmt.Printf("Plan:       %s\n", tn.Plan)
 	fmt.Printf("API Token:  %s\n\n", token)
-	fmt.Println("Test with:")
-	fmt.Printf("  curl -s -H 'Authorization: Bearer %s' http://localhost:8080/api/v1/score/octocat | jq .\n", token)
+	fmt.Println("Test API:")
+	fmt.Printf("  curl -s -H 'Authorization: Bearer %s' http://localhost:8080/api/v1/score/octocat | jq .\n\n", token)
+	fmt.Println("Set session cookie (run in browser console on localhost:8080):")
+	fmt.Printf("  document.cookie = 'session=%s; path=/'\n", sessionToken)
 
 	return nil
 }

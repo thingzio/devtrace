@@ -31,7 +31,7 @@ type pageData struct {
 	Error   string
 }
 
-func scorecardHandler(svc *service.ScoreService) http.HandlerFunc {
+func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := r.PathValue("username")
 		if username == "" {
@@ -45,7 +45,8 @@ func scorecardHandler(svc *service.ScoreService) http.HandlerFunc {
 		// Use "free" as minimum to get signals/categories/risk summary.
 		// The API endpoint (/api/v1/score) still gates by actual plan.
 		plan := "free"
-		if tn := middleware.TenantFromContext(r.Context()); tn != nil {
+		tn := middleware.TenantFromContext(r.Context())
+		if tn != nil {
 			plan = tn.Plan
 		}
 
@@ -54,7 +55,7 @@ func scorecardHandler(svc *service.ScoreService) http.HandlerFunc {
 			slog.Error("scoring for scorecard", "username", username, "error", err)
 			renderTemplate(w, "scorecard.html", map[string]any{
 				"Title": username, "Username": username,
-				"Grade": "?", "Value": 0.0, "Version": "?",
+				"Grade": "?", "Value": 0.0, "ModelVersion": "?", "Version": opts.Version,
 				"GradeClass": "grade-f",
 			})
 			return
@@ -74,8 +75,15 @@ func scorecardHandler(svc *service.ScoreService) http.HandlerFunc {
 			}
 		}
 
+		// Record usage for authenticated users
+		if tn != nil {
+			if uerr := tenant.RecordUsage(r.Context(), store.DB(), tn.ID, username, "github", "ui", false); uerr != nil {
+				slog.Error("scorecard: record usage", "tenant", tn.ID, "error", uerr)
+			}
+		}
+
 		// Show sign-up CTA for unauthenticated visitors
-		showSignUp := middleware.TenantFromContext(r.Context()) == nil
+		showSignUp := tn == nil
 
 		renderTemplate(w, "scorecard.html", map[string]any{
 			"Title":       username,
@@ -83,7 +91,8 @@ func scorecardHandler(svc *service.ScoreService) http.HandlerFunc {
 			"Profile":     resp.Profile,
 			"Grade":       resp.Score.Grade,
 			"Value":       resp.Score.Value,
-			"Version":     resp.Version,
+			"ModelVersion": resp.Version,
+			"Version":      opts.Version,
 			"ScoringMode": resp.ScoringMode,
 			"GradeClass":  gradeClass,
 			"Categories":  resp.Score.Categories,
@@ -135,6 +144,10 @@ func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := t.ExecuteTemplate(w, "home", map[string]any{
 			"username":    tn.Username,
+			"name":        tn.Name,
+			"company":     tn.Company,
+			"location":    tn.Location,
+			"bio":         tn.Bio,
 			"avatar_url":  tn.AvatarURL,
 			"plan":        tn.Plan,
 			"quota_used":  used,
@@ -149,7 +162,7 @@ func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 	}
 }
 
-func settingsHandler(store *postgres.Store) http.HandlerFunc {
+func settingsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tn := middleware.TenantFromContext(r.Context())
 		if tn == nil {
@@ -170,8 +183,14 @@ func settingsHandler(store *postgres.Store) http.HandlerFunc {
 
 		renderTemplate(w, "settings.html", map[string]any{
 			"Title":            "Settings",
+			"Version":          opts.Version,
 			"username":         tn.Username,
+			"name":             tn.Name,
 			"email":            tn.Email,
+			"company":          tn.Company,
+			"location":         tn.Location,
+			"bio":              tn.Bio,
+			"avatar_url":       tn.AvatarURL,
 			"plan":             tn.Plan,
 			"max_contributors": limits.MaxContributors,
 			"rate_limit":       limits.RateLimitPerHour,
@@ -206,6 +225,10 @@ func tosAcceptHandler(store *postgres.Store) http.HandlerFunc {
 
 func landingHandler(opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if middleware.TenantFromContext(r.Context()) != nil {
+			http.Redirect(w, r, "/dashboard", http.StatusFound)
+			return
+		}
 		var errMsg string
 		if code := r.URL.Query().Get("err"); code != "" {
 			if msg, ok := errMessages[code]; ok {

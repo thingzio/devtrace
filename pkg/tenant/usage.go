@@ -8,10 +8,11 @@ import (
 )
 
 // RecordUsage logs a scoring event for quota tracking.
-func RecordUsage(ctx context.Context, db *sql.DB, tenantID, username, provider string, deep bool) error {
+// source indicates how the score was triggered ("ui" or "api").
+func RecordUsage(ctx context.Context, db *sql.DB, tenantID, username, provider, source string, deep bool) error {
 	_, err := db.ExecContext(ctx,
-		`INSERT INTO usage_record (tenant_id, username_scored, provider, deep) VALUES ($1, $2, $3, $4)`,
-		tenantID, username, provider, deep)
+		`INSERT INTO usage_record (tenant_id, username_scored, provider, source, deep) VALUES ($1, $2, $3, $4, $5)`,
+		tenantID, username, provider, source, deep)
 	if err != nil {
 		return fmt.Errorf("recording usage: %w", err)
 	}
@@ -40,31 +41,47 @@ func BillingPeriodStart() time.Time {
 // RecentScored represents a recently scored contributor.
 type RecentScored struct {
 	Username string
+	Provider string
+	Source   string
+	Deep     bool
 	ScoredAt time.Time
 }
 
 // GetRecentScored returns the most recently scored contributors for a tenant.
 func GetRecentScored(ctx context.Context, db *sql.DB, tenantID string, limit int) ([]RecentScored, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT username_scored, MAX(scored_at) as last_scored
+		`SELECT DISTINCT ON (username_scored) username_scored, provider, source, deep, scored_at
 		 FROM usage_record WHERE tenant_id = $1
-		 GROUP BY username_scored
-		 ORDER BY last_scored DESC LIMIT $2`,
-		tenantID, limit)
+		 ORDER BY username_scored, scored_at DESC`,
+		tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("get recent scored: %w", err)
 	}
 	defer rows.Close()
 
-	var result []RecentScored
+	var all []RecentScored
 	for rows.Next() {
 		var r RecentScored
-		if err := rows.Scan(&r.Username, &r.ScoredAt); err != nil {
+		if err := rows.Scan(&r.Username, &r.Provider, &r.Source, &r.Deep, &r.ScoredAt); err != nil {
 			return nil, fmt.Errorf("scan recent: %w", err)
 		}
-		result = append(result, r)
+		all = append(all, r)
 	}
-	return result, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// Sort by scored_at DESC and apply limit in Go since DISTINCT ON
+	// requires matching ORDER BY on the first key.
+	for i := 1; i < len(all); i++ {
+		for j := i; j > 0 && all[j].ScoredAt.After(all[j-1].ScoredAt); j-- {
+			all[j], all[j-1] = all[j-1], all[j]
+		}
+	}
+	if limit > 0 && len(all) > limit {
+		all = all[:limit]
+	}
+	return all, nil
 }
 
 // NextBillingPeriodStart returns the start of the next monthly billing period.

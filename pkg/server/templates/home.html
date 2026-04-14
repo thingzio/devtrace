@@ -1,47 +1,76 @@
 {{define "home"}}
 {{template "header" .}}
 
-<section class="dashboard-section">
-  <div class="welcome-header">
-    <img src="{{.avatar_url}}" alt="{{.username}}" class="welcome-avatar" width="64" height="64">
-    <div>
-      <h1>{{.username}}</h1>
-      <span class="plan-badge">{{.plan}}</span>
+<div class="dashboard-content">
+  <div class="score-header">
+    <div style="display:flex;align-items:center;gap:1rem;">
+      <img src="{{.avatar_url}}" alt="{{.username}}" style="width:64px;height:64px;border-radius:50%;">
+      <div>
+        <h1 style="margin:0;">{{.username}}</h1>
+        {{if .name}}<div style="font-size:0.85rem;color:var(--text-secondary,#8b949e);margin-top:0.25rem;">{{.name}}</div>{{end}}
+        {{if or .company .location}}<div style="font-size:0.85rem;color:var(--text-secondary,#8b949e);margin-top:0.25rem;">
+          {{if .company}}<span>{{.company}}</span>{{end}}
+          {{if and .company .location}}<span> · </span>{{end}}
+          {{if .location}}<span>{{.location}}</span>{{end}}
+        </div>{{end}}
+        {{if .bio}}<div style="font-size:0.8rem;color:var(--text-secondary,#8b949e);margin-top:0.25rem;">{{.bio}}</div>{{end}}
+      </div>
+    </div>
+    <span class="plan-badge">{{.plan}}</span>
+  </div>
+
+  <hr style="border:none;border-top:1px solid var(--border-color,#e1e4e8);margin:1.5rem 0;">
+
+  <div class="search-quota-row">
+    <div class="search-quota-left">
+      <form id="try-search" class="search-form" onsubmit="return false;">
+        <input id="try-username" type="search" role="searchbox" placeholder="GitHub username (e.g., octocat)" autocomplete="off" name="q" data-1p-ignore data-lpignore="true" data-form-type="other"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('try-search').dispatchEvent(new Event('submit'));}">
+        <button type="button" onclick="document.getElementById('try-search').dispatchEvent(new Event('submit'));">Score</button>
+      </form>
+    </div>
+    <div class="quota-gauge">
+      <svg class="quota-ring" viewBox="0 0 36 36">
+        <circle class="quota-ring-bg" cx="18" cy="18" r="15.9" fill="none" stroke-width="3"/>
+        <circle class="quota-ring-fill" cx="18" cy="18" r="15.9" fill="none" stroke-width="3"
+          stroke-dasharray="{{.quota_pct}} {{sub 100 .quota_pct}}" stroke-dashoffset="25"/>
+      </svg>
+      <span class="quota-gauge-pct">{{.quota_pct}}%</span>
+      <span class="quota-gauge-label">quota used</span>
     </div>
   </div>
-</section>
 
-<section class="dashboard-section">
-  <h2>Quota</h2>
-  <div class="quota-bar-container">
-    <div class="quota-bar" style="width: {{.quota_pct}}%"></div>
-  </div>
-  <p class="quota-label">{{comma .quota_used}} of {{comma .quota_limit}} contributors scored this period</p>
-</section>
+  <section style="margin-top:2rem;">
+    <h2>Recently Scored</h2>
+    {{if .recent}}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Contributor</th>
+          <th>Provider</th>
+          <th>Source</th>
+          <th>Deep</th>
+          <th>Scored</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .recent}}
+        <tr>
+          <td><a href="/score/{{.Username}}">{{.Username}}</a></td>
+          <td>{{.Provider}}</td>
+          <td>{{.Source}}</td>
+          <td>{{if .Deep}}&#10003;{{else}}&#10007;{{end}}</td>
+          <td>{{.ScoredAt.Format "2006-01-02 15:04"}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p>No contributors scored yet. Use the search bar to score your first contributor.</p>
+    {{end}}
+  </section>
+</div>
 
-<section class="dashboard-section">
-  <h2>Recently Scored</h2>
-  {{if .recent}}
-  <table class="data-table">
-    <thead>
-      <tr>
-        <th>Contributor</th>
-        <th>Scored</th>
-      </tr>
-    </thead>
-    <tbody>
-      {{range .recent}}
-      <tr>
-        <td><a href="/score/{{.Username}}">{{.Username}}</a></td>
-        <td>{{.ScoredAt.Format "2006-01-02 15:04"}}</td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
-  {{else}}
-  <p>No contributors scored yet. Use the API or search bar to score your first contributor.</p>
-  {{end}}
-</section>
-
+<script>window.addEventListener('pageshow',function(e){if(e.persisted)location.reload()})</script>
 {{template "footer" .}}
 {{end}}

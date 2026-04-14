@@ -42,7 +42,7 @@ func TestRecordAndGetUsage(t *testing.T) {
 
 	// Record 3 events: 2 unique users.
 	for _, u := range []string{"alice", "bob", "alice"} {
-		if rerr := RecordUsage(ctx, db, tn.ID, u, "github", false); rerr != nil {
+		if rerr := RecordUsage(ctx, db, tn.ID, u, "github", "ui", false); rerr != nil {
 			t.Fatalf("record usage for %s: %v", u, rerr)
 		}
 	}

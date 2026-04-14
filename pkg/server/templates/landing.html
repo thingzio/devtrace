@@ -5,7 +5,7 @@
     <p class="hero-sub">Inspect the provenance of any open source contributor at a glance. Trace contribution history, assess license obligations, and surface trust signals before they become risks.</p>
 
     <form id="try-search" class="search-form" onsubmit="return false;">
-      <input id="try-username" type="text" placeholder="GitHub username (e.g., octocat)" autocomplete="off"
+      <input id="try-username" type="search" role="searchbox" placeholder="GitHub username (e.g., octocat)" autocomplete="off" name="q" data-1p-ignore data-lpignore="true" data-form-type="other"
         onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('try-search').dispatchEvent(new Event('submit'));}">
       <button type="button" onclick="document.getElementById('try-search').dispatchEvent(new Event('submit'));">Score</button>
     </form>
@@ -37,8 +37,5 @@
 
   {{if .Error}}<p class="error-msg">{{.Error}}</p>{{end}}
 
-  <footer class="landing-footer">
-    <p>{{.Version}} &middot; <a href="/changelog">Changelog</a> &middot; <a href="/help">Help</a> &middot; <a href="/tos">Terms</a></p>
-  </footer>
 </div>
 {{end}}

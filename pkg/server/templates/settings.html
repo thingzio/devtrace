@@ -4,13 +4,24 @@
     <a href="/dashboard" class="nav-logo">DevTrace</a>
   </div>
   <div class="nav-right">
-    <a href="/dashboard" class="nav-link">Dashboard</a>
-    <a href="/settings" class="nav-link">Settings</a>
-    <form action="/auth/signout" method="POST" class="nav-signout">
-      <button type="submit" class="nav-link">Sign out</button>
-    </form>
+    <div class="nav-profile">
+      <button class="nav-profile-btn" onclick="document.querySelector('.nav-dropdown').classList.toggle('open')">
+        <img src="{{.avatar_url}}" alt="" class="nav-avatar" width="28" height="28">
+      </button>
+      <div class="nav-dropdown">
+        <div class="nav-dropdown-header">
+          <strong>{{.username}}</strong>
+        </div>
+        <div class="nav-dropdown-divider"></div>
+        <a href="/settings" class="nav-dropdown-item">Settings</a>
+        <form action="/auth/signout" method="POST" class="nav-dropdown-form">
+          <button type="submit" class="nav-dropdown-item">Sign out</button>
+        </form>
+      </div>
+    </div>
   </div>
 </nav>
+<script>document.addEventListener('click',function(e){var d=document.querySelector('.nav-dropdown');if(d&&!e.target.closest('.nav-profile'))d.classList.remove('open')})</script>
 <main class="dashboard-main">
 <div class="settings">
   <a href="/dashboard" class="back-link">&larr; Dashboard</a>
@@ -20,7 +31,11 @@
     <h2>Profile</h2>
     <dl>
       <dt>Username</dt><dd>{{.username}}</dd>
+      {{if .name}}<dt>Name</dt><dd>{{.name}}</dd>{{end}}
       <dt>Email</dt><dd>{{.email}}</dd>
+      {{if .company}}<dt>Company</dt><dd>{{.company}}</dd>{{end}}
+      {{if .location}}<dt>Location</dt><dd>{{.location}}</dd>{{end}}
+      {{if .bio}}<dt>Bio</dt><dd>{{.bio}}</dd>{{end}}
       <dt>Member since</dt><dd>{{.created_at}}</dd>
       <dt>Last sign-in</dt><dd>{{.last_login}}</dd>
     </dl>
@@ -33,16 +48,15 @@
       <dt>Contributors/month</dt><dd>{{comma .max_contributors}}</dd>
       <dt>Rate limit</dt><dd>{{comma .rate_limit}}/hour</dd>
     </dl>
+    <button class="btn btn-primary" disabled title="Coming soon">Change Plan</button>
   </section>
 
   <section class="settings-section">
     <h2>API Tokens</h2>
-    {{if .tokens}}
-    <table class="data-table">
+    <table class="data-table" id="token-table" {{if not .tokens}}style="display:none"{{end}}>
       <thead>
         <tr>
           <th>Name</th>
-          <th>Prefix</th>
           <th>Last Used</th>
           <th>Created</th>
           <th></th>
@@ -50,9 +64,8 @@
       </thead>
       <tbody>
         {{range .tokens}}
-        <tr>
+        <tr id="token-{{.ID}}">
           <td>{{.Name}}</td>
-          <td><code>{{.Prefix}}…</code></td>
           <td>{{if .LastUsed}}{{.LastUsed.Format "2006-01-02 15:04"}}{{else}}Never{{end}}</td>
           <td>{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
           <td><button class="btn btn-sm btn-danger" onclick="revokeToken('{{.ID}}')">Revoke</button></td>
@@ -60,10 +73,33 @@
         {{end}}
       </tbody>
     </table>
-    {{else}}
-    <p>No API tokens yet.</p>
-    {{end}}
-    <button class="btn btn-primary" onclick="generateToken()">Generate Token</button>
+    <p id="no-tokens" {{if .tokens}}style="display:none"{{end}}>No API tokens yet.</p>
+
+    <div id="new-token-msg" class="token-created" style="display:none;">
+      <div class="token-created-header">
+        <strong>Copy your token now — it won't be shown again</strong>
+        <button class="btn btn-sm" onclick="document.getElementById('new-token-msg').style.display='none'">Dismiss</button>
+      </div>
+      <div class="token-created-value">
+        <code id="new-token-value"></code>
+        <button class="btn btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('new-token-value').textContent)">Copy</button>
+      </div>
+    </div>
+
+    <div id="token-error" class="token-error" style="display:none;"></div>
+    <button class="btn btn-primary" onclick="document.getElementById('token-modal').style.display='flex'">+ Create Token</button>
+
+    <div id="token-modal" class="modal-overlay" style="display:none;">
+      <div class="modal-dialog">
+        <h3>Create API Token</h3>
+        <label for="token-name-input">Token name</label>
+        <input id="token-name-input" type="text" placeholder="e.g., my-ci-token" autocomplete="off">
+        <div class="modal-actions">
+          <button class="btn btn-sm" onclick="document.getElementById('token-modal').style.display='none'">Cancel</button>
+          <button class="btn btn-primary btn-sm" onclick="generateToken()">Create</button>
+        </div>
+      </div>
+    </div>
   </section>
 
   <section class="settings-section">
@@ -76,7 +112,4 @@
   </section>
 </div>
 </main>
-<footer class="app-footer">
-  DevTrace &middot; 2026
-</footer>
 {{end}}

@@ -14,6 +14,9 @@
 </head>
 <body>
 {{template "content" .}}
+<footer class="app-footer">
+  {{if .Version}}{{.Version}}{{else}}DevTrace{{end}} &middot; <a href="/changelog">Changelog</a> &middot; <a href="/help">Help</a> &middot; <a href="/tos">Terms</a>
+</footer>
 <script src="/static/js/app.js"></script>
 </body>
 </html>

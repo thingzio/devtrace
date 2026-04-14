@@ -45,6 +45,7 @@ var templateFuncs = template.FuncMap{
 		}
 		return fmt.Sprintf("%d,%03d", n/1000, n%1000)
 	},
+	"sub":      func(a, b int) int { return a - b },
 	"mul":      func(a, b float64) float64 { return a * b },
 	"int":      func(n int64) int { return int(n) },
 	"prettify": func(s string) string { return strings.ReplaceAll(s, "_", " ") },
@@ -243,7 +244,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 	mux.Handle("GET /static/", http.FileServer(http.FS(staticFS)))
 
 	// Public
-	mux.HandleFunc("GET /{$}", landingHandler(opts))
+	mux.Handle("GET /{$}", requireAny(landingHandler(opts)))
 	mux.HandleFunc("GET /health", health.Handler())
 	mux.HandleFunc("GET /changelog", stubPageHandler("Changelog"))
 	mux.HandleFunc("GET /help", stubPageHandler("Help"))
@@ -254,12 +255,12 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 	mux.Handle("GET /dashboard", requireSession(dashboardHandler(store, opts)))
 
 	// Settings + ToS — requires session
-	mux.Handle("GET /settings", requireSession(settingsHandler(store)))
+	mux.Handle("GET /settings", requireSession(settingsHandler(store, opts)))
 	mux.HandleFunc("GET /tos", tosPageHandler())
 	mux.Handle("POST /tos/accept", requireSession(tosAcceptHandler(store)))
 
 	// Score card page — accepts any auth
-	mux.Handle("GET /score/{username}", scoreRL.wrap(requireAny(scorecardHandler(scoreSvc))))
+	mux.Handle("GET /score/{username}", scoreRL.wrap(requireAny(scorecardHandler(store, scoreSvc, opts))))
 
 	// Score API — accepts any auth (token, session, or none)
 	mux.Handle("GET /api/v1/score/{username}", scoreRL.wrap(requireAny(scoreHandler(db, store, scoreSvc))))

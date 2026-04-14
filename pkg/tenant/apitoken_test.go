@@ -91,9 +91,6 @@ func TestListAPITokens(t *testing.T) {
 	if tokens[1].Name != "deploy" {
 		t.Fatalf("second token name = %q, want %q", tokens[1].Name, "deploy")
 	}
-	if tokens[0].Prefix == "" {
-		t.Fatal("prefix should not be empty")
-	}
 }
 
 func TestRevokeAPIToken(t *testing.T) {

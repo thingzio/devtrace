@@ -1,7 +1,7 @@
 {{define "footer"}}
 </main>
 <footer class="app-footer">
-  DevTrace &middot; 2026
+  {{if .version}}{{.version}}{{else}}DevTrace{{end}} &middot; <a href="/changelog">Changelog</a> &middot; <a href="/help">Help</a> &middot; <a href="/tos">Terms</a>
 </footer>
 <script src="/static/js/app.js"></script>
 </body>

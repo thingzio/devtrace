@@ -17,7 +17,6 @@ var ErrTokenInvalid = errors.New("invalid or revoked API token")
 type APITokenInfo struct {
 	ID        string
 	Name      string
-	Prefix    string // first 8 chars of token hash for display
 	LastUsed  *time.Time
 	CreatedAt time.Time
 }
@@ -77,7 +76,7 @@ func ValidateAPIToken(ctx context.Context, db *sql.DB, rawToken string) (*Tenant
 // ListAPITokens returns all tokens for a tenant, ordered by creation time descending.
 func ListAPITokens(ctx context.Context, db *sql.DB, tenantID string) ([]APITokenInfo, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, name, LEFT(token_hash, 8) AS prefix, last_used_at, created_at
+		`SELECT id, name, last_used_at, created_at
 		 FROM api_token WHERE tenant_id = $1 ORDER BY created_at DESC`, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("listing api tokens: %w", err)
@@ -88,7 +87,7 @@ func ListAPITokens(ctx context.Context, db *sql.DB, tenantID string) ([]APIToken
 	for rows.Next() {
 		var ti APITokenInfo
 		var lastUsed sql.NullTime
-		if err := rows.Scan(&ti.ID, &ti.Name, &ti.Prefix, &lastUsed, &ti.CreatedAt); err != nil {
+		if err := rows.Scan(&ti.ID, &ti.Name, &lastUsed, &ti.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scanning api token: %w", err)
 		}
 		if lastUsed.Valid {
