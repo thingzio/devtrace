@@ -29,10 +29,6 @@ SITE="$TMPDIR_E2E/devtrace-site"
 go build -mod=vendor -o "$SITE" ./cmd/devtrace-site
 [[ -x "$SITE" ]] || { echo "FAIL: devtrace-site binary not found" >&2; exit 1; }
 
-echo "==> Building devtrace-ingest..."
-INGEST="$TMPDIR_E2E/devtrace-ingest"
-go build -mod=vendor -o "$INGEST" ./cmd/devtrace-ingest
-[[ -x "$INGEST" ]] || { echo "FAIL: devtrace-ingest binary not found" >&2; exit 1; }
 
 # ==========================================================================
 # Smoke tests (no DB)
