@@ -11,7 +11,22 @@
   <hr style="border:none;border-top:1px solid var(--border-color,#e1e4e8);margin-bottom:1.5rem;">
 
   <div class="score-header">
-    <h1>{{.Username}}</h1>
+    <div style="display:flex;align-items:center;gap:1rem;">
+      {{if .Profile}}{{if .Profile.AvatarURL}}
+      <img src="{{.Profile.AvatarURL}}" alt="{{.Username}}" style="width:64px;height:64px;border-radius:50%;">
+      {{end}}{{end}}
+      <div>
+        <h1 style="margin:0;">{{.Username}}</h1>
+        {{if .Profile}}
+        <div style="font-size:0.85rem;color:var(--text-secondary,#8b949e);margin-top:0.25rem;">
+          {{if .Profile.Name}}<span>{{.Profile.Name}}</span>{{end}}
+          {{if .Profile.Company}}<span style="margin-left:0.5rem;">· {{.Profile.Company}}</span>{{end}}
+          {{if .Profile.Location}}<span style="margin-left:0.5rem;">· {{.Profile.Location}}</span>{{end}}
+        </div>
+        {{if .Profile.Bio}}<div style="font-size:0.8rem;color:var(--text-secondary,#8b949e);margin-top:0.25rem;">{{.Profile.Bio}}</div>{{end}}
+        {{end}}
+      </div>
+    </div>
     <div class="grade-display">
       <span class="grade-badge {{.GradeClass}}">{{.Grade}}</span>
       <div style="display:flex;flex-direction:column;margin-left:0.75rem;">

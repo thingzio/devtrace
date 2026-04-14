@@ -80,6 +80,7 @@ func scorecardHandler(svc *service.ScoreService) http.HandlerFunc {
 		renderTemplate(w, "scorecard.html", map[string]any{
 			"Title":       username,
 			"Username":    username,
+			"Profile":     resp.Profile,
 			"Grade":       resp.Score.Grade,
 			"Value":       resp.Score.Value,
 			"Version":     resp.Version,

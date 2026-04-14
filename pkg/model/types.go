@@ -13,6 +13,7 @@ type ScoreResponse struct {
 	Version     string       `json:"version"`
 	Username    string       `json:"username"`
 	Provider    Provider     `json:"provider"`
+	Profile     *Profile     `json:"profile,omitempty"`
 	Score       *Score       `json:"score"`
 	Signals     *Signals     `json:"signals,omitempty"`
 	RiskSummary string       `json:"risk_summary,omitempty"`
@@ -24,6 +25,15 @@ type ScoreResponse struct {
 	ScoredAt    time.Time    `json:"scored_at"`
 	CachedAt    *time.Time   `json:"cached_at,omitempty"`
 	Detail      string       `json:"detail,omitempty"`
+}
+
+// Profile holds public contributor metadata from GitHub.
+type Profile struct {
+	Name      string `json:"name,omitempty"`
+	AvatarURL string `json:"avatar_url,omitempty"`
+	Company   string `json:"company,omitempty"`
+	Location  string `json:"location,omitempty"`
+	Bio       string `json:"bio,omitempty"`
 }
 
 // Score holds the computed reputation score and grade.

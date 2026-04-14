@@ -106,6 +106,13 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 		Version:  s.version,
 		Username: username,
 		Provider: model.ProviderGitHub,
+		Profile: &model.Profile{
+			Name:      profile.Name,
+			AvatarURL: profile.AvatarURL,
+			Company:   profile.Company,
+			Location:  profile.Location,
+			Bio:       profile.Bio,
+		},
 		Score: &model.Score{
 			Grade:      grade,
 			Value:      value,
@@ -164,6 +171,7 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 			Grade: full.Score.Grade,
 			Value: full.Score.Value,
 		}
+		resp.Profile = nil
 		resp.Signals = nil
 		resp.RiskSummary = ""
 		resp.RepoContext = nil
