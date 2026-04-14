@@ -7,6 +7,7 @@ import (
 
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
+	"github.com/thingzio/devtrace/pkg/model"
 	"github.com/thingzio/devtrace/pkg/score"
 )
 
@@ -58,7 +59,7 @@ func (m *mockScorerStore) RemoveFromQueue(_ context.Context, username, _ string)
 	return nil
 }
 
-func (m *mockScorerStore) GetBehavioralSignals(_ context.Context, _, _ string) (*postgres.BehavioralSignals, error) {
+func (m *mockScorerStore) GetBehavioralSignals(_ context.Context, _, _ string) (*model.Behavior, error) {
 	return nil, nil
 }
 

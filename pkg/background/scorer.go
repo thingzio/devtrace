@@ -9,6 +9,7 @@ import (
 	"github.com/thingzio/devtrace/pkg/config"
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
+	"github.com/thingzio/devtrace/pkg/model"
 	"github.com/thingzio/devtrace/pkg/score"
 )
 
@@ -24,7 +25,7 @@ type scorerStore interface {
 	DequeueForScoring(ctx context.Context, limit int) ([]postgres.QueueEntry, error)
 	RemoveFromQueue(ctx context.Context, username, provider string) error
 	GetStaleContributors(ctx context.Context, lowDays, highDays, limit int) ([]postgres.StaleContributor, error)
-	GetBehavioralSignals(ctx context.Context, username, provider string) (*postgres.BehavioralSignals, error)
+	GetBehavioralSignals(ctx context.Context, username, provider string) (*model.Behavior, error)
 	UpsertContributor(ctx context.Context, username, provider string) error
 	SaveScoreHistory(ctx context.Context, username, provider string, value float64, grade string, deep bool) error
 	UpdateReputation(ctx context.Context, username, provider string, value float64, grade, version string, signals *score.InputSignals) error
