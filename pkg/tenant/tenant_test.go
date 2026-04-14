@@ -29,7 +29,7 @@ func testDB(t *testing.T) *sql.DB {
 
 func cleanup(t *testing.T, db *sql.DB, githubID int64) {
 	t.Helper()
-	_, _ = db.ExecContext(context.Background(), "DELETE FROM tenant WHERE github_id = $1", githubID)
+	_, _ = db.ExecContext(context.Background(), "DELETE FROM devtrace_tenant WHERE github_id = $1", githubID)
 }
 
 func TestUpsertTenant(t *testing.T) {

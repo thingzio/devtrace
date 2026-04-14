@@ -10,8 +10,9 @@ import (
 
 func TestNewClientNoKey(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("DEVTRACE_ANTHROPIC_API_KEY", "")
 	if c := New(); c != nil {
-		t.Fatal("expected nil client when ANTHROPIC_API_KEY is empty")
+		t.Fatal("expected nil client when no API key is set")
 	}
 }
 
