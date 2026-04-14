@@ -1,0 +1,218 @@
+#!/bin/bash
+# setup-tools — validate and install all local dev tool dependencies.
+# Reads required versions from .settings.yaml where possible.
+# Supports macOS (Homebrew) and Linux (apt + curl installs).
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${DIR}/common"
+
+SETTINGS="${REPO_ROOT}/.settings.yaml"
+
+setting_val() {
+    local key="$1" default="$2"
+    grep -E "^\s+${key}:" "$SETTINGS" 2>/dev/null \
+        | head -1 \
+        | sed "s/.*${key}:[[:space:]]*//" \
+        | tr -d "'\"~> " \
+        || echo "$default"
+}
+
+REQUIRED_GO_VER=$(setting_val "go" "1.26")
+REQUIRED_GOLANGCI_VER=$(setting_val "golangci_lint" "v2.11.3")
+REQUIRED_GORELEASER_MAJOR="2"
+
+OS="$(uname -s)"
+ARCH="$(uname -m)"
+FAILED=()
+
+has_brew() { command -v brew &>/dev/null; }
+has_apt()  { command -v apt-get &>/dev/null; }
+
+brew_install() {
+    local pkg="$1" tap="${2:-}"
+    if ! has_brew; then return 1; fi
+    if [[ -n "$tap" ]]; then brew tap "$tap" &>/dev/null || true; fi
+    brew install "$pkg"
+}
+
+apt_install() {
+    local pkg="$1"
+    if ! has_apt; then return 1; fi
+    sudo apt-get install -y --no-install-recommends "$pkg"
+}
+
+skip() { printf "  \033[33m[SKIP]\033[0m %s\n" "$1" >&2; }
+ok()   { printf "  \033[32m[OK]\033[0m   %s\n"   "$1" >&2; }
+fail() { printf "  \033[31m[FAIL]\033[0m %s\n"   "$1" >&2; FAILED+=("$1"); }
+
+check_tool() {
+    local name="$1" check_cmd="$2" install_fn="$3"
+    printf "Checking %-20s ... " "$name"
+    if eval "$check_cmd" &>/dev/null; then
+        ok "already installed"
+        return
+    fi
+    printf "(installing) "
+    if eval "$install_fn" &>/dev/null; then
+        if eval "$check_cmd" &>/dev/null; then
+            ok "installed"
+        else
+            fail "$name — install succeeded but check still fails; verify manually"
+        fi
+    else
+        fail "$name — install failed"
+    fi
+}
+
+# git
+printf "Checking %-20s ... " "git"
+if command -v git &>/dev/null; then
+    ok "$(git --version)"
+else
+    fail "git — install via your OS package manager"
+fi
+
+# Go
+printf "Checking %-20s ... " "go (>= ${REQUIRED_GO_VER})"
+if command -v go &>/dev/null; then
+    INSTALLED_GO="$(go env GOVERSION 2>/dev/null | sed 's/go//')"
+    REQ_MAJOR="${REQUIRED_GO_VER%%.*}"
+    REQ_MINOR="${REQUIRED_GO_VER#*.}"; REQ_MINOR="${REQ_MINOR%%.*}"
+    INS_MAJOR="${INSTALLED_GO%%.*}"
+    INS_MINOR="${INSTALLED_GO#*.}"; INS_MINOR="${INS_MINOR%%.*}"
+    if [[ "$INS_MAJOR" -gt "$REQ_MAJOR" ]] \
+        || ( [[ "$INS_MAJOR" -eq "$REQ_MAJOR" ]] && [[ "$INS_MINOR" -ge "$REQ_MINOR" ]] ); then
+        ok "go${INSTALLED_GO}"
+    else
+        fail "go — installed ${INSTALLED_GO}, need >= ${REQUIRED_GO_VER}; update via https://go.dev/dl"
+    fi
+else
+    fail "go — not found; install from https://go.dev/dl"
+fi
+
+# yq
+check_tool "yq" "command -v yq" \
+    "brew_install yq || (apt_install yq || (
+        curl -sSfL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${ARCH} \
+            -o /usr/local/bin/yq && chmod +x /usr/local/bin/yq
+    ))"
+
+# golangci-lint
+printf "Checking %-20s ... " "golangci-lint (${REQUIRED_GOLANGCI_VER})"
+_semver_gte() {
+    local a="${1#v}" b="${2#v}"
+    local IFS=.
+    local -a av=($a) bv=($b)
+    local i
+    for i in 0 1 2; do
+        local ai="${av[$i]:-0}" bi="${bv[$i]:-0}"
+        [[ "$ai" -gt "$bi" ]] && return 0
+        [[ "$ai" -lt "$bi" ]] && return 1
+    done
+    return 0
+}
+_golangci_version_ok() {
+    local v
+    v="$(golangci-lint --version 2>/dev/null | awk '{print $4}')"
+    [[ -n "$v" ]] && _semver_gte "$v" "$REQUIRED_GOLANGCI_VER"
+}
+if _golangci_version_ok; then
+    ok "${REQUIRED_GOLANGCI_VER}"
+else
+    printf "(installing %s) " "$REQUIRED_GOLANGCI_VER"
+    if has_brew; then
+        brew_install golangci-lint golangci-lint/tap &>/dev/null \
+            || brew upgrade golangci-lint &>/dev/null || true
+    else
+        curl -sSfL \
+            https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" "${REQUIRED_GOLANGCI_VER}" &>/dev/null
+    fi
+    if _golangci_version_ok; then
+        ok "${REQUIRED_GOLANGCI_VER}"
+    else
+        fail "golangci-lint — could not install ${REQUIRED_GOLANGCI_VER}"
+    fi
+fi
+
+# goreleaser
+printf "Checking %-20s ... " "goreleaser (v${REQUIRED_GORELEASER_MAJOR}+)"
+_goreleaser_ok() {
+    local v
+    v="$(goreleaser --version 2>/dev/null | grep -i 'version' | head -1 | grep -oE '[0-9]+' | head -1)"
+    [[ "${v:-0}" -ge "$REQUIRED_GORELEASER_MAJOR" ]]
+}
+if _goreleaser_ok; then
+    ok "$(goreleaser --version 2>/dev/null | head -1)"
+else
+    printf "(installing) "
+    brew_install goreleaser goreleaser/tap &>/dev/null \
+        || { curl -sSfL https://goreleaser.com/static/run | bash -s -- --install-dir "$(go env GOPATH)/bin" &>/dev/null; }
+    if _goreleaser_ok; then
+        ok "$(goreleaser --version 2>/dev/null | head -1)"
+    else
+        fail "goreleaser — need v${REQUIRED_GORELEASER_MAJOR}+; see https://goreleaser.com/install"
+    fi
+fi
+
+# ko
+check_tool "ko" "command -v ko" \
+    "brew_install ko || go install github.com/google/ko@latest"
+
+# govulncheck
+printf "Checking %-20s ... " "govulncheck"
+_govulncheck_ok() {
+    command -v govulncheck &>/dev/null || return 1
+    local bin_go cur_go
+    bin_go="$(go version "$(command -v govulncheck)" 2>/dev/null | grep -oE 'go[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)"
+    cur_go="$(go env GOVERSION 2>/dev/null)"
+    [[ "$bin_go" == "$cur_go" ]]
+}
+if _govulncheck_ok; then
+    ok "already installed ($(go env GOVERSION))"
+else
+    printf "(installing with %s) " "$(go env GOVERSION)"
+    if go install golang.org/x/vuln/cmd/govulncheck@latest &>/dev/null; then
+        ok "installed"
+    else
+        fail "govulncheck — install failed"
+    fi
+fi
+
+# yamllint
+check_tool "yamllint" "command -v yamllint" \
+    "brew_install yamllint || apt_install yamllint || pip3 install --user yamllint"
+
+# tfsec
+check_tool "tfsec" "command -v tfsec" \
+    "brew_install tfsec tfsec/tfsec || (
+        curl -sSfL https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-\$(uname -s | tr '[:upper:]' '[:lower:]')-${ARCH} \
+            -o /usr/local/bin/tfsec && chmod +x /usr/local/bin/tfsec
+    )"
+
+# docker
+printf "Checking %-20s ... " "docker"
+if command -v docker &>/dev/null && docker info &>/dev/null 2>&1; then
+    ok "$(docker --version)"
+elif command -v docker &>/dev/null; then
+    fail "docker — installed but daemon not running; start Docker Desktop"
+else
+    fail "docker — not found; install from https://docs.docker.com/get-docker"
+fi
+
+# psql
+check_tool "psql" "command -v psql" \
+    "brew_install libpq && brew link --force libpq || apt_install postgresql-client"
+
+# Summary
+echo ""
+if [[ "${#FAILED[@]}" -eq 0 ]]; then
+    msg "All tools are installed and ready."
+else
+    printf "${RED}[ERR]${NC} The following tools need attention:\n" >&2
+    for t in "${FAILED[@]}"; do
+        printf "  - %s\n" "$t" >&2
+    done
+    exit 1
+fi

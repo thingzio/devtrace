@@ -1,0 +1,158 @@
+#!/bin/bash
+set -euo pipefail
+
+err() { echo "FAIL: $*" >&2; FAILURES=$((FAILURES + 1)); }
+pass() { echo "PASS: $*"; }
+
+command -v go >/dev/null 2>&1 || { echo "FAIL: go is required" >&2; exit 1; }
+command -v curl >/dev/null 2>&1 || { echo "FAIL: curl is required" >&2; exit 1; }
+
+TMPDIR_E2E=$(mktemp -d)
+SITE_PID=""
+trap '[[ -n "$SITE_PID" ]] && kill "$SITE_PID" 2>/dev/null; docker compose down 2>/dev/null; rm -rf "$TMPDIR_E2E"' EXIT
+
+FAILURES=0
+DEV_DB="postgres://devtrace:devtrace@localhost:5432/devtrace?sslmode=disable"
+SITE_PORT=18080
+
+# ==========================================================================
+# Build
+# ==========================================================================
+echo "==> Building devtrace-site..."
+SITE="$TMPDIR_E2E/devtrace-site"
+go build -mod=vendor -o "$SITE" ./cmd/devtrace-site
+[[ -x "$SITE" ]] || { echo "FAIL: devtrace-site binary not found" >&2; exit 1; }
+
+echo "==> Building devtrace-ingest..."
+INGEST="$TMPDIR_E2E/devtrace-ingest"
+go build -mod=vendor -o "$INGEST" ./cmd/devtrace-ingest
+[[ -x "$INGEST" ]] || { echo "FAIL: devtrace-ingest binary not found" >&2; exit 1; }
+
+# ==========================================================================
+# Smoke tests (no DB)
+# ==========================================================================
+if output=$(DATABASE_URL="" "$SITE" 2>&1); then
+  err "site-missing-database-url (expected non-zero exit)"
+else
+  pass "site-missing-database-url (exits on missing DB)"
+fi
+
+# ==========================================================================
+# Start Postgres
+# ==========================================================================
+echo "==> Starting Postgres..."
+docker compose up -d 2>/dev/null
+for i in $(seq 1 30); do
+  docker compose exec -T db pg_isready -U devtrace >/dev/null 2>&1 && break
+  sleep 1
+done
+docker compose exec -T db pg_isready -U devtrace >/dev/null 2>&1 || { echo "FAIL: Postgres not ready" >&2; exit 1; }
+echo "==> Postgres ready"
+
+# ==========================================================================
+# Start site server
+# ==========================================================================
+echo "==> Starting devtrace-site on port $SITE_PORT..."
+DATABASE_URL="$DEV_DB" PORT="$SITE_PORT" DEVTRACE_DEBUG=true BASE_URL="http://localhost:$SITE_PORT" \
+  "$SITE" >"$TMPDIR_E2E/site.log" 2>&1 &
+SITE_PID=$!
+
+for i in $(seq 1 15); do
+  curl -sf "http://localhost:$SITE_PORT/health" >/dev/null 2>&1 && break
+  sleep 1
+done
+curl -sf "http://localhost:$SITE_PORT/health" >/dev/null 2>&1 || { echo "FAIL: site not ready"; cat "$TMPDIR_E2E/site.log"; exit 1; }
+echo "==> Site ready"
+
+# ==========================================================================
+# HTTP tests
+# ==========================================================================
+
+# Health endpoint
+STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "http://localhost:$SITE_PORT/health")
+[[ "$STATUS" == "200" ]] && pass "GET /health → 200" || err "GET /health → $STATUS (expected 200)"
+
+# Landing page
+STATUS=$(curl -sf -o "$TMPDIR_E2E/landing.html" -w "%{http_code}" "http://localhost:$SITE_PORT/")
+if [[ "$STATUS" == "200" ]] && grep -qi "devtrace" "$TMPDIR_E2E/landing.html"; then
+  pass "GET / → 200 with DevTrace content"
+else
+  err "GET / → $STATUS (expected 200 with DevTrace)"
+fi
+
+# Help page
+STATUS=$(curl -sf -o "$TMPDIR_E2E/help.html" -w "%{http_code}" "http://localhost:$SITE_PORT/help")
+if [[ "$STATUS" == "200" ]]; then
+  pass "GET /help → 200"
+else
+  err "GET /help → $STATUS (expected 200)"
+fi
+
+# Unauthenticated /dashboard redirects to auth
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$SITE_PORT/dashboard")
+[[ "$STATUS" == "302" ]] && pass "GET /dashboard (unauth) → 302" || err "GET /dashboard (unauth) → $STATUS (expected 302)"
+
+# Unauthenticated /settings redirects to auth
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$SITE_PORT/settings")
+[[ "$STATUS" == "302" ]] && pass "GET /settings (unauth) → 302" || err "GET /settings (unauth) → $STATUS (expected 302)"
+
+# Static assets served
+STATUS=$(curl -sf -o /dev/null -w "%{http_code}" "http://localhost:$SITE_PORT/static/css/app.css")
+[[ "$STATUS" == "200" ]] && pass "GET /static/css/app.css → 200" || err "GET /static/css/app.css → $STATUS (expected 200)"
+
+# Score API (unauthenticated) — returns score without signals
+STATUS=$(curl -sf -o "$TMPDIR_E2E/score.json" -w "%{http_code}" "http://localhost:$SITE_PORT/api/v1/score/octocat")
+if [[ "$STATUS" == "200" ]]; then
+  # Verify minimal unauth response structure
+  if jq -e '.score.grade' "$TMPDIR_E2E/score.json" >/dev/null 2>&1; then
+    pass "GET /api/v1/score/octocat → 200 with grade"
+  else
+    err "GET /api/v1/score/octocat → 200 but missing .score.grade"
+  fi
+  # Verify version field present
+  if jq -e '.version' "$TMPDIR_E2E/score.json" >/dev/null 2>&1; then
+    pass "score response has version field"
+  else
+    err "score response missing version field"
+  fi
+  # Verify unauth has no signals
+  if jq -e '.signals' "$TMPDIR_E2E/score.json" >/dev/null 2>&1; then
+    err "unauth score should not have signals"
+  else
+    pass "unauth score correctly omits signals"
+  fi
+else
+  err "GET /api/v1/score/octocat → $STATUS (expected 200)"
+fi
+
+# Bot detection — score 0
+STATUS=$(curl -sf -o "$TMPDIR_E2E/bot.json" -w "%{http_code}" "http://localhost:$SITE_PORT/api/v1/score/dependabot%5Bbot%5D")
+if [[ "$STATUS" == "200" ]]; then
+  BOT_SCORE=$(jq -r '.score.value' "$TMPDIR_E2E/bot.json")
+  BOT_GRADE=$(jq -r '.score.grade' "$TMPDIR_E2E/bot.json")
+  if [[ "$BOT_SCORE" == "0" ]] && [[ "$BOT_GRADE" == "F" ]]; then
+    pass "bot detection: dependabot[bot] → score 0, grade F"
+  else
+    err "bot detection: score=$BOT_SCORE grade=$BOT_GRADE (expected 0/F)"
+  fi
+else
+  err "GET /api/v1/score/dependabot[bot] → $STATUS (expected 200)"
+fi
+
+# Token management requires auth
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$SITE_PORT/api/v1/token")
+[[ "$STATUS" == "302" ]] && pass "GET /api/v1/token (unauth) → 302" || err "GET /api/v1/token (unauth) → $STATUS (expected 302)"
+
+# Webhook rejects without signature
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:$SITE_PORT/webhook/github" -d '{}')
+[[ "$STATUS" == "404" || "$STATUS" == "401" ]] && pass "POST /webhook/github (no secret configured) → $STATUS" || err "POST /webhook/github → $STATUS (expected 404 or 401)"
+
+# ==========================================================================
+# Summary
+# ==========================================================================
+echo ""
+if [[ $FAILURES -gt 0 ]]; then
+  echo "FAIL: $FAILURES test(s) failed" >&2
+  exit 1
+fi
+echo "==> All e2e tests passed"

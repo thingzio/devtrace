@@ -102,6 +102,10 @@ vulncheck: ## Scans for known vulnerabilities with govulncheck
 qualify: test-coverage lint vulncheck ## Qualifies the codebase (test, lint, vulncheck)
 	@echo "Codebase qualification completed"
 
+.PHONY: e2e
+e2e: ## Runs end-to-end tests (requires Docker)
+	tools/e2e
+
 DEV_DB := postgres://devtrace:devtrace@localhost:5432/devtrace?sslmode=disable
 
 # =============================================================================

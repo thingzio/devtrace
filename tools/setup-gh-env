@@ -1,0 +1,42 @@
+#!/bin/bash
+set -euo pipefail
+
+# Creates GitHub Actions environment variables for the 'saas' environment
+# from Terraform outputs. Run from the repo root after terraform apply.
+#
+# Prerequisites:
+#   - gh CLI authenticated
+#   - terraform apply completed in infra/saas/
+
+REPO="thingzio/devtrace"
+ENV_NAME="saas"
+TF_DIR="infra/saas"
+
+echo "==> Reading Terraform outputs from ${TF_DIR}..."
+WIF_PROVIDER=$(terraform -chdir="$TF_DIR" output -raw wif_provider)
+DEPLOYER_SA=$(terraform -chdir="$TF_DIR" output -raw deployer_sa)
+
+SERVICE_NAME="devtrace-saas-serve"
+JOB_NAME="devtrace-saas-ingest"
+REGION="us-west1"
+PROJECT_ID=$(terraform -chdir="$TF_DIR" output -raw project_id)
+AR_REPO=$(terraform -chdir="$TF_DIR" output -raw ar_repo)
+
+echo "==> Setting environment variables for '${ENV_NAME}'..."
+gh variable set WIF_PROVIDER  --repo "$REPO" --env "$ENV_NAME" --body "$WIF_PROVIDER"
+gh variable set DEPLOYER_SA   --repo "$REPO" --env "$ENV_NAME" --body "$DEPLOYER_SA"
+gh variable set SERVICE_NAME  --repo "$REPO" --env "$ENV_NAME" --body "$SERVICE_NAME"
+gh variable set JOB_NAME      --repo "$REPO" --env "$ENV_NAME" --body "$JOB_NAME"
+gh variable set REGION        --repo "$REPO" --env "$ENV_NAME" --body "$REGION"
+gh variable set PROJECT_ID    --repo "$REPO" --env "$ENV_NAME" --body "$PROJECT_ID"
+gh variable set AR_REPO       --repo "$REPO" --env "$ENV_NAME" --body "$AR_REPO"
+
+echo ""
+echo "==> Done. Variables set in '${ENV_NAME}' environment:"
+echo "  WIF_PROVIDER = ${WIF_PROVIDER}"
+echo "  DEPLOYER_SA  = ${DEPLOYER_SA}"
+echo "  SERVICE_NAME = ${SERVICE_NAME}"
+echo "  JOB_NAME     = ${JOB_NAME}"
+echo "  REGION       = ${REGION}"
+echo "  PROJECT_ID   = ${PROJECT_ID}"
+echo "  AR_REPO      = ${AR_REPO}"
