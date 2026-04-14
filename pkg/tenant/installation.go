@@ -74,6 +74,28 @@ func ListInstallations(ctx context.Context, db *sql.DB, tenantID string) ([]Inst
 	return result, rows.Err()
 }
 
+// GetAllActiveInstallations returns non-suspended installations across all tenants.
+// Used at startup to build the GitHub API token pool.
+func GetAllActiveInstallations(ctx context.Context, db *sql.DB) ([]ActiveInstallation, error) {
+	rows, err := db.QueryContext(ctx,
+		`SELECT DISTINCT installation_id, target_login FROM github_app_installation
+		 WHERE suspended_at IS NULL`)
+	if err != nil {
+		return nil, fmt.Errorf("getting all active installations: %w", err)
+	}
+	defer rows.Close()
+
+	var result []ActiveInstallation
+	for rows.Next() {
+		var a ActiveInstallation
+		if err := rows.Scan(&a.InstallationID, &a.TargetLogin); err != nil {
+			return nil, fmt.Errorf("scanning active installation: %w", err)
+		}
+		result = append(result, a)
+	}
+	return result, rows.Err()
+}
+
 // GetActiveInstallations returns non-suspended installations for a tenant.
 func GetActiveInstallations(ctx context.Context, db *sql.DB, tenantID string) ([]ActiveInstallation, error) {
 	rows, err := db.QueryContext(ctx,

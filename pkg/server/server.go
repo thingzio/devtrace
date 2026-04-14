@@ -91,32 +91,13 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	defer store.Close()
 
-	if err := store.Migrate(ctx); err != nil {
-		return fmt.Errorf("run migrations: %w", err)
+	if migrateErr := store.Migrate(ctx); migrateErr != nil {
+		return fmt.Errorf("run migrations: %w", migrateErr)
 	}
 
-	var ghClient ghclient.Client
-
-	// Try GitHub App installation client first.
-	if appCfg, appErr := tenant.LoadGitHubAppConfig(); appErr == nil {
-		instID := int64(config.GetEnvAsInt("GITHUB_APP_INSTALLATION_ID", 0))
-		if instID > 0 {
-			ghClient = ghclient.NewInstallationClient(appCfg, instID)
-			slog.Info("using GitHub App installation client",
-				"app_id", appCfg.AppID,
-				"installation_id", instID,
-			)
-		}
-	}
-
-	// Fall back to PAT.
-	if ghClient == nil {
-		token := config.GetEnv("GITHUB_TOKEN", "")
-		if token == "" {
-			return fmt.Errorf("GITHUB_TOKEN or GitHub App config (GITHUB_APP_ID+KEY+INSTALLATION_ID) required")
-		}
-		ghClient = ghclient.NewPATClient(ctx, token)
-		slog.Info("using PAT GitHub client")
+	ghClient, err := buildGitHubClient(ctx, store)
+	if err != nil {
+		return fmt.Errorf("init GitHub client: %w", err)
 	}
 
 	// Start background operations (disabled by default for local dev).
@@ -183,6 +164,57 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	return nil
+}
+
+// buildGitHubClient creates a GitHub API client, preferring a token pool
+// from all active installations, falling back to a single PAT.
+func buildGitHubClient(ctx context.Context, store *postgres.Store) (ghclient.Client, error) {
+	appCfg, appErr := tenant.LoadGitHubAppConfig()
+
+	// Try to build a token pool from all active GitHub App installations.
+	if appErr == nil && store != nil {
+		installations, err := tenant.GetAllActiveInstallations(ctx, store.DB())
+		if err == nil && len(installations) > 0 {
+			var tokens []string
+			for _, inst := range installations {
+				tok, err := tenant.MintInstallationToken(ctx, appCfg, inst.InstallationID)
+				if err != nil {
+					slog.Warn("skip installation token", "installation_id", inst.InstallationID, "error", err)
+					continue
+				}
+				tokens = append(tokens, tok.Token)
+				slog.Debug("minted installation token", "installation_id", inst.InstallationID, "org", inst.TargetLogin)
+			}
+
+			// Also add GITHUB_TOKEN if set (dev/CI fallback).
+			if pat := config.GetEnv("GITHUB_TOKEN", ""); pat != "" {
+				tokens = append(tokens, pat)
+			}
+
+			if len(tokens) > 0 {
+				pool := ghclient.NewTokenPool(tokens...)
+				slog.Info("using token pool GitHub client", "tokens", pool.Size())
+				return ghclient.NewPoolClient(pool), nil
+			}
+		}
+	}
+
+	// Single installation client (legacy path).
+	if appErr == nil {
+		instID := int64(config.GetEnvAsInt("GITHUB_APP_INSTALLATION_ID", 0))
+		if instID > 0 {
+			slog.Info("using GitHub App installation client", "app_id", appCfg.AppID, "installation_id", instID)
+			return ghclient.NewInstallationClient(appCfg, instID), nil
+		}
+	}
+
+	// Fall back to PAT.
+	token := config.GetEnv("GITHUB_TOKEN", "")
+	if token == "" {
+		return nil, fmt.Errorf("GITHUB_TOKEN or GitHub App config required")
+	}
+	slog.Info("using PAT GitHub client")
+	return ghclient.NewPATClient(ctx, token), nil
 }
 
 func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg *oauth.Config, opts Options) *http.ServeMux {
