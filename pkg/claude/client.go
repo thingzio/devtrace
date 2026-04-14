@@ -13,7 +13,7 @@ import (
 
 const (
 	defaultBaseURL   = "https://api.anthropic.com/v1"
-	defaultModel     = "claude-haiku-4-5-20251001"
+	defaultModel     = "claude-haiku-4-5"
 	anthropicVersion = "2023-06-01"
 )
 
