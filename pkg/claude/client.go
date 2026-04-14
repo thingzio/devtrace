@@ -38,7 +38,10 @@ func New() *Client {
 		return nil
 	}
 
-	model := os.Getenv("ANTHROPIC_MODEL")
+	model := os.Getenv("DEVTRACE_ANTHROPIC_MODEL")
+	if model == "" {
+		model = os.Getenv("ANTHROPIC_MODEL")
+	}
 	if model == "" {
 		model = defaultModel
 	}
