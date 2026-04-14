@@ -9,7 +9,13 @@ command -v curl >/dev/null 2>&1 || { echo "FAIL: curl is required" >&2; exit 1; 
 
 TMPDIR_E2E=$(mktemp -d)
 SITE_PID=""
-trap '[[ -n "$SITE_PID" ]] && kill "$SITE_PID" 2>/dev/null; docker compose down 2>/dev/null; rm -rf "$TMPDIR_E2E"' EXIT
+STARTED_COMPOSE=false
+cleanup() {
+  [[ -n "$SITE_PID" ]] && kill "$SITE_PID" 2>/dev/null
+  [[ "$STARTED_COMPOSE" == "true" ]] && docker compose down 2>/dev/null
+  rm -rf "$TMPDIR_E2E"
+}
+trap cleanup EXIT
 
 FAILURES=0
 DEV_DB="postgres://devtrace:devtrace@localhost:5432/devtrace?sslmode=disable"
@@ -38,16 +44,21 @@ else
 fi
 
 # ==========================================================================
-# Start Postgres
+# Start Postgres (skip if already running)
 # ==========================================================================
-echo "==> Starting Postgres..."
-docker compose up -d 2>/dev/null
-for i in $(seq 1 30); do
-  docker compose exec -T db pg_isready -U devtrace >/dev/null 2>&1 && break
-  sleep 1
-done
-docker compose exec -T db pg_isready -U devtrace >/dev/null 2>&1 || { echo "FAIL: Postgres not ready" >&2; exit 1; }
-echo "==> Postgres ready"
+if pg_isready -h localhost -U devtrace -d devtrace >/dev/null 2>&1; then
+  echo "==> Postgres already running"
+else
+  echo "==> Starting Postgres..."
+  docker compose up -d || { echo "FAIL: docker compose up failed" >&2; exit 1; }
+  STARTED_COMPOSE=true
+  for i in $(seq 1 30); do
+    pg_isready -h localhost -U devtrace -d devtrace >/dev/null 2>&1 && break
+    sleep 1
+  done
+  pg_isready -h localhost -U devtrace -d devtrace >/dev/null 2>&1 || { echo "FAIL: Postgres not ready" >&2; exit 1; }
+  echo "==> Postgres ready"
+fi
 
 # ==========================================================================
 # Start site server
