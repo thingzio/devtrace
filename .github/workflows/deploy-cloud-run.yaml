@@ -1,0 +1,45 @@
+name: deploy-cloud-run
+
+on:
+  workflow_call:
+    inputs:
+      image_tag:
+        description: 'Container image tag to deploy'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: saas
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db  # v3.0.1
+
+      - name: Deploy to Cloud Run
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.image_tag }}"
+          AR="${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}"
+          echo "Deploying ${TAG} via ${AR}..."
+          gcloud run services update ${{ vars.SERVICE_NAME }} \
+            --region=${{ vars.REGION }} \
+            --image="${AR}/devtrace-site:${TAG}"
+          gcloud run jobs update ${{ vars.JOB_NAME }} \
+            --region=${{ vars.REGION }} \
+            --image="${AR}/devtrace-ingest:${TAG}"
