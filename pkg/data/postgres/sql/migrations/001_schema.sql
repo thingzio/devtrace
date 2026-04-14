@@ -1,16 +1,30 @@
--- Align shared tables when DevPulse created them first.
--- Each ALTER uses IF NOT EXISTS so this migration is safe to re-apply.
+-- DevTrace schema. All statements use IF NOT EXISTS for idempotent re-application.
 
--- tenant: DevTrace needs max_contributors (already in 005, but kept here for completeness).
--- DevPulse columns (max_repos, max_events_per_week, upgrade_requested_at) are
--- ignored by DevTrace — they exist in the physical table but DevTrace doesn't query them.
-ALTER TABLE devtrace_tenant ADD COLUMN IF NOT EXISTS max_contributors INTEGER NOT NULL DEFAULT 50;
+-- Schema version tracking (devtrace-scoped).
+CREATE TABLE IF NOT EXISTS devtrace_schema_version (
+    version INTEGER PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
--- github_app_installation: app_id was added in 004, ensure it exists.
-ALTER TABLE github_app_installation ADD COLUMN IF NOT EXISTS app_id BIGINT;
+-- Tenants (DevTrace-owned, independent from DevPulse).
+CREATE TABLE IF NOT EXISTS devtrace_tenant (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    github_id BIGINT UNIQUE NOT NULL,
+    username TEXT NOT NULL,
+    email TEXT,
+    avatar_url TEXT,
+    name TEXT,
+    company TEXT,
+    location TEXT,
+    bio TEXT,
+    plan TEXT NOT NULL DEFAULT 'free',
+    max_contributors INTEGER NOT NULL DEFAULT 50,
+    tos_accepted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
--- DevTrace-only tables that may not exist if DevPulse created the initial schema.
--- These use IF NOT EXISTS so they are safe to re-run.
+-- Contributor profiles (provider-agnostic identity).
 CREATE TABLE IF NOT EXISTS contributor (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
@@ -27,6 +41,7 @@ CREATE TABLE IF NOT EXISTS contributor (
     PRIMARY KEY (username, provider)
 );
 
+-- Reputation scores.
 CREATE TABLE IF NOT EXISTS reputation (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
@@ -45,6 +60,7 @@ CREATE TABLE IF NOT EXISTS reputation (
 CREATE INDEX IF NOT EXISTS idx_reputation_score ON reputation(score);
 CREATE INDEX IF NOT EXISTS idx_reputation_scored_at ON reputation(scored_at);
 
+-- Reputation history (trend charts).
 CREATE TABLE IF NOT EXISTS reputation_history (
     id BIGSERIAL PRIMARY KEY,
     username TEXT NOT NULL,
@@ -58,6 +74,7 @@ CREATE TABLE IF NOT EXISTS reputation_history (
 
 CREATE INDEX IF NOT EXISTS idx_reputation_history_lookup ON reputation_history(username, provider, scored_at);
 
+-- License profiles.
 CREATE TABLE IF NOT EXISTS license_profile (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
@@ -69,6 +86,7 @@ CREATE TABLE IF NOT EXISTS license_profile (
     FOREIGN KEY (username, provider) REFERENCES contributor(username, provider) ON DELETE CASCADE
 );
 
+-- AI sensing signals.
 CREATE TABLE IF NOT EXISTS ai_signal (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
@@ -82,6 +100,7 @@ CREATE TABLE IF NOT EXISTS ai_signal (
     FOREIGN KEY (username, provider) REFERENCES contributor(username, provider) ON DELETE CASCADE
 );
 
+-- API tokens (DevTrace-minted).
 CREATE TABLE IF NOT EXISTS api_token (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES devtrace_tenant(id) ON DELETE CASCADE,
@@ -94,6 +113,30 @@ CREATE TABLE IF NOT EXISTS api_token (
 CREATE INDEX IF NOT EXISTS idx_api_token_hash ON api_token(token_hash);
 CREATE INDEX IF NOT EXISTS idx_api_token_tenant ON api_token(tenant_id);
 
+-- Sessions (UI auth).
+CREATE TABLE IF NOT EXISTS session (
+    id TEXT PRIMARY KEY,
+    tenant_id UUID NOT NULL REFERENCES devtrace_tenant(id) ON DELETE CASCADE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- GitHub App installations.
+CREATE TABLE IF NOT EXISTS github_app_installation (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES devtrace_tenant(id) ON DELETE CASCADE,
+    installation_id BIGINT UNIQUE NOT NULL,
+    app_id BIGINT,
+    target_type TEXT,
+    target_login TEXT,
+    permissions JSONB,
+    suspended_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_installation_app_id ON github_app_installation(app_id) WHERE app_id IS NOT NULL;
+
+-- Usage tracking (quota enforcement).
 CREATE TABLE IF NOT EXISTS usage_record (
     id BIGSERIAL PRIMARY KEY,
     tenant_id UUID NOT NULL REFERENCES devtrace_tenant(id) ON DELETE CASCADE,
@@ -105,12 +148,20 @@ CREATE TABLE IF NOT EXISTS usage_record (
 
 CREATE INDEX IF NOT EXISTS idx_usage_tenant_period ON usage_record(tenant_id, scored_at);
 
+-- Rate limit tracking (IP-based for unauth).
 CREATE TABLE IF NOT EXISTS rate_limit (
     key TEXT PRIMARY KEY,
     count INTEGER NOT NULL DEFAULT 0,
     window_start TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Sync state tracking (key-value for background sync cursors).
+CREATE TABLE IF NOT EXISTS sync_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+-- Hourly behavioral summaries from GH Archive.
 CREATE TABLE IF NOT EXISTS contributor_activity (
     id BIGSERIAL,
     username TEXT NOT NULL,
@@ -128,6 +179,7 @@ CREATE TABLE IF NOT EXISTS contributor_activity (
 
 CREATE INDEX IF NOT EXISTS idx_activity_hour ON contributor_activity(hour);
 
+-- Priority-based scoring queue.
 CREATE TABLE IF NOT EXISTS scoring_queue (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
@@ -137,8 +189,3 @@ CREATE TABLE IF NOT EXISTS scoring_queue (
 );
 
 CREATE INDEX IF NOT EXISTS idx_scoring_queue_priority ON scoring_queue(priority, queued_at);
-
-CREATE TABLE IF NOT EXISTS sync_state (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-);
