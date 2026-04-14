@@ -128,3 +128,36 @@ jobs:
           rm -rf "${TFSEC_TMP}"
           tfsec --version
           tfsec infra/saas
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17.5-alpine
+        env:
+          POSTGRES_DB: devtrace
+          POSTGRES_USER: devtrace
+          POSTGRES_PASSWORD: devtrace
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U devtrace -d devtrace"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go-env
+
+      - name: E2E Test
+        env:
+          DATABASE_URL: "postgres://devtrace:devtrace@localhost:5432/devtrace?sslmode=disable"
+        run: make e2e

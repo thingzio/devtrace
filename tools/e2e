@@ -18,7 +18,7 @@ cleanup() {
 trap cleanup EXIT
 
 FAILURES=0
-DEV_DB="postgres://devtrace:devtrace@localhost:5432/devtrace?sslmode=disable"
+DEV_DB="${DATABASE_URL:-postgres://devtrace:devtrace@localhost:5432/devtrace?sslmode=disable}"
 SITE_PORT=18080
 
 # ==========================================================================
