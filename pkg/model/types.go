@@ -46,7 +46,7 @@ type Signals struct {
 	HasCompany        bool  `json:"has_company"`
 	HasLocation       bool  `json:"has_location"`
 	HasWebsite        bool  `json:"has_website"`
-	HasVerifiedEmail  bool  `json:"has_verified_email"`
+	HasPublicEmail    bool  `json:"has_public_email"`
 	Suspended         bool  `json:"suspended"`
 }
 
@@ -61,7 +61,6 @@ type RepoContext struct {
 	OrgMember         bool   `json:"org_member"`
 	CommitsVerified   bool   `json:"commits_verified"`
 	AuthorAssociation string `json:"author_association,omitempty"`
-	TrustedOrgMember  bool   `json:"trusted_org_member"`
 }
 
 // License holds aggregated license information across repositories.

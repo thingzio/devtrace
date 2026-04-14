@@ -49,7 +49,7 @@ type InputSignals struct {
 	HasCompany        bool
 	HasLocation       bool
 	HasWebsite        bool
-	HasVerifiedEmail  bool
+	HasPublicEmail    bool
 
 	// Engagement
 	Commits           int64
@@ -109,7 +109,7 @@ func Compute(s InputSignals) float64 {
 	if s.HasWebsite {
 		profileCount++
 	}
-	if s.HasVerifiedEmail {
+	if s.HasPublicEmail {
 		profileCount++
 	}
 	rep += float64(profileCount) / 5.0 * profileWeight
@@ -208,7 +208,7 @@ func Categories(s InputSignals) map[string]float64 {
 	if s.HasWebsite {
 		profileCount++
 	}
-	if s.HasVerifiedEmail {
+	if s.HasPublicEmail {
 		profileCount++
 	}
 	identity += float64(profileCount) / 5.0 * profileWeight

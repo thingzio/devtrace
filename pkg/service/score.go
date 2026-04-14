@@ -197,7 +197,7 @@ func signalsFromInput(s *score.InputSignals, p *ghclient.UserProfile) *model.Sig
 		HasCompany:        s.HasCompany,
 		HasLocation:       s.HasLocation,
 		HasWebsite:        s.HasWebsite,
-		HasVerifiedEmail:  s.HasVerifiedEmail,
+		HasPublicEmail:    s.HasPublicEmail,
 		Suspended:         s.Suspended,
 	}
 }
@@ -214,7 +214,6 @@ func repoContextFromSignals(s *score.InputSignals, repo string) *model.RepoConte
 		OrgMember:         s.OrgMember,
 		CommitsVerified:   s.UnverifiedCommits == 0 && s.Commits > 0,
 		AuthorAssociation: s.AuthorAssociation,
-		TrustedOrgMember:  s.TrustedOrgMember,
 	}
 }
 

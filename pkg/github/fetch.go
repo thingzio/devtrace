@@ -33,16 +33,16 @@ func fetchSignals(ctx context.Context, api *gh.Client, username, repo string, hi
 
 	profile := mapUser(u)
 	signals := &score.InputSignals{
-		AgeDays:          int64(time.Since(profile.CreatedAt).Hours() / 24),
-		HasBio:           profile.Bio != "",
-		HasCompany:       profile.Company != "",
-		HasLocation:      profile.Location != "",
-		HasWebsite:       profile.Website != "",
-		HasVerifiedEmail: profile.Email != "",
-		Followers:        profile.Followers,
-		Following:        profile.Following,
-		PublicRepos:      profile.PublicRepos,
-		Suspended:        profile.Suspended,
+		AgeDays:        int64(time.Since(profile.CreatedAt).Hours() / 24),
+		HasBio:         profile.Bio != "",
+		HasCompany:     profile.Company != "",
+		HasLocation:    profile.Location != "",
+		HasWebsite:     profile.Website != "",
+		HasPublicEmail: profile.Email != "",
+		Followers:      profile.Followers,
+		Following:      profile.Following,
+		PublicRepos:    profile.PublicRepos,
+		Suspended:      profile.Suspended,
 	}
 
 	// Suspended accounts: return early with basic profile data only.
@@ -206,18 +206,29 @@ func fetchSignals(ctx context.Context, api *gh.Client, username, repo string, hi
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				stats, resp, e := api.Repositories.ListContributorsStats(ctx, org, parts[1])
-				if e != nil {
-					results <- result{"repo_stats", e}
-					return
-				}
-				// GitHub returns 202 when stats are being computed. Retry once.
-				if resp.StatusCode == http.StatusAccepted {
-					time.Sleep(2 * time.Second)
-					stats, _, e = api.Repositories.ListContributorsStats(ctx, org, parts[1])
+				// GitHub returns 202 when stats are being computed.
+				// Retry with backoff (2s, 4s, 8s) up to 3 times.
+				var stats []*gh.ContributorStats
+				for attempt := range 4 {
+					var resp *gh.Response
+					var e error
+					stats, resp, e = api.Repositories.ListContributorsStats(ctx, org, parts[1])
 					if e != nil {
-						results <- result{"repo_stats_retry", e}
+						results <- result{"repo_stats", e}
 						return
+					}
+					if resp.StatusCode != http.StatusAccepted {
+						break
+					}
+					if attempt == 3 {
+						slog.Debug("repo stats still computing after retries", "repo", repo)
+						return
+					}
+					wait := time.Duration(2<<attempt) * time.Second
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(wait):
 					}
 				}
 
