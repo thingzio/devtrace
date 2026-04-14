@@ -97,4 +97,13 @@ type AISensing struct {
 	KnownToolSignatures  []string `json:"known_tool_signatures"`
 	TotalCommitsAnalyzed int      `json:"total_commits_analyzed"`
 	AIAssociatedRatio    float64  `json:"ai_associated_ratio"`
+	// Claude-powered (Starter+, when available)
+	PRAuthenticity *AuthenticityAssessment `json:"pr_authenticity,omitempty"`
+}
+
+// AuthenticityAssessment is a Claude-powered classification of PR authenticity.
+type AuthenticityAssessment struct {
+	Classification string  `json:"classification"` // human, ai_assisted, ai_generated, uncertain
+	Confidence     float64 `json:"confidence"`
+	Reasoning      string  `json:"reasoning"`
 }

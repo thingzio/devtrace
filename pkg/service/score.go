@@ -149,7 +149,11 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 		resp.AISensing = nil
 
 	case "starter", "pro":
-		// Full response. License and AI sensing are nil placeholders until analyzers are built.
+		// Initialize AISensing placeholder for Starter+ (Tier 1 metadata signals).
+		// PRAuthenticity will be populated when GH Archive captures PR descriptions.
+		if resp.AISensing == nil {
+			resp.AISensing = &model.AISensing{}
+		}
 	}
 
 	return &resp
