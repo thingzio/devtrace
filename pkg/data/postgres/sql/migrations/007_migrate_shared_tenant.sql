@@ -2,6 +2,25 @@
 -- Only runs on existing deployments where the shared 'tenant' table exists.
 -- No-ops on fresh installs (no shared tenant table, no data to migrate).
 
+-- Ensure devtrace_tenant exists (skipped on fresh installs where 001 created it,
+-- needed on existing deployments where 001 was the old schema).
+CREATE TABLE IF NOT EXISTS devtrace_tenant (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    github_id BIGINT UNIQUE NOT NULL,
+    username TEXT NOT NULL,
+    email TEXT,
+    avatar_url TEXT,
+    name TEXT,
+    company TEXT,
+    location TEXT,
+    bio TEXT,
+    plan TEXT NOT NULL DEFAULT 'free',
+    max_contributors INTEGER NOT NULL DEFAULT 50,
+    tos_accepted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 DO $$
 BEGIN
     -- Only migrate if the shared tenant table exists (existing deployment).
