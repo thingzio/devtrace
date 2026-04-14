@@ -1,17 +1,120 @@
 {{define "content"}}
-<div class="tos">
-  <h1>Terms of Service</h1>
-  <div class="tos-content">
-    <p>By using DevTrace, you agree to the following terms:</p>
-    <ul>
-      <li>DevTrace accesses public GitHub data to compute reputation scores.</li>
-      <li>Scores are informational and should not be the sole basis for trust decisions.</li>
-      <li>API tokens are your responsibility. Do not share them.</li>
-      <li>We reserve the right to rate-limit or suspend accounts that abuse the service.</li>
-    </ul>
+<div class="landing">
+  <div class="landing-hero">
+    <h1>Terms of Service</h1>
+    <p>Please review and accept the following terms before using DevTrace.</p>
   </div>
-  <form action="/tos/accept" method="POST">
-    <button type="submit" class="btn btn-primary">I Accept</button>
-  </form>
+
+  <div style="max-width:700px;margin:0 auto 30px">
+    <div class="landing-feature" style="margin-bottom:20px">
+      <h3>1. Data Collection &amp; Access</h3>
+      <ul>
+        <li>DevTrace collects and processes <strong>only data that is already publicly accessible</strong> via the GitHub API. No information is gathered that is not available to any user of github.com.</li>
+        <li>Data collected includes contributor profiles, contribution metadata (pull requests, commits, reviews), repository metadata (stars, forks, language, license), and account activity signals.</li>
+        <li><strong>DevTrace does not access, read, or store source code.</strong> Only event metadata, repository statistics, and contributor signals are processed.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:20px">
+      <h3>2. Authentication &amp; Credentials</h3>
+      <ul>
+        <li>DevTrace authenticates you via the standard GitHub OAuth web flow. The OAuth token is used only during the sign-in process to verify your identity and is <strong>not stored</strong>.</li>
+        <li>Scoring queries use GitHub App installation tokens that are <strong>short-lived, minted on-demand</strong>, and never persisted to disk or database.</li>
+        <li>Your dashboard session is maintained via an encrypted, HTTP-only cookie. No GitHub credentials, tokens, or secrets are stored by DevTrace at any time.</li>
+        <li>API tokens you generate are stored as one-way hashes. The raw token is shown once at creation and cannot be recovered.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:20px">
+      <h3>3. Data Storage &amp; Use</h3>
+      <ul>
+        <li>Scoring data is stored in our database and used solely to generate contributor reputation scores and analytics for your dashboard.</li>
+        <li>Your data is isolated from other users. Other users cannot view your scoring history or API usage.</li>
+        <li>We do not sell, share, or distribute your data to third parties.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:20px">
+      <h3>4. AI-Powered Features</h3>
+      <ul>
+        <li>DevTrace may send aggregated, non-identifying contributor statistics to a third-party large language model provider (currently Anthropic) to generate AI-powered risk summaries.</li>
+        <li>No personally identifiable information or source code is included in these requests. Only pre-computed scores and summary statistics are sent.</li>
+        <li>AI-generated insights are informational only and should not be treated as professional advice or the sole basis for trust decisions.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:20px">
+      <h3>5. Scores &amp; Reputation Data</h3>
+      <ul>
+        <li>Reputation scores are computed from publicly available signals and are <strong>informational only</strong>.</li>
+        <li>Scores should not be the sole basis for employment, access, or trust decisions.</li>
+        <li>DevTrace does not guarantee the accuracy, completeness, or timeliness of any score or signal.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:20px">
+      <h3>6. Your Controls</h3>
+      <ul>
+        <li>You can generate and revoke API tokens at any time from Settings.</li>
+        <li>You can revoke DevTrace access by uninstalling the GitHub App from your account settings.</li>
+        <li>You can sign out and clear your session at any time from the dashboard.</li>
+        <li>You may request deletion of all your data by contacting us. Upon account deletion, all associated data is permanently removed.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:20px">
+      <h3>7. Usage Limits</h3>
+      <ul>
+        <li>Free accounts are limited to 50 scored contributors per month and 60 API requests per hour.</li>
+        <li>When limits are reached, scoring requests are rejected until the next billing period or rate limit window.</li>
+        <li>Higher limits are available on paid plans.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:20px">
+      <h3>8. Service Availability</h3>
+      <ul>
+        <li>DevTrace is provided on an <strong>&ldquo;as is&rdquo; and &ldquo;as available&rdquo;</strong> basis. We do not guarantee any specific level of uptime or availability.</li>
+        <li>We reserve the right to <strong>modify, suspend, or discontinue</strong> the service (or any part of it) at any time, with or without notice.</li>
+        <li>We will make reasonable efforts to provide advance notice of material changes or planned discontinuation.</li>
+        <li>In the event of service discontinuation, a reasonable wind-down period will be provided during which you may export your data.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:20px">
+      <h3>9. Changes to These Terms</h3>
+      <ul>
+        <li>We may update these Terms of Service from time to time. When we make material changes, we will notify you by posting the updated terms on this page.</li>
+        <li>Your continued use of DevTrace after changes are posted constitutes acceptance of the revised terms.</li>
+        <li>If you do not agree with the updated terms, you should discontinue use and may request deletion of your data.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:20px">
+      <h3>10. Account Eligibility &amp; Conduct</h3>
+      <ul>
+        <li>You must be at least 13 years old (or 16 in jurisdictions where required) to use DevTrace.</li>
+        <li>You are responsible for all activity under your account, including API token usage.</li>
+        <li>We reserve the right to suspend or terminate accounts that engage in abusive behavior, violate these terms, or place unreasonable burden on the service.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:20px">
+      <h3>11. Limitation of Liability</h3>
+      <ul>
+        <li>To the maximum extent permitted by applicable law, DevTrace and its operators shall not be liable for any indirect, incidental, special, consequential, or punitive damages, or any loss of data, profits, or goodwill, arising out of or related to your use of the service.</li>
+        <li>Our total aggregate liability for any claims arising from your use of the service shall not exceed the amount you paid to us (if any) in the twelve months preceding the claim.</li>
+        <li>DevTrace makes no warranties, express or implied, including but not limited to implied warranties of merchantability, fitness for a particular purpose, and non-infringement.</li>
+      </ul>
+    </div>
+  </div>
+
+  {{if .NavUser}}
+  <div style="text-align:center">
+    <form method="POST" action="/tos/accept">
+      <button type="submit" class="btn btn-primary">I Accept</button>
+    </form>
+  </div>
+  {{end}}
 </div>
 {{end}}

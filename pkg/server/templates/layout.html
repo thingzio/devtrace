@@ -13,9 +13,35 @@
 <link rel="stylesheet" href="/static/css/app.css">
 </head>
 <body>
+<nav class="dashboard-nav">
+  <div class="nav-left">
+    <a href="/dashboard" class="nav-logo">DevTrace</a>
+  </div>
+  <div class="nav-right">
+    {{if .NavUser}}
+    <div class="nav-profile">
+      <button class="nav-profile-btn" onclick="document.querySelector('.nav-dropdown').classList.toggle('open')">
+        <img src="{{.NavAvatar}}" alt="" class="nav-avatar" width="28" height="28">
+      </button>
+      <div class="nav-dropdown">
+        <div class="nav-dropdown-header">
+          <strong>{{.NavUser}}</strong>
+        </div>
+        <div class="nav-dropdown-divider"></div>
+        <a href="/settings" class="nav-dropdown-item">Settings</a>
+        <form action="/auth/signout" method="POST" class="nav-dropdown-form">
+          <button type="submit" class="nav-dropdown-item">Sign out</button>
+        </form>
+      </div>
+    </div>
+    {{end}}
+  </div>
+</nav>
+<script>document.addEventListener('click',function(e){var d=document.querySelector('.nav-dropdown');if(d&&!e.target.closest('.nav-profile'))d.classList.remove('open')})</script>
 {{template "content" .}}
 <footer class="app-footer">
-  {{if .Version}}{{.Version}}{{else}}DevTrace{{end}} &middot; <a href="/changelog">Changelog</a> &middot; <a href="/help">Help</a> &middot; <a href="/tos">Terms</a>
+  <div class="footer-left">VERSION {{if .Version}}{{.Version}}{{else}}DEV{{end}}{{if .Commit}} ({{.Commit}}{{if .Date}} - {{.Date}}{{end}}){{end}}</div>
+  <div class="footer-right"><a href="/changelog">CHANGELOG</a> &middot; <a href="/help">HELP</a> &middot; <a href="/tos">TERMS</a></div>
 </footer>
 <script src="/static/js/app.js"></script>
 </body>

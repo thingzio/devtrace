@@ -1,27 +1,4 @@
 {{define "content"}}
-<nav class="dashboard-nav">
-  <div class="nav-left">
-    <a href="/dashboard" class="nav-logo">DevTrace</a>
-  </div>
-  <div class="nav-right">
-    <div class="nav-profile">
-      <button class="nav-profile-btn" onclick="document.querySelector('.nav-dropdown').classList.toggle('open')">
-        <img src="{{.avatar_url}}" alt="" class="nav-avatar" width="28" height="28">
-      </button>
-      <div class="nav-dropdown">
-        <div class="nav-dropdown-header">
-          <strong>{{.username}}</strong>
-        </div>
-        <div class="nav-dropdown-divider"></div>
-        <a href="/settings" class="nav-dropdown-item">Settings</a>
-        <form action="/auth/signout" method="POST" class="nav-dropdown-form">
-          <button type="submit" class="nav-dropdown-item">Sign out</button>
-        </form>
-      </div>
-    </div>
-  </div>
-</nav>
-<script>document.addEventListener('click',function(e){var d=document.querySelector('.nav-dropdown');if(d&&!e.target.closest('.nav-profile'))d.classList.remove('open')})</script>
 <main class="dashboard-main">
 <div class="settings">
   <a href="/dashboard" class="back-link">&larr; Dashboard</a>

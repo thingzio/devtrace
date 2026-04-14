@@ -1,0 +1,210 @@
+{{define "content"}}
+<div class="landing">
+  <div style="max-width:700px;margin:0 auto;padding:0 0 1rem;">
+    <a href="javascript:history.back()" class="back-link">&larr; Back</a>
+  </div>
+  <div class="landing-hero">
+    <h1>Help</h1>
+    <p>Getting started with DevTrace</p>
+    <div style="max-width:400px;margin:16px auto 0">
+      <input type="text" id="help-search" placeholder="Search help topics..." style="width:100%;padding:8px 12px;font-size:0.95em;border:1px solid var(--border-color);border-radius:var(--border-radius);background:var(--page-content-blockColor);color:var(--page-content-txtColor);" />
+    </div>
+  </div>
+
+  <div style="max-width:700px;margin:0 auto">
+    <p id="help-no-results" style="display:none;text-align:center;color:var(--gray);padding:20px 0;">No matching help topics found.</p>
+
+    <div class="landing-feature help-section" style="margin-bottom:20px">
+      <h3>Getting Started</h3>
+      <ul>
+        <li><strong>Sign in</strong> &mdash; authenticate with your GitHub account using the Sign In button on the landing page. DevTrace uses GitHub OAuth, so no separate account is needed.</li>
+        <li><strong>Accept Terms</strong> &mdash; on your first sign-in, you will be asked to accept the <a href="/tos">Terms of Service</a> before accessing the dashboard.</li>
+        <li><strong>Dashboard</strong> &mdash; once signed in, the dashboard shows your profile, a search bar to score contributors, your quota usage, and a list of recently scored contributors.</li>
+        <li><strong>Score a contributor</strong> &mdash; type any GitHub username into the search bar and click Score. DevTrace will analyze 22 signals across 5 categories and return a reputation score.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature help-section" style="margin-bottom:20px">
+      <h3>Understanding Scores</h3>
+      <ul>
+        <li><strong>Overall Score</strong> &mdash; a value between 0.00 and 1.00 representing the contributor's reputation. Higher is better.</li>
+        <li><strong>Grade</strong> &mdash; letter grade from A+ to F derived from the score. A+/A = exceptional, B = good, C = average, D = below average, F = poor or insufficient data.</li>
+        <li><strong>Categories</strong> &mdash; scores are broken down into five categories:
+          <ul>
+            <li><strong>Identity</strong> &mdash; profile completeness (bio, company, location, website, public email)</li>
+            <li><strong>Behavioral</strong> &mdash; account age, suspension status, contribution patterns</li>
+            <li><strong>Community</strong> &mdash; followers, public repos, fork ratio</li>
+            <li><strong>Engagement</strong> &mdash; PRs merged, PRs closed, recent PR activity across repos</li>
+            <li><strong>AI Sensing</strong> &mdash; AI-generated contribution transparency signals</li>
+          </ul>
+        </li>
+        <li><strong>Risk Summary</strong> &mdash; AI-generated narrative summarizing the contributor's reputation, strengths, and areas of concern.</li>
+        <li><strong>Score Trend</strong> &mdash; when a contributor has been scored more than once, a trend chart shows how their score has changed over time.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature help-section" style="margin-bottom:20px">
+      <h3>Dashboard</h3>
+      <ul>
+        <li><strong>Profile</strong> &mdash; shows your GitHub username, name, company, location, and bio as imported from your GitHub profile.</li>
+        <li><strong>Score Contributor</strong> &mdash; search bar to score any GitHub user. Results open on the scorecard detail page.</li>
+        <li><strong>Quota</strong> &mdash; circular gauge showing what percentage of your monthly contributor limit has been used.</li>
+        <li><strong>Recently Scored</strong> &mdash; table of your most recent scoring activity with contributor name, provider, source (ui/api), deep scoring flag, and timestamp.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature help-section" style="margin-bottom:20px">
+      <h3>Settings</h3>
+      <ul>
+        <li><strong>Profile</strong> &mdash; view your GitHub username, name, email, company, location, bio, and account dates.</li>
+        <li><strong>Plan</strong> &mdash; see your current plan, contributor limit per month, and API rate limit.</li>
+        <li><strong>API Tokens</strong> &mdash; create and revoke API tokens for programmatic access. Tokens are shown once at creation and cannot be recovered. See the API section below for usage.</li>
+        <li><strong>Appearance</strong> &mdash; switch between Light, Dark, or System theme. Your preference is saved in the browser.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature help-section" style="margin-bottom:20px">
+      <h3>API Reference</h3>
+      <p style="font-size:0.85em;color:var(--gray);line-height:1.5;margin-bottom:12px;">
+        All API endpoints require a Bearer token. Create one in
+        <a href="/settings">Settings</a>. Set your base URL:
+      </p>
+      <pre><code>export HOST=https://devtrace.thingz.io
+export TOKEN=dt_your_token_here</code></pre>
+
+      <h4 style="margin-top:16px;">Score a contributor</h4>
+      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Returns the full reputation score for a GitHub user.</p>
+      <pre><code>curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  $HOST/api/v1/score/octocat</code></pre>
+
+      <h4 style="margin-top:16px;">Score with repository context</h4>
+      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Add <code>?repo=owner/name</code> for repo-specific signals.</p>
+      <pre><code>curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  "$HOST/api/v1/score/octocat?repo=kubernetes/kubernetes"</code></pre>
+
+      <h4 style="margin-top:16px;">Score with trusted organizations</h4>
+      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Pass <code>trusted_orgs</code> to boost scores for org members.</p>
+      <pre><code>curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  "$HOST/api/v1/score/octocat?trusted_orgs=google&amp;trusted_orgs=microsoft"</code></pre>
+
+      <h4 style="margin-top:16px;">Score history</h4>
+      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Returns historical scores for trend analysis.</p>
+      <pre><code>curl -s \
+  -H "Authorization: Bearer $TOKEN" \
+  $HOST/api/v1/score/octocat/history</code></pre>
+      <p style="font-size:0.85em;color:var(--gray);margin-top:6px;">Returns an array of <code>{"score": 0.97, "scored_at": "..."}</code> entries.</p>
+    </div>
+
+    <div class="landing-feature help-section" style="margin-bottom:20px">
+      <h3>API Response Example</h3>
+      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Abbreviated response from <code>/api/v1/score/octocat</code>:</p>
+      <pre><code>{
+  "version": "v0.4.1",
+  "username": "octocat",
+  "provider": "github",
+  "profile": {
+    "name": "The Octocat",
+    "company": "@github",
+    "location": "San Francisco"
+  },
+  "score": {
+    "grade": "A-",
+    "value": 0.84,
+    "categories": {
+      "behavioral": 0.3333,
+      "community": 0.19,
+      "engagement": 0,
+      "identity": 0.3167
+    }
+  },
+  "signals": {
+    "account_age_days": 5558,
+    "followers": 22342,
+    "public_repos": 8,
+    "prs_merged": 0,
+    "has_company": true,
+    "has_location": true
+  },
+  "risk_summary": "...",
+  "scoring_mode": "global",
+  "scored_at": "2026-04-14T22:06:34Z"
+}</code></pre>
+    </div>
+
+    <div class="landing-feature help-section" style="margin-bottom:20px">
+      <h3>Usage Limits</h3>
+      <ul>
+        <li><strong>Free</strong> &mdash; 50 contributors/month, 60 API requests/hour, basic scoring</li>
+        <li><strong>Quota</strong> &mdash; each unique contributor scored counts against your monthly limit. Rescoring the same contributor does not consume additional quota.</li>
+        <li><strong>Rate limiting</strong> &mdash; API requests are rate-limited per hour. When the limit is reached, requests return HTTP 429. Wait for the next window.</li>
+        <li><strong>Upgrading</strong> &mdash; higher limits are available on paid plans (coming soon).</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature help-section" style="margin-bottom:20px">
+      <h3>Troubleshooting</h3>
+      <ul>
+        <li><strong>Stuck in sign-in loop</strong> &mdash; clear your browser cookies for the DevTrace domain and try again.</li>
+        <li><strong>Score returns an error</strong> &mdash; check that the GitHub username exists and is spelled correctly. If the GitHub API is rate-limited, wait a few minutes.</li>
+        <li><strong>API returns 401</strong> &mdash; your token may be revoked or missing. Generate a new one in <a href="/settings">Settings</a>.</li>
+        <li><strong>API returns 429</strong> &mdash; you've hit the hourly rate limit. Wait for the rate limit window to reset.</li>
+        <li><strong>API returns 403</strong> &mdash; you've reached your monthly contributor quota. Wait for the next billing period or upgrade your plan.</li>
+        <li><strong>Score data looks stale</strong> &mdash; scores are cached. The same contributor scored within a short window may return cached results.</li>
+      </ul>
+    </div>
+
+    {{if .Email}}
+    <div class="landing-feature help-section" style="margin-bottom:20px" id="help-contact">
+      <h3>Contact Support</h3>
+      {{if .Sent}}
+      <div style="padding:12px;background:rgba(34,197,94,0.1);border:1px solid #22c55e;border-radius:6px;">
+        Message sent. We'll get back to you at <strong>{{.Email}}</strong>.
+      </div>
+      {{else}}
+      {{if .Error}}
+      <div style="padding:12px;background:rgba(248,81,73,0.1);border:1px solid #f85149;border-radius:6px;margin-bottom:12px;color:#f85149;">
+        {{.Error}}
+      </div>
+      {{end}}
+      <p style="margin-bottom:10px;color:var(--gray);font-size:0.9em;">Sending as <strong>{{.Username}}</strong> ({{.Email}})</p>
+      <form method="POST" action="/help/contact">
+        <textarea name="message" rows="5" required placeholder="Describe your issue or question..."
+          style="width:100%;padding:10px 12px;border:1px solid var(--border-color);border-radius:6px;font-family:inherit;font-size:0.95em;resize:vertical;background:var(--page-content-blockColor);color:var(--page-content-txtColor);box-sizing:border-box;"></textarea>
+        <button type="submit" class="btn btn-primary" style="margin-top:10px;">Send Message</button>
+      </form>
+      {{end}}
+    </div>
+    {{end}}
+  </div>
+</div>
+
+<script>
+(function() {
+  var input = document.getElementById('help-search');
+  var sections = document.querySelectorAll('.help-section');
+  var noResults = document.getElementById('help-no-results');
+  input.addEventListener('input', function() {
+    var q = this.value.toLowerCase().trim();
+    var visibleSections = 0;
+    sections.forEach(function(s) {
+      var heading = s.querySelector('h3');
+      var headingMatch = !q || (heading && heading.textContent.toLowerCase().indexOf(q) !== -1);
+      var items = s.querySelectorAll('li');
+      var visibleItems = 0;
+      items.forEach(function(li) {
+        var match = !q || headingMatch || li.textContent.toLowerCase().indexOf(q) !== -1;
+        li.style.display = match ? '' : 'none';
+        if (match) visibleItems++;
+      });
+      var sectionVisible = !q || headingMatch || visibleItems > 0;
+      s.style.display = sectionVisible ? '' : 'none';
+      if (sectionVisible) visibleSections++;
+    });
+    noResults.style.display = visibleSections === 0 ? '' : 'none';
+  });
+})();
+</script>
+{{end}}

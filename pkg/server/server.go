@@ -52,7 +52,7 @@ var templateFuncs = template.FuncMap{
 }
 
 func init() {
-	simplePages := []string{"landing.html", "scorecard.html", "tos.html", "settings.html", "stub.html"}
+	simplePages := []string{"landing.html", "scorecard.html", "tos.html", "settings.html", "stub.html", "help.html"}
 	pageTemplates = make(map[string]*template.Template, len(simplePages)+1)
 	for _, p := range simplePages {
 		pageTemplates[p] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
@@ -247,7 +247,8 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 	mux.Handle("GET /{$}", requireAny(landingHandler(opts)))
 	mux.HandleFunc("GET /health", health.Handler())
 	mux.HandleFunc("GET /changelog", stubPageHandler("Changelog"))
-	mux.HandleFunc("GET /help", stubPageHandler("Help"))
+	mux.HandleFunc("GET /help", helpPageHandler(db, opts))
+	mux.HandleFunc("POST /help/contact", helpContactHandler(db, opts))
 	mux.Handle("GET /auth/github", oauthRL.wrap(oauthStartHandler(oauthCfg)))
 	mux.HandleFunc("GET /auth/github/callback", oauthCallbackHandler(db, oauthCfg))
 
@@ -256,7 +257,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 
 	// Settings + ToS — requires session
 	mux.Handle("GET /settings", requireSession(settingsHandler(store, opts)))
-	mux.HandleFunc("GET /tos", tosPageHandler())
+	mux.Handle("GET /tos", requireAny(tosPageHandler(db, opts)))
 	mux.Handle("POST /tos/accept", requireSession(tosAcceptHandler(store)))
 
 	// Score card page — accepts any auth

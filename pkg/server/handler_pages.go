@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"log/slog"
 	"net/http"
 
@@ -24,11 +25,13 @@ var errMessages = map[string]string{
 }
 
 type pageData struct {
-	Title   string
-	Version string
-	Commit  string
-	Date    string
-	Error   string
+	Title     string
+	Version   string
+	Commit    string
+	Date      string
+	Error     string
+	NavUser   string
+	NavAvatar string
 }
 
 func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Options) http.HandlerFunc {
@@ -53,11 +56,16 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 		resp, err := svc.Score(r.Context(), username, repo, plan, nil)
 		if err != nil {
 			slog.Error("scoring for scorecard", "username", username, "error", err)
-			renderTemplate(w, "scorecard.html", map[string]any{
+			errData := map[string]any{
 				"Title": username, "Username": username,
-				"Grade": "?", "Value": 0.0, "ModelVersion": "?", "Version": opts.Version,
+				"Grade": "?", "Value": 0.0, "ModelVersion": "?", "Version": opts.Version, "Commit": opts.Commit, "Date": opts.Date,
 				"GradeClass": "grade-f",
-			})
+			}
+			if tn != nil {
+				errData["NavUser"] = tn.Username
+				errData["NavAvatar"] = tn.AvatarURL
+			}
+			renderTemplate(w, "scorecard.html", errData)
 			return
 		}
 
@@ -85,7 +93,7 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 		// Show sign-up CTA for unauthenticated visitors
 		showSignUp := tn == nil
 
-		renderTemplate(w, "scorecard.html", map[string]any{
+		data := map[string]any{
 			"Title":        username,
 			"Username":     username,
 			"Profile":      resp.Profile,
@@ -93,6 +101,8 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 			"Value":        resp.Score.Value,
 			"ModelVersion": resp.Version,
 			"Version":      opts.Version,
+			"Commit":       opts.Commit,
+			"Date":         opts.Date,
 			"ScoringMode":  resp.ScoringMode,
 			"GradeClass":   gradeClass,
 			"Categories":   resp.Score.Categories,
@@ -100,7 +110,12 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 			"RiskSummary":  resp.RiskSummary,
 			"RepoContext":  resp.RepoContext,
 			"ShowSignUp":   showSignUp,
-		})
+		}
+		if tn != nil {
+			data["NavUser"] = tn.Username
+			data["NavAvatar"] = tn.AvatarURL
+		}
+		renderTemplate(w, "scorecard.html", data)
 	}
 }
 
@@ -156,6 +171,8 @@ func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			"tokens":      tokens,
 			"recent":      recent,
 			"version":     opts.Version,
+			"commit":      opts.Commit,
+			"date":        opts.Date,
 		}); err != nil {
 			slog.Error("render dashboard", "error", err)
 		}
@@ -184,6 +201,10 @@ func settingsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 		renderTemplate(w, "settings.html", map[string]any{
 			"Title":            "Settings",
 			"Version":          opts.Version,
+			"Commit":           opts.Commit,
+			"Date":             opts.Date,
+			"NavUser":          tn.Username,
+			"NavAvatar":        tn.AvatarURL,
 			"username":         tn.Username,
 			"name":             tn.Name,
 			"email":            tn.Email,
@@ -201,9 +222,19 @@ func settingsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 	}
 }
 
-func tosPageHandler() http.HandlerFunc {
+func tosPageHandler(_ *sql.DB, opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		renderTemplate(w, "tos.html", pageData{Title: "Terms of Service"})
+		pd := pageData{
+			Title:   "Terms of Service",
+			Version: opts.Version,
+			Commit:  opts.Commit,
+			Date:    opts.Date,
+		}
+		if tn := middleware.TenantFromContext(r.Context()); tn != nil {
+			pd.NavUser = tn.Username
+			pd.NavAvatar = tn.AvatarURL
+		}
+		renderTemplate(w, "tos.html", pd)
 	}
 }
 
@@ -235,10 +266,17 @@ func landingHandler(opts Options) http.HandlerFunc {
 				errMsg = msg
 			}
 		}
-		renderTemplate(w, "landing.html", pageData{
+		pd := pageData{
 			Title:   "Home",
 			Version: opts.Version,
+			Commit:  opts.Commit,
+			Date:    opts.Date,
 			Error:   errMsg,
-		})
+		}
+		if tn := middleware.TenantFromContext(r.Context()); tn != nil {
+			pd.NavUser = tn.Username
+			pd.NavAvatar = tn.AvatarURL
+		}
+		renderTemplate(w, "landing.html", pd)
 	}
 }

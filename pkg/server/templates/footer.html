@@ -1,7 +1,8 @@
 {{define "footer"}}
 </main>
 <footer class="app-footer">
-  {{if .version}}{{.version}}{{else}}DevTrace{{end}} &middot; <a href="/changelog">Changelog</a> &middot; <a href="/help">Help</a> &middot; <a href="/tos">Terms</a>
+  <div class="footer-left">VERSION {{if .version}}{{.version}}{{else}}DEV{{end}}{{if .commit}} ({{.commit}}{{if .date}} - {{.date}}{{end}}){{end}}</div>
+  <div class="footer-right"><a href="/changelog">CHANGELOG</a> &middot; <a href="/help">HELP</a> &middot; <a href="/tos">TERMS</a></div>
 </footer>
 <script src="/static/js/app.js"></script>
 </body>

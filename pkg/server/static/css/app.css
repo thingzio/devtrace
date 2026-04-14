@@ -2469,18 +2469,31 @@ section h2 {
   font-size: 0.8rem;
 }
 
-/* Dashboard + Settings footer */
+/* Footer */
 .app-footer {
-  text-align: center;
-  padding: 2rem 1rem 1.5rem;
-  font-size: 0.8rem;
+  max-width: 800px;
+  margin: 2rem auto 0;
+  padding: 1rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
   color: var(--gray);
   border-top: 1px solid var(--border-color);
-  margin-top: 2rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.footer-left {
+  color: var(--gray);
+}
+.footer-right {
+  display: flex;
+  gap: 0.25rem;
 }
 .app-footer a {
-  color: var(--link-color);
+  color: var(--accent, #58a6ff);
   text-decoration: none;
+  font-weight: 600;
 }
 .app-footer a:hover {
   text-decoration: underline;
@@ -2598,6 +2611,30 @@ section h2 {
   word-break: break-all;
   font-size: 0.85rem;
 }
+/* Help page code blocks */
+.help-section pre {
+  background: var(--page-content-blockColor, #0d1117);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+.help-section pre code {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--page-content-txtColor);
+  white-space: pre;
+}
+.help-section code {
+  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 0.82em;
+  padding: 0.15em 0.35em;
+  background: var(--page-content-blockColor, #0d1117);
+  border-radius: 3px;
+}
+
 .token-error {
   margin: 1rem 0;
   padding: 0.75rem 1rem;
