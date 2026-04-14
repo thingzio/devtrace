@@ -49,7 +49,7 @@ func scorecardHandler(svc *service.ScoreService) http.HandlerFunc {
 			plan = tn.Plan
 		}
 
-		resp, err := svc.Score(r.Context(), username, repo, plan)
+		resp, err := svc.Score(r.Context(), username, repo, plan, nil)
 		if err != nil {
 			slog.Error("scoring for scorecard", "username", username, "error", err)
 			renderTemplate(w, "scorecard.html", map[string]any{

@@ -61,6 +61,7 @@ type RepoContext struct {
 	OrgMember         bool   `json:"org_member"`
 	CommitsVerified   bool   `json:"commits_verified"`
 	AuthorAssociation string `json:"author_association,omitempty"`
+	TrustedOrgMember  bool   `json:"trusted_org_member,omitempty"`
 }
 
 // License holds aggregated license information across repositories.

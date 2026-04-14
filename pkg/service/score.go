@@ -50,7 +50,7 @@ func (s *ScoreService) SetClaudeClient(c *claude.Client) {
 
 // Score fetches signals, computes a reputation score, and builds a plan-aware response.
 // Results are cached to avoid redundant GitHub API calls.
-func (s *ScoreService) Score(ctx context.Context, username, repo, plan string) (*model.ScoreResponse, error) {
+func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, trustedOrgs []string) (*model.ScoreResponse, error) {
 	// Bot accounts get a predictable zero-score response — no API calls.
 	if bot.IsBot(username) {
 		return s.botResponse(username), nil
@@ -89,6 +89,11 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string) (
 	profile, err := s.gh.FetchUser(ctx, username)
 	if err != nil {
 		return nil, fmt.Errorf("fetch user: %w", err)
+	}
+
+	// Check trusted org membership (caller-provided list).
+	if len(trustedOrgs) > 0 && !signals.TrustedOrgMember {
+		signals.TrustedOrgMember = s.checkTrustedOrgs(ctx, username, trustedOrgs)
 	}
 
 	value := score.Compute(*signals)
@@ -182,6 +187,20 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 	return &resp
 }
 
+// checkTrustedOrgs checks if the user is a member of any caller-provided trusted org.
+// Best-effort: returns false on any error (doesn't block scoring).
+func (s *ScoreService) checkTrustedOrgs(ctx context.Context, username string, orgs []string) bool {
+	for _, org := range orgs {
+		if org == "" {
+			continue
+		}
+		if isMember, err := s.gh.IsOrgMember(ctx, org, username); err == nil && isMember {
+			return true
+		}
+	}
+	return false
+}
+
 // signalsFromInput maps InputSignals and UserProfile to global response signals.
 func signalsFromInput(s *score.InputSignals, p *ghclient.UserProfile) *model.Signals {
 	return &model.Signals{
@@ -214,6 +233,7 @@ func repoContextFromSignals(s *score.InputSignals, repo string) *model.RepoConte
 		OrgMember:         s.OrgMember,
 		CommitsVerified:   s.UnverifiedCommits == 0 && s.Commits > 0,
 		AuthorAssociation: s.AuthorAssociation,
+		TrustedOrgMember:  s.TrustedOrgMember,
 	}
 }
 

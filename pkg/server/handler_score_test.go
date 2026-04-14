@@ -27,6 +27,10 @@ func (m *mockGH) FetchSignals(_ context.Context, _, _ string, _ *ghclient.Archiv
 	return m.signals, m.err
 }
 
+func (m *mockGH) IsOrgMember(_ context.Context, _, _ string) (bool, error) {
+	return false, nil
+}
+
 func TestScoreHandler(t *testing.T) {
 	mock := &mockGH{
 		profile: &ghclient.UserProfile{

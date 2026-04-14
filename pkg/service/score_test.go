@@ -11,12 +11,17 @@ import (
 
 // mockClient implements ghclient.Client for testing.
 type mockClient struct {
-	signals *score.InputSignals
-	profile *ghclient.UserProfile
+	signals    *score.InputSignals
+	profile    *ghclient.UserProfile
+	trustedOrg string // IsOrgMember returns true for this org
 }
 
 func (m *mockClient) FetchSignals(_ context.Context, _, _ string, _ *ghclient.ArchiveHints) (*score.InputSignals, error) {
 	return m.signals, nil
+}
+
+func (m *mockClient) IsOrgMember(_ context.Context, org, _ string) (bool, error) {
+	return m.trustedOrg != "" && org == m.trustedOrg, nil
 }
 
 func (m *mockClient) FetchUser(_ context.Context, _ string) (*ghclient.UserProfile, error) {
@@ -61,7 +66,7 @@ func TestScoreContributor(t *testing.T) {
 		profile: establishedProfile(),
 	}, nil, "v0.0.1-test")
 
-	resp, err := svc.Score(context.Background(), "testuser", "", "free")
+	resp, err := svc.Score(context.Background(), "testuser", "", "free", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -95,7 +100,7 @@ func TestScoreContributorPlanAware(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("unauth", func(t *testing.T) {
-		resp, err := svc.Score(ctx, "testuser", "", "")
+		resp, err := svc.Score(ctx, "testuser", "", "", nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -111,7 +116,7 @@ func TestScoreContributorPlanAware(t *testing.T) {
 	})
 
 	t.Run("free", func(t *testing.T) {
-		resp, err := svc.Score(ctx, "testuser", "", "free")
+		resp, err := svc.Score(ctx, "testuser", "", "free", nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -130,7 +135,7 @@ func TestScoreContributorPlanAware(t *testing.T) {
 	})
 
 	t.Run("starter", func(t *testing.T) {
-		resp, err := svc.Score(ctx, "testuser", "", "starter")
+		resp, err := svc.Score(ctx, "testuser", "", "starter", nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -155,7 +160,7 @@ func TestScoreContributorWithRepo(t *testing.T) {
 		profile: establishedProfile(),
 	}, nil, "v0.0.1-test")
 
-	resp, err := svc.Score(context.Background(), "testuser", "org/repo", "free")
+	resp, err := svc.Score(context.Background(), "testuser", "org/repo", "free", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -220,7 +225,7 @@ func TestScoreBotReturnsZero(t *testing.T) {
 
 	bots := []string{"dependabot[bot]", "renovate[bot]", "copilot", "github-copilot", "custom-app[bot]"}
 	for _, botName := range bots {
-		resp, err := svc.Score(context.Background(), botName, "", "free")
+		resp, err := svc.Score(context.Background(), botName, "", "free", nil)
 		if err != nil {
 			t.Fatalf("Score(%q): unexpected error: %v", botName, err)
 		}
@@ -245,12 +250,65 @@ func TestScoreNonBotNotFiltered(t *testing.T) {
 		profile: establishedProfile(),
 	}, nil, "v0.0.1-test")
 
-	resp, err := svc.Score(context.Background(), "testuser", "", "free")
+	resp, err := svc.Score(context.Background(), "testuser", "", "free", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if resp.Score.Value == 0 {
 		t.Error("non-bot should have non-zero score with established signals")
+	}
+}
+
+func TestScoreTrustedOrgsMatch(t *testing.T) {
+	svc := NewScoreService(&mockClient{
+		signals:    establishedSignals(),
+		profile:    establishedProfile(),
+		trustedOrg: "trusted-org",
+	}, nil, "v0.0.1-test")
+
+	resp, err := svc.Score(context.Background(), "testuser", "org/repo", "free", []string{"trusted-org"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.RepoContext == nil {
+		t.Fatal("expected repo_context")
+	}
+	if !resp.RepoContext.TrustedOrgMember {
+		t.Error("trusted_org_member should be true when user is member of trusted org")
+	}
+}
+
+func TestScoreTrustedOrgsNoMatch(t *testing.T) {
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, nil, "v0.0.1-test")
+
+	resp, err := svc.Score(context.Background(), "testuser", "org/repo", "free", []string{"other-org"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.RepoContext == nil {
+		t.Fatal("expected repo_context")
+	}
+	if resp.RepoContext.TrustedOrgMember {
+		t.Error("trusted_org_member should be false when user is not a member")
+	}
+}
+
+func TestScoreTrustedOrgsNilNoOp(t *testing.T) {
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, nil, "v0.0.1-test")
+
+	// nil trusted orgs — should work fine (no org checks).
+	resp, err := svc.Score(context.Background(), "testuser", "", "free", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Score.Value == 0 {
+		t.Error("should have non-zero score")
 	}
 }
 

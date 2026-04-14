@@ -23,6 +23,10 @@ func (m *MockClient) FetchSignals(_ context.Context, _, _ string, _ *ArchiveHint
 	return m.Signals, m.Err
 }
 
+func (m *MockClient) IsOrgMember(_ context.Context, _, _ string) (bool, error) {
+	return false, m.Err
+}
+
 func TestMockClientImplementsInterface(t *testing.T) {
 	var _ Client = &MockClient{}
 	var _ Client = &PATClient{}

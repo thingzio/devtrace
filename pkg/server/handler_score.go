@@ -19,6 +19,7 @@ func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) 
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := r.PathValue("username")
 		repo := r.URL.Query().Get("repo")
+		trustedOrgs := r.URL.Query()["trusted_orgs"]
 
 		planName := ""
 		tn := middleware.TenantFromContext(r.Context())
@@ -68,7 +69,7 @@ func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) 
 			w.Header().Set("X-Quota-Reset", strconv.FormatInt(resetTS, 10))
 		}
 
-		resp, err := svc.Score(r.Context(), username, repo, planName)
+		resp, err := svc.Score(r.Context(), username, repo, planName, trustedOrgs)
 		if err != nil {
 			slog.Error("scoring failed", "username", username, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "scoring failed"})

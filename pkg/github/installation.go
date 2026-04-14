@@ -74,3 +74,15 @@ func (c *InstallationClient) FetchSignals(ctx context.Context, username, repo st
 	}
 	return fetchSignals(ctx, api, username, repo, hints)
 }
+
+func (c *InstallationClient) IsOrgMember(ctx context.Context, org, username string) (bool, error) {
+	api, err := c.ghClient(ctx)
+	if err != nil {
+		return false, err
+	}
+	isMember, _, err := api.Organizations.IsMember(ctx, org, username)
+	if err != nil {
+		return false, err
+	}
+	return isMember, nil
+}

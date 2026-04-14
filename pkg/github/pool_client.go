@@ -72,6 +72,28 @@ func (c *PoolClient) FetchSignals(ctx context.Context, username, repo string, hi
 	return signals, fetchErr
 }
 
+// IsOrgMember checks if the user is a member of the given org with token rotation.
+func (c *PoolClient) IsOrgMember(ctx context.Context, org, username string) (bool, error) {
+	api, token, err := c.ghClient(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	isMember, _, fetchErr := api.Organizations.IsMember(ctx, org, username)
+	if fetchErr != nil && isRateLimited(fetchErr) {
+		c.pool.Exhaust(token)
+		api, _, err = c.ghClient(ctx)
+		if err != nil {
+			return false, fmt.Errorf("retry after rate limit: %w", err)
+		}
+		isMember, _, fetchErr = api.Organizations.IsMember(ctx, org, username)
+	}
+	if fetchErr != nil {
+		return false, fetchErr
+	}
+	return isMember, nil
+}
+
 // isRateLimited checks if the error is a GitHub rate limit error.
 func isRateLimited(err error) bool {
 	var rlErr *gh.RateLimitError

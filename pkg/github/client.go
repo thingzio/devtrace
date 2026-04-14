@@ -20,6 +20,7 @@ type ArchiveHints struct {
 type Client interface {
 	FetchUser(ctx context.Context, username string) (*UserProfile, error)
 	FetchSignals(ctx context.Context, username, repo string, hints *ArchiveHints) (*score.InputSignals, error)
+	IsOrgMember(ctx context.Context, org, username string) (bool, error)
 }
 
 // UserProfile holds GitHub user metadata.

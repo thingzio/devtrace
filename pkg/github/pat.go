@@ -29,3 +29,12 @@ func (c *PATClient) FetchUser(ctx context.Context, username string) (*UserProfil
 func (c *PATClient) FetchSignals(ctx context.Context, username, repo string, hints *ArchiveHints) (*score.InputSignals, error) {
 	return fetchSignals(ctx, c.api, username, repo, hints)
 }
+
+// IsOrgMember checks if the user is a member of the given org.
+func (c *PATClient) IsOrgMember(ctx context.Context, org, username string) (bool, error) {
+	isMember, _, err := c.api.Organizations.IsMember(ctx, org, username)
+	if err != nil {
+		return false, err
+	}
+	return isMember, nil
+}

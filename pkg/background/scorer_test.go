@@ -98,6 +98,10 @@ func (m *mockGHClient) FetchUser(_ context.Context, _ string) (*ghclient.UserPro
 	return nil, nil
 }
 
+func (m *mockGHClient) IsOrgMember(_ context.Context, _, _ string) (bool, error) {
+	return false, nil
+}
+
 const testVersion = "v0.0.1-test"
 
 func TestScoreContributorSuccess(t *testing.T) {
