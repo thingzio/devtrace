@@ -113,6 +113,17 @@ type AISensing struct {
 	AIAssociatedRatio    float64  `json:"ai_associated_ratio"`
 	// Claude-powered (Starter+, when available)
 	PRAuthenticity *AuthenticityAssessment `json:"pr_authenticity,omitempty"`
+	// Tier 2 behavioral heuristics (Pro only)
+	Behavioral *BehavioralHeuristics `json:"behavioral,omitempty"`
+}
+
+// BehavioralHeuristics holds Tier 2 AI sensing signals computed from contributor activity.
+type BehavioralHeuristics struct {
+	VelocityAnomalyRatio float64  `json:"velocity_anomaly_ratio"`
+	ActiveHourSpread     int      `json:"active_hour_spread"`
+	BurstVanishScore     float64  `json:"burst_vanish_score"`
+	SyntheticRiskFlags   int      `json:"synthetic_risk_flags"`
+	SyntheticRiskDetails []string `json:"synthetic_risk_details"`
 }
 
 // AuthenticityAssessment is a Claude-powered classification of PR authenticity.
