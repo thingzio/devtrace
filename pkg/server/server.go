@@ -36,6 +36,13 @@ var staticFS embed.FS
 
 var pageTemplates map[string]*template.Template
 
+// CSS classes for AI sensing interpretation badges.
+const (
+	cssInterpGreen = "interp-green"
+	cssInterpAmber = "interp-amber"
+	cssInterpRed   = "interp-red"
+)
+
 var templateFuncs = template.FuncMap{
 	"comma": func(n int) string {
 		if n == 0 {
@@ -61,12 +68,12 @@ var templateFuncs = template.FuncMap{
 	},
 	"velocityClass": func(v float64) string {
 		if v > 5.0 {
-			return "interp-red"
+			return cssInterpRed
 		}
 		if v > 2.0 {
-			return "interp-amber"
+			return cssInterpAmber
 		}
-		return "interp-green"
+		return cssInterpGreen
 	},
 	"hourLabel": func(h int) string {
 		if h < 8 {
@@ -79,12 +86,12 @@ var templateFuncs = template.FuncMap{
 	},
 	"hourClass": func(h int) string {
 		if h < 8 {
-			return "interp-amber"
+			return cssInterpAmber
 		}
 		if h > 16 {
-			return "interp-amber"
+			return cssInterpAmber
 		}
-		return "interp-green"
+		return cssInterpGreen
 	},
 	"burstLabel": func(v float64) string {
 		if v > 5.0 {
@@ -97,12 +104,12 @@ var templateFuncs = template.FuncMap{
 	},
 	"burstClass": func(v float64) string {
 		if v > 5.0 {
-			return "interp-red"
+			return cssInterpRed
 		}
 		if v > 2.0 {
-			return "interp-amber"
+			return cssInterpAmber
 		}
-		return "interp-green"
+		return cssInterpGreen
 	},
 	"syntheticClass": func(flags int) string {
 		if flags >= 3 {

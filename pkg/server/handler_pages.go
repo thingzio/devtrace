@@ -111,7 +111,7 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 			"Signals":      resp.Signals,
 			"RiskSummary":  resp.RiskSummary,
 			"RepoContext":  resp.RepoContext,
-			"AISensing":   resp.AISensing,
+			"AISensing":    resp.AISensing,
 			"ShowSignUp":   showSignUp,
 		}
 		if tn != nil {
