@@ -113,15 +113,26 @@
 
     form.addEventListener('submit', function(e) {
       e.preventDefault();
-      var username = input.value.trim();
-      if (!username) return;
+      var raw = input.value.trim();
+      if (!raw) return;
+
       var btn = form.querySelector('button');
       if (btn) {
         btn.disabled = true;
         btn.textContent = 'Scoring\u2026';
       }
       input.disabled = true;
-      window.location.href = '/score/' + encodeURIComponent(username);
+
+      // Parse "username in org/repo" format
+      var parts = raw.split(/\s+in\s+/);
+      var username = parts[0].trim();
+      var repo = parts.length > 1 ? parts[1].trim() : '';
+
+      var url = '/score/' + encodeURIComponent(username);
+      if (repo) {
+        url += '?repo=' + encodeURIComponent(repo);
+      }
+      window.location.href = url;
     });
   }
 

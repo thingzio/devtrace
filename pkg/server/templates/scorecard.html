@@ -3,7 +3,7 @@
   <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">
     <a href="javascript:history.back()" class="back-link" style="margin:0;">&larr; Back</a>
     <form id="try-search" class="search-form" style="margin:0;flex:1;" onsubmit="return false;">
-      <input id="try-username" type="search" role="searchbox" placeholder="Score another contributor..." autocomplete="off" name="q" data-1p-ignore data-lpignore="true" data-form-type="other"
+      <input id="try-username" type="search" role="searchbox" placeholder="username or username in org/repo" autocomplete="off" name="q" data-1p-ignore data-lpignore="true" data-form-type="other"
         onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('try-search').dispatchEvent(new Event('submit'));}">
       <button type="button" onclick="document.getElementById('try-search').dispatchEvent(new Event('submit'));">Score</button>
     </form>
@@ -17,6 +17,11 @@
       {{end}}{{end}}
       <div>
         <h1 style="margin:0;">{{.Username}}</h1>
+        {{if .RepoContext}}
+        <div style="font-size:0.85rem;color:var(--text-secondary,#8b949e);margin-top:0.25rem;">
+          in <a href="https://github.com/{{.RepoContext.Repo}}" target="_blank" rel="noopener" style="color:var(--text-secondary,#8b949e);text-decoration:underline;">{{.RepoContext.Repo}}</a>
+        </div>
+        {{end}}
         {{if .Profile}}
         <div style="font-size:0.85rem;color:var(--text-secondary,#8b949e);margin-top:0.25rem;">
           {{if .Profile.Name}}<span>{{.Profile.Name}}</span>{{end}}
@@ -31,7 +36,7 @@
       <span class="grade-badge {{.GradeClass}}">{{.Grade}}</span>
       <div style="display:flex;flex-direction:column;margin-left:0.75rem;">
         <span class="grade-score">{{printf "%.2f" .Value}}</span>
-        <span class="grade-model-label">{{.ModelVersion}} · {{.ScoringMode}}</span>
+        <span class="grade-model-label">{{.ModelVersion}}</span>
       </div>
     </div>
   </div>
