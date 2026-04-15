@@ -195,7 +195,7 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 		if resp.AISensing != nil {
 			aiCopy := *resp.AISensing
 			aiCopy.PRAuthenticity = nil // Starter+ only
-			aiCopy.Behavioral = nil    // Pro only
+			aiCopy.Behavioral = nil     // Pro only
 			resp.AISensing = &aiCopy
 		} else {
 			resp.AISensing = &model.AISensing{}

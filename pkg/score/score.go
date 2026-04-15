@@ -8,15 +8,15 @@ import (
 
 const (
 	// Category weights (sum to 1.0).
-	provenanceWeight  = 0.15
-	ageWeight         = 0.15
-	associationWeight = 0.05
-	profileWeight     = 0.05
-	proportionWeight  = 0.15
-	recencyWeight     = 0.05
-	prAcceptWeight    = 0.05
-	followerWeight    = 0.05
-	repoCountWeight   = 0.10
+	provenanceWeight     = 0.15
+	ageWeight            = 0.15
+	associationWeight    = 0.05
+	profileWeight        = 0.05
+	proportionWeight     = 0.15
+	recencyWeight        = 0.05
+	prAcceptWeight       = 0.05
+	followerWeight       = 0.05
+	repoCountWeight      = 0.10
 	consistencyWeight    = 0.06
 	reviewParticipWeight = 0.04
 	repoDiversityWeight  = 0.04

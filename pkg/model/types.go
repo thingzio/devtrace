@@ -100,9 +100,9 @@ type Behavior struct {
 	ConsistencyScore   float64   `json:"consistency_score"`
 	ActiveSince        time.Time `json:"active_since,omitempty"`
 	// Cumulative counts from GH Archive (used by hybrid scoring to skip GitHub Search API).
-	TotalPRsMerged int `json:"total_prs_merged"`
-	TotalPRsClosed int `json:"total_prs_closed"`
-	ActiveHourSpread int `json:"active_hour_spread"`
+	TotalPRsMerged            int     `json:"total_prs_merged"`
+	TotalPRsClosed            int     `json:"total_prs_closed"`
+	ActiveHourSpread          int     `json:"active_hour_spread"`
 	BurstVanishPeakRatio      float64 `json:"-"`
 	BurstVanishDaysSince      int     `json:"-"`
 	BurstVanishDataSufficient bool    `json:"-"`
