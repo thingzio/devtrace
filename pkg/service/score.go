@@ -190,9 +190,16 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 		resp.CachedAt = &now
 
 	case "free":
-		// Free gets categories, signals, risk summary, behavior. No AI sensing.
+		// Free gets categories, signals, risk summary, behavior, AI sensing Tier 1 (metadata).
 		resp.License = nil
-		resp.AISensing = nil
+		if resp.AISensing != nil {
+			aiCopy := *resp.AISensing
+			aiCopy.PRAuthenticity = nil // Starter+ only
+			aiCopy.Behavioral = nil    // Pro only
+			resp.AISensing = &aiCopy
+		} else {
+			resp.AISensing = &model.AISensing{}
+		}
 
 	case "starter":
 		// Starter gets Tier 1 AI sensing (metadata + PR authenticity). No Tier 2.
