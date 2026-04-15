@@ -74,8 +74,10 @@ func fetchSignals(ctx context.Context, api *gh.Client, username, repo string, hi
 	var wg sync.WaitGroup
 	results := make(chan result, 6)
 
-	// When archive hints are available, use them instead of calling the GitHub Search API.
-	if hints != nil {
+	// When archive hints contain meaningful data, use them instead of calling the GitHub Search API.
+	// A non-nil hints struct with all-zero values means the archive has activity but no PR data —
+	// fall through to the Search API to get real counts.
+	if hints != nil && (hints.PRsMerged > 0 || hints.PRsClosed > 0 || hints.RecentPRRepoCount > 0) {
 		mergedPRs = hints.PRsMerged
 		closedPRs = hints.PRsClosed
 		recentRepos = hints.RecentPRRepoCount
