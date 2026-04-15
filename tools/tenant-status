@@ -1,0 +1,47 @@
+#!/bin/bash
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${DIR}/common"
+
+has_tools curl jq
+
+usage() {
+    echo "Usage: $0 <username> <status>"
+    echo ""
+    echo "Status:"
+    echo "  active      Normal operation"
+    echo "  suspended   Block all API and UI access"
+    exit 1
+}
+
+[[ $# -ne 2 ]] && usage
+
+USERNAME="$1"
+STATUS="$2"
+
+case "$STATUS" in
+    active|suspended) ;;
+    *) err "Unknown status: $STATUS (must be active or suspended)" ;;
+esac
+
+API_URL="${API_URL:-http://localhost:8080}"
+ADMIN_API_KEY="${ADMIN_API_KEY:?ADMIN_API_KEY is required}"
+
+msg "Updating ${USERNAME} status to ${STATUS}..."
+RESPONSE="$(curl -s -w "\n%{http_code}" \
+    -X PUT \
+    -H "Authorization: Bearer ${ADMIN_API_KEY}" \
+    -H "Content-Type: application/json" \
+    -d "{\"status\":\"${STATUS}\"}" \
+    "${API_URL}/api/v1/admin/tenant/${USERNAME}/status")"
+
+HTTP_CODE="$(echo "${RESPONSE}" | tail -1)"
+BODY="$(echo "${RESPONSE}" | sed '$d')"
+
+if [[ "${HTTP_CODE}" != "200" ]]; then
+    err "Failed (HTTP ${HTTP_CODE}): ${BODY}"
+fi
+
+echo "${BODY}" | jq .
+msg "Done."

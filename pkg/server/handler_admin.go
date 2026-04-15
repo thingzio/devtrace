@@ -85,8 +85,8 @@ func adminUpdatePlanHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		tn, err := tenant.GetTenantByUsername(r.Context(), db, username)
-		if err != nil {
+		tn, lookupErr := tenant.GetTenantByUsername(r.Context(), db, username)
+		if lookupErr != nil {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "tenant not found"})
 			return
 		}
@@ -94,7 +94,7 @@ func adminUpdatePlanHandler(db *sql.DB) http.HandlerFunc {
 		var req struct {
 			Plan string `json:"plan"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 			return
 		}
@@ -105,8 +105,8 @@ func adminUpdatePlanHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		updated, err := tenant.UpdateTenantPlan(r.Context(), db, tn.ID, req.Plan, p.MaxContributors)
-		if err != nil {
+		updated, updateErr := tenant.UpdateTenantPlan(r.Context(), db, tn.ID, req.Plan, p.MaxContributors)
+		if updateErr != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update plan"})
 			return
 		}
@@ -133,8 +133,8 @@ func adminUpdateStatusHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		tn, err := tenant.GetTenantByUsername(r.Context(), db, username)
-		if err != nil {
+		tn, lookupErr := tenant.GetTenantByUsername(r.Context(), db, username)
+		if lookupErr != nil {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "tenant not found"})
 			return
 		}
@@ -142,7 +142,7 @@ func adminUpdateStatusHandler(db *sql.DB) http.HandlerFunc {
 		var req struct {
 			Status string `json:"status"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 			return
 		}
@@ -154,8 +154,8 @@ func adminUpdateStatusHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		updated, err := tenant.UpdateTenantStatus(r.Context(), db, tn.ID, req.Status)
-		if err != nil {
+		updated, updateErr := tenant.UpdateTenantStatus(r.Context(), db, tn.ID, req.Status)
+		if updateErr != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update status"})
 			return
 		}
