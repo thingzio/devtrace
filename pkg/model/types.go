@@ -102,6 +102,10 @@ type Behavior struct {
 	// Cumulative counts from GH Archive (used by hybrid scoring to skip GitHub Search API).
 	TotalPRsMerged int `json:"total_prs_merged"`
 	TotalPRsClosed int `json:"total_prs_closed"`
+	ActiveHourSpread int `json:"active_hour_spread"`
+	BurstVanishPeakRatio      float64 `json:"-"`
+	BurstVanishDaysSince      int     `json:"-"`
+	BurstVanishDataSufficient bool    `json:"-"`
 }
 
 // AISensing holds signals about AI-assisted development activity.

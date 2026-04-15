@@ -87,6 +87,7 @@ func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider str
 		reviewsGiven30d  int
 		issueComments30d int
 		activeWeeks      int
+		activeHourSpread int
 		minHour          sql.NullTime
 		monthsInWindow   sql.NullFloat64
 	)
@@ -101,13 +102,14 @@ func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider str
 			COALESCE(SUM(CASE WHEN hour > NOW() - INTERVAL '30 days' THEN issue_comments ELSE 0 END), 0),
 			COUNT(DISTINCT date_trunc('week', hour)),
 			MIN(hour),
-			EXTRACT(EPOCH FROM NOW() - MIN(hour)) / 2592000.0
+			EXTRACT(EPOCH FROM NOW() - MIN(hour)) / 2592000.0,
+			COALESCE(COUNT(DISTINCT EXTRACT(hour FROM hour)) FILTER (WHERE hour > NOW() - INTERVAL '90 days'), 0)
 		FROM devtrace_contributor_activity
 		WHERE username = $1 AND provider = $2 AND hour > NOW() - INTERVAL '180 days'`,
 		username, provider,
 	).Scan(&prVelocity30d, &totalPRs, &totalPRsMerged, &totalPRsClosed,
 		&reviewsGiven30d, &issueComments30d,
-		&activeWeeks, &minHour, &monthsInWindow)
+		&activeWeeks, &minHour, &monthsInWindow, &activeHourSpread)
 	if err != nil {
 		return nil, fmt.Errorf("get behavioral signals: %w", err)
 	}
@@ -139,17 +141,55 @@ func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider str
 		baseline = float64(totalPRs) / monthsInWindow.Float64
 	}
 
-	return &BehavioralSignals{
-		PRVelocity30d:      prVelocity30d,
-		PRVelocityBaseline: baseline,
-		ReviewsGiven30d:    reviewsGiven30d,
-		IssueComments30d:   issueComments30d,
-		DistinctRepos90d:   distinctRepos90d,
-		ConsistencyScore:   consistency,
-		ActiveSince:        minHour.Time,
-		TotalPRsMerged:     totalPRsMerged,
-		TotalPRsClosed:     totalPRsClosed,
-	}, nil
+	// Burst-vanish: peak-to-median weekly activity ratio.
+	var peakRatio sql.NullFloat64
+	var daysSince sql.NullInt64
+	err = s.db.QueryRowContext(ctx,
+		`WITH weekly AS (
+			SELECT date_trunc('week', hour) AS week,
+				SUM(prs_opened + reviews_given + issue_comments) AS activity
+			FROM devtrace_contributor_activity
+			WHERE username = $1 AND provider = $2
+				AND hour > NOW() - INTERVAL '180 days'
+			GROUP BY 1
+			HAVING SUM(prs_opened + reviews_given + issue_comments) > 0
+		)
+		SELECT
+			CASE WHEN COUNT(*) >= 2
+				THEN MAX(activity)::float / GREATEST(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY activity), 1)
+				ELSE NULL
+			END,
+			EXTRACT(days FROM NOW() - MAX(week))::int
+		FROM weekly`,
+		username, provider,
+	).Scan(&peakRatio, &daysSince)
+	if err != nil {
+		return nil, fmt.Errorf("get burst vanish: %w", err)
+	}
+
+	result := &BehavioralSignals{
+		PRVelocity30d:             prVelocity30d,
+		PRVelocityBaseline:        baseline,
+		ReviewsGiven30d:           reviewsGiven30d,
+		IssueComments30d:          issueComments30d,
+		DistinctRepos90d:          distinctRepos90d,
+		ConsistencyScore:          consistency,
+		ActiveSince:               minHour.Time,
+		TotalPRsMerged:            totalPRsMerged,
+		TotalPRsClosed:            totalPRsClosed,
+		ActiveHourSpread:          activeHourSpread,
+		BurstVanishPeakRatio:      0,
+		BurstVanishDaysSince:      0,
+		BurstVanishDataSufficient: false,
+	}
+
+	if peakRatio.Valid {
+		result.BurstVanishPeakRatio = peakRatio.Float64
+		result.BurstVanishDaysSince = int(daysSince.Int64)
+		result.BurstVanishDataSufficient = true
+	}
+
+	return result, nil
 }
 
 // CompactActivity aggregates hourly rows older than the given age into weekly
