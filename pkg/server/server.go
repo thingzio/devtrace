@@ -232,10 +232,11 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 	if store != nil {
 		db = store.DB()
 	}
-	scoreRL := newIPRateLimiter(
-		config.GetEnvAsInt("SCORE_RATE_LIMIT", 60),
-		3600, // 1 hour window
+	unauthRL := newIPRateLimiter(
+		config.GetEnvAsInt("UNAUTH_RATE_LIMIT", 1),
+		config.GetEnvAsInt("UNAUTH_RATE_WINDOW", 60),
 	)
+	authRL := newIPRateLimiter(1000, 3600) // ceiling; actual limit per plan via allowWithLimit
 	oauthRL := newIPRateLimiter(
 		config.GetEnvAsInt("OAUTH_RATE_LIMIT", 20),
 		60,
@@ -266,14 +267,14 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 	mux.Handle("GET /tos", requireAny(tosPageHandler(db, opts)))
 	mux.Handle("POST /tos/accept", requireSession(tosAcceptHandler(store)))
 
-	// Score card page — accepts any auth
-	mux.Handle("GET /score/{username}", scoreRL.wrap(requireAny(scorecardHandler(store, scoreSvc, opts))))
+	// Score card page — accepts any auth, rate-limited (HTML 429)
+	mux.Handle("GET /score/{username}", requireAny(authAwareRateLimit(unauthRL, authRL, true)(scorecardHandler(store, scoreSvc, opts))))
 
-	// Score API — accepts any auth (token, session, or none)
-	mux.Handle("GET /api/v1/score/{username}", scoreRL.wrap(requireAny(scoreHandler(db, store, scoreSvc))))
+	// Score API — accepts any auth, rate-limited (JSON 429)
+	mux.Handle("GET /api/v1/score/{username}", requireAny(authAwareRateLimit(unauthRL, authRL, false)(scoreHandler(db, store, scoreSvc))))
 
 	// Score history API (trend chart data)
-	mux.Handle("GET /api/v1/score/{username}/history", scoreRL.wrap(requireAny(historyHandler(store))))
+	mux.Handle("GET /api/v1/score/{username}/history", requireAny(authAwareRateLimit(unauthRL, authRL, false)(historyHandler(store))))
 
 	// Token management — requires session auth (UI only)
 	mux.Handle("POST /api/v1/token", requireSession(createTokenHandler(db)))
@@ -290,7 +291,8 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 	}
 
 	cleanup := func() {
-		scoreRL.close()
+		unauthRL.close()
+		authRL.close()
 		oauthRL.close()
 	}
 	return mux, cleanup
