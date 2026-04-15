@@ -57,6 +57,38 @@ func GetTenantByGitHubID(ctx context.Context, db *sql.DB, githubID int64) (*Tena
 	return scanTenant(db.QueryRowContext(ctx, q, githubID))
 }
 
+// GetTenantByUsername returns the tenant with the given GitHub username.
+func GetTenantByUsername(ctx context.Context, db *sql.DB, username string) (*Tenant, error) {
+	const q = `SELECT id, github_id, username, email, avatar_url,
+		COALESCE(name,''), COALESCE(company,''), COALESCE(location,''), COALESCE(bio,''),
+		plan, status, max_contributors, tos_accepted_at, created_at, updated_at
+		FROM devtrace_tenant WHERE username = $1`
+	return scanTenant(db.QueryRowContext(ctx, q, username))
+}
+
+// ListTenants returns all tenants ordered by creation date.
+func ListTenants(ctx context.Context, db *sql.DB) ([]*Tenant, error) {
+	const q = `SELECT id, github_id, username, email, avatar_url,
+		COALESCE(name,''), COALESCE(company,''), COALESCE(location,''), COALESCE(bio,''),
+		plan, status, max_contributors, tos_accepted_at, created_at, updated_at
+		FROM devtrace_tenant ORDER BY created_at`
+	rows, err := db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("list tenants: %w", err)
+	}
+	defer rows.Close()
+
+	var tenants []*Tenant
+	for rows.Next() {
+		t, err := scanTenant(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan tenant: %w", err)
+		}
+		tenants = append(tenants, t)
+	}
+	return tenants, rows.Err()
+}
+
 func AcceptToS(ctx context.Context, db *sql.DB, tenantID string) error {
 	const q = `UPDATE devtrace_tenant SET tos_accepted_at = NOW(), updated_at = NOW() WHERE id = $1`
 	res, err := db.ExecContext(ctx, q, tenantID)
@@ -98,7 +130,12 @@ func UpdateTenantStatus(ctx context.Context, db *sql.DB, tenantID, status string
 	return scanTenant(db.QueryRowContext(ctx, q, tenantID, status))
 }
 
-func scanTenant(row *sql.Row) (*Tenant, error) {
+// scanner is satisfied by both *sql.Row and *sql.Rows.
+type scanner interface {
+	Scan(dest ...any) error
+}
+
+func scanTenant(row scanner) (*Tenant, error) {
 	var t Tenant
 	var tosAccepted sql.NullTime
 	if err := row.Scan(

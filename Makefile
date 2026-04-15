@@ -170,26 +170,6 @@ bump-patch: ## Bumps patch version (1.2.3 -> 1.2.4)
 	tools/bump patch
 
 # =============================================================================
-# Admin
-# =============================================================================
-
-.PHONY: set-plan
-set-plan: ## Changes a tenant's plan (TENANT=uuid PLAN=free|starter|pro)
-	@curl -s -X PUT \
-		-H "Authorization: Bearer $(ADMIN_API_KEY)" \
-		-H "Content-Type: application/json" \
-		-d '{"plan":"$(PLAN)"}' \
-		$(API_URL)/api/v1/admin/tenant/$(TENANT)/plan | jq .
-
-.PHONY: set-status
-set-status: ## Changes a tenant's status (TENANT=uuid STATUS=active|suspended)
-	@curl -s -X PUT \
-		-H "Authorization: Bearer $(ADMIN_API_KEY)" \
-		-H "Content-Type: application/json" \
-		-d '{"status":"$(STATUS)"}' \
-		$(API_URL)/api/v1/admin/tenant/$(TENANT)/status | jq .
-
-# =============================================================================
 # Cleanup
 # =============================================================================
 
