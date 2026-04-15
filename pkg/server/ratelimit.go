@@ -136,7 +136,7 @@ func (rl *ipRateLimiter) wrap(next http.Handler) http.Handler {
 //
 // When htmlMode is true, 429 responses render the ratelimit.html template.
 // When false, 429 responses return JSON with Retry-After header.
-func authAwareRateLimit(unauthRL, authRL *ipRateLimiter, htmlMode bool) func(http.Handler) http.Handler {
+func authAwareRateLimit(unauthRL, authRL *ipRateLimiter, htmlMode bool, version string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tn := middleware.TenantFromContext(r.Context())
@@ -177,6 +177,7 @@ func authAwareRateLimit(unauthRL, authRL *ipRateLimiter, htmlMode bool) func(htt
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
 				w.WriteHeader(http.StatusTooManyRequests)
 				_ = json.NewEncoder(w).Encode(map[string]any{
+					"version":     version,
 					"error":       "rate limit exceeded",
 					"retry_after": retryAfter,
 					"sign_in_url": "/auth/github",

@@ -181,7 +181,7 @@ func TestAuthAwareRateLimitUnauth(t *testing.T) {
 	})
 
 	t.Run("json mode blocks second unauth request", func(t *testing.T) {
-		handler := authAwareRateLimit(unauthRL, authRL, false)(ok)
+		handler := authAwareRateLimit(unauthRL, authRL, false, "test")(ok)
 
 		// First request — allowed
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/score/octocat", nil)
@@ -219,7 +219,7 @@ func TestAuthAwareRateLimitUnauth(t *testing.T) {
 		// Use a fresh limiter so previous test state doesn't interfere
 		unauthRL2 := newIPRateLimiter(1, 60)
 		defer close(unauthRL2.stop)
-		handler := authAwareRateLimit(unauthRL2, authRL, true)(ok)
+		handler := authAwareRateLimit(unauthRL2, authRL, true, "test")(ok)
 
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/score/octocat", nil)
 		req.RemoteAddr = "10.0.0.2:1234"
@@ -249,7 +249,7 @@ func TestAuthAwareRateLimitAuth(t *testing.T) {
 	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := authAwareRateLimit(unauthRL, authRL, false)(ok)
+	handler := authAwareRateLimit(unauthRL, authRL, false, "test")(ok)
 
 	tn := &tenant.Tenant{ID: "test-tenant-id", Plan: "free"} // free = 60/hr
 
