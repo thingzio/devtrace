@@ -62,7 +62,7 @@ Add `"AISensing": resp.AISensing` to the handler's template data map in `handler
 
 `PUT /api/v1/admin/tenant/{id}/plan`
 
-**Auth:** `Authorization: Bearer <ADMIN_API_KEY>` (env var, constant-time comparison).
+**Auth:** `Authorization: Bearer <DEVTRACE_ADMIN_API_KEY>` (env var, constant-time comparison).
 
 **Request:**
 ```json
@@ -88,7 +88,7 @@ Updates both `plan` and `max_contributors` (from `plan.Get()`) in `devtrace_tena
 ```makefile
 set-plan:
 	@curl -s -X PUT \
-		-H "Authorization: Bearer $(ADMIN_API_KEY)" \
+		-H "Authorization: Bearer $(DEVTRACE_ADMIN_API_KEY)" \
 		-H "Content-Type: application/json" \
 		-d '{"plan":"$(PLAN)"}' \
 		$(API_URL)/api/v1/admin/tenant/$(TENANT)/plan | jq .
@@ -121,7 +121,7 @@ All code references these constants — no string literals for status values.
 
 `PUT /api/v1/admin/tenant/{id}/status`
 
-**Auth:** Same `ADMIN_API_KEY`.
+**Auth:** Same `DEVTRACE_ADMIN_API_KEY`.
 
 **Request:**
 ```json
@@ -149,7 +149,7 @@ All code references these constants — no string literals for status values.
 ```makefile
 set-status:
 	@curl -s -X PUT \
-		-H "Authorization: Bearer $(ADMIN_API_KEY)" \
+		-H "Authorization: Bearer $(DEVTRACE_ADMIN_API_KEY)" \
 		-H "Content-Type: application/json" \
 		-d '{"status":"$(STATUS)"}' \
 		$(API_URL)/api/v1/admin/tenant/$(TENANT)/status | jq .

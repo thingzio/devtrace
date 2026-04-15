@@ -13,9 +13,9 @@ import (
 	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
-// adminAuth checks the ADMIN_API_KEY env var against the Authorization: Bearer header.
+// adminAuth checks the DEVTRACE_ADMIN_API_KEY env var against the Authorization: Bearer header.
 func adminAuth(w http.ResponseWriter, r *http.Request) bool {
-	key := os.Getenv("ADMIN_API_KEY")
+	key := os.Getenv("DEVTRACE_ADMIN_API_KEY")
 	if key == "" {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "admin api not configured"})
 		return false

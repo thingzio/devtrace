@@ -4,7 +4,7 @@
 
 **Goal:** Render AI Sensing Tier 2 heuristics on the scorecard for Pro users, and add admin API endpoints for tenant plan and status management.
 
-**Architecture:** Pass `AISensing` to the scorecard template and conditionally render a new section. Add `handler_admin.go` with two endpoints protected by `ADMIN_API_KEY` env var. Add tenant `status` column via migration 002, enforce suspension in auth middleware.
+**Architecture:** Pass `AISensing` to the scorecard template and conditionally render a new section. Add `handler_admin.go` with two endpoints protected by `DEVTRACE_ADMIN_API_KEY` env var. Add tenant `status` column via migration 002, enforce suspension in auth middleware.
 
 **Tech Stack:** Go, HTML templates, CSS, PostgreSQL
 
@@ -200,10 +200,10 @@ import (
 	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
-// adminAuth checks the ADMIN_API_KEY env var against the Authorization: Bearer header.
+// adminAuth checks the DEVTRACE_ADMIN_API_KEY env var against the Authorization: Bearer header.
 // Returns false and writes 401 if auth fails.
 func adminAuth(w http.ResponseWriter, r *http.Request) bool {
-	key := os.Getenv("ADMIN_API_KEY")
+	key := os.Getenv("DEVTRACE_ADMIN_API_KEY")
 	if key == "" {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "admin api not configured"})
 		return false
@@ -306,7 +306,7 @@ func adminUpdateStatusHandler(db *sql.DB) http.HandlerFunc {
 In `pkg/server/server.go`, add after the webhook handler registration (before the `cleanup` function):
 
 ```go
-	// Admin API — protected by ADMIN_API_KEY env var
+	// Admin API — protected by DEVTRACE_ADMIN_API_KEY env var
 	mux.HandleFunc("PUT /api/v1/admin/tenant/{id}/plan", adminUpdatePlanHandler(db))
 	mux.HandleFunc("PUT /api/v1/admin/tenant/{id}/status", adminUpdateStatusHandler(db))
 ```
@@ -342,7 +342,7 @@ Add before the Cleanup section in the Makefile:
 .PHONY: set-plan
 set-plan: ## Changes a tenant's plan (TENANT=uuid PLAN=free|starter|pro)
 	@curl -s -X PUT \
-		-H "Authorization: Bearer $(ADMIN_API_KEY)" \
+		-H "Authorization: Bearer $(DEVTRACE_ADMIN_API_KEY)" \
 		-H "Content-Type: application/json" \
 		-d '{"plan":"$(PLAN)"}' \
 		$(API_URL)/api/v1/admin/tenant/$(TENANT)/plan | jq .
@@ -350,7 +350,7 @@ set-plan: ## Changes a tenant's plan (TENANT=uuid PLAN=free|starter|pro)
 .PHONY: set-status
 set-status: ## Changes a tenant's status (TENANT=uuid STATUS=active|suspended)
 	@curl -s -X PUT \
-		-H "Authorization: Bearer $(ADMIN_API_KEY)" \
+		-H "Authorization: Bearer $(DEVTRACE_ADMIN_API_KEY)" \
 		-H "Content-Type: application/json" \
 		-d '{"status":"$(STATUS)"}' \
 		$(API_URL)/api/v1/admin/tenant/$(TENANT)/status | jq .

@@ -360,7 +360,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 		mux.HandleFunc("POST /webhook/github", webhookHandler(db, webhookSecret))
 	}
 
-	// Admin API — protected by ADMIN_API_KEY env var
+	// Admin API — protected by DEVTRACE_ADMIN_API_KEY env var
 	mux.HandleFunc("GET /api/v1/admin/tenants", adminListTenantsHandler(db))
 	mux.HandleFunc("PUT /api/v1/admin/tenant/{username}/plan", adminUpdatePlanHandler(db))
 	mux.HandleFunc("PUT /api/v1/admin/tenant/{username}/status", adminUpdateStatusHandler(db))

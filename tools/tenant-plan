@@ -27,12 +27,12 @@ case "$PLAN" in
 esac
 
 API_URL="${API_URL:-http://localhost:8080}"
-ADMIN_API_KEY="${ADMIN_API_KEY:?ADMIN_API_KEY is required}"
+DEVTRACE_ADMIN_API_KEY="${DEVTRACE_ADMIN_API_KEY:?DEVTRACE_ADMIN_API_KEY is required}"
 
 msg "Updating ${USERNAME} to plan ${PLAN}..."
 RESPONSE="$(curl -s -w "\n%{http_code}" \
     -X PUT \
-    -H "Authorization: Bearer ${ADMIN_API_KEY}" \
+    -H "Authorization: Bearer ${DEVTRACE_ADMIN_API_KEY}" \
     -H "Content-Type: application/json" \
     -d "{\"plan\":\"${PLAN}\"}" \
     "${API_URL}/api/v1/admin/tenant/${USERNAME}/plan")"
