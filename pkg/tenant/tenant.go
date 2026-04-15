@@ -73,6 +73,31 @@ func AcceptToS(ctx context.Context, db *sql.DB, tenantID string) error {
 	return nil
 }
 
+// UpdateTenantPlan updates a tenant's plan and max_contributors.
+func UpdateTenantPlan(ctx context.Context, db *sql.DB, tenantID, planName string, maxContributors int) (*Tenant, error) {
+	const q = `UPDATE devtrace_tenant
+		SET plan = $2, max_contributors = $3, updated_at = NOW()
+		WHERE id = $1
+		RETURNING id, github_id, username, email, avatar_url,
+			COALESCE(name,''), COALESCE(company,''), COALESCE(location,''), COALESCE(bio,''),
+			plan, status, max_contributors, tos_accepted_at, created_at, updated_at`
+	return scanTenant(db.QueryRowContext(ctx, q, tenantID, planName, maxContributors))
+}
+
+// UpdateTenantStatus updates a tenant's status (active or suspended).
+func UpdateTenantStatus(ctx context.Context, db *sql.DB, tenantID, status string) (*Tenant, error) {
+	if status != StatusActive && status != StatusSuspended {
+		return nil, fmt.Errorf("invalid status: %s", status)
+	}
+	const q = `UPDATE devtrace_tenant
+		SET status = $2, updated_at = NOW()
+		WHERE id = $1
+		RETURNING id, github_id, username, email, avatar_url,
+			COALESCE(name,''), COALESCE(company,''), COALESCE(location,''), COALESCE(bio,''),
+			plan, status, max_contributors, tos_accepted_at, created_at, updated_at`
+	return scanTenant(db.QueryRowContext(ctx, q, tenantID, status))
+}
+
 func scanTenant(row *sql.Row) (*Tenant, error) {
 	var t Tenant
 	var tosAccepted sql.NullTime
