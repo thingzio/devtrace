@@ -38,7 +38,7 @@ Terraform infra (Cloud Run, Artifact Registry, secrets, IAM, WIF), CI/CD pipelin
 
 ### Phase 7 — AI Sensing Tier 2 ✅
 
-Behavioral heuristics computed from GH Archive data: velocity anomalies, time-of-day spread, commit size uniformity, burst-and-vanish patterns.
+Behavioral heuristics computed from GH Archive data: velocity anomaly ratio, active hour spread, burst-and-vanish score, synthetic contributor flags. Behavioral scoring category improved from 2 to 5 signals (consistency, review participation, repo diversity, burst rate, fork ratio).
 
 **Elevated from deferred** based on competitive analysis ([COMP.md — AI-Generated Code](COMP.md#ai-generated-code)): AI-generated code has 2.7x higher vulnerability density, and AI lowers the cost of manufacturing fake contributor histories. No competitor provides behavioral AI sensing at the contributor level. Data already exists in `contributor_activity`.
 

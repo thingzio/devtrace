@@ -78,6 +78,7 @@
 | AI-powered narratives | **Yes** | No | No | Yes (pkg) | No | No | No |
 | Bot detection | **Yes** | No | No | No | No | No | No |
 | Behavioral signals (GH Archive) | **Yes** | No | Yes (OSO) | No | No | No | No |
+| AI/synthetic contributor detection | **Yes (Tier 2)** | No | No | No | Anomaly only | No | No |
 | API-first with tiered access | **Yes** | Enterprise API | SDK | Enterprise | Enterprise | Enterprise | Yes (free) |
 | Self-serve SaaS | **Yes** | No | Web3 | Yes | Yes | No | Free |
 | External OSS contributors | **Yes** | Yes | Yes | Partial | No | No | N/A |

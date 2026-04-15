@@ -68,7 +68,7 @@ Everything in Pro plus compliance, governance, and organizational controls. Comp
 |---------|------|---------|-----|------------|
 | Contributor Scoring | Score + Grade + Signals | Score + Grade + Signals | Score + Grade + Signals | Score + Grade + Signals |
 | Risk Summary | Metrics-based | AI-powered | AI-powered | AI-powered |
-| AI Sensing | Metadata | Metadata + PR authenticity | Full Context | Full Context |
+| AI Sensing | Tier 1 (metadata) | Tier 1 + PR authenticity | Tier 1 + Tier 2 (behavioral) | Tier 1 + Tier 2 (behavioral) |
 | Score History | 30 days | 90 days | 365 days | Unlimited |
 | Rate Limit | 60 req/hour | 300 req/hour | 1,000 req/hour | Custom |
 | API Keys | 1 | Multiple | Multiple | Multiple |
@@ -84,7 +84,7 @@ Everything in Pro plus compliance, governance, and organizational controls. Comp
 
 | Priority | Feature | Target Plan | Status | Competitive Rationale |
 |----------|---------|------------|--------|----------------------|
-| **P1** | AI sensing Tier 2 (behavioral) | Pro | Data exists (GH Archive), computation pending | AI code proliferation (2.7x vuln density) makes this time-sensitive; no competitor has it ([COMP.md](COMP.md#ai-generated-code)) |
+| ~~P1~~ | ~~AI sensing Tier 2 (behavioral)~~ | ~~Pro~~ | **Implemented** — velocity anomaly, hour spread, burst-vanish, synthetic flags | — |
 | **P1** | Batch API | Pro+ | Not started | Validates portfolio-level scoring that [NetRise Provenance](COMP.md#tier-1-direct--near-competitors-contributor-level-risk) pursues at enterprise-only pricing |
 | **P2** | Compliance reports | Enterprise | Not started | Unoccupied space; [NIST SSDF](https://csrc.nist.gov/pubs/sp/800/218/final) + [EU CRA](https://digital-strategy.ec.europa.eu/en/policies/cyber-resilience-act) create implicit demand ([COMP.md](COMP.md#regulatory-pressure)) |
 | **P2** | SSO (SAML/OIDC) | Enterprise | Not started | Table stakes for enterprise tier |

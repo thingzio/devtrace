@@ -117,7 +117,7 @@ Native to DevTrace (`pkg/score/`). Version tracked by DevTrace release tags.
 | Identity | 0.25 | Account age, association, profile completeness (bio, company, location, website, verified email) |
 | Engagement | 0.25 | Commit proportion, recency, PR acceptance rate |
 | Community | 0.15 | Follower/following ratio, repository count |
-| Behavioral | 0.20 | Cross-repo burst detection, fork-only ratio |
+| Behavioral | 0.20 | Consistency (0.06), review participation (0.04), repo diversity (0.04), burst rate (0.03), fork ratio (0.03) |
 
 ### Signal Sources
 
@@ -162,8 +162,6 @@ Native to DevTrace (`pkg/score/`). Version tracked by DevTrace release tags.
 
 ### Near-term (competitive priority — see [COMP.md](COMP.md))
 
-- **GitHub Action** — `thingzio/devtrace-action` for PR comment integration. Primary GTM wedge; only `contributor-report` (narrow GH Action, no persistent scoring) competes. Elevated ahead of admin service.
-- **AI sensing Tier 2** — behavioral heuristics from GH Archive data. AI-generated code growing 10x (GitClear 2025), makes fake contributor histories cheaper. No competitor has this at the contributor level.
 - **Quota headers** — `X-RateLimit-*` and `X-Quota-*` in API responses
 - **Batch API** — bulk contributor scoring. Validates the portfolio-level use case that NetRise Provenance is pursuing at enterprise-only price points.
 
@@ -177,6 +175,8 @@ Native to DevTrace (`pkg/score/`). Version tracked by DevTrace release tags.
 ### Completed
 
 - **Deployment and bootstrap** — Cloud Run service + ingest job deployed, Terraform infra, CI/CD pipelines, DNS, secrets, domain mapping, first release (see [BOOTSTRAP.md](BOOTSTRAP.md))
+- **GitHub Action** — `thingzio/devtrace-action@v1` shipped. PR comment with trust scores, optional `min-score` threshold enforcement via check runs. See [design doc](plans/2026-04-15-devtrace-action-design.md).
+- **AI sensing Tier 2** — Behavioral heuristics (velocity anomaly, hour spread, burst-vanish, synthetic contributor flags) computed on-demand. Behavioral scoring category improved from 2 to 5 signals. Pro plan only. See [design doc](plans/2026-04-15-ai-sensing-tier2-design.md).
 
 ### Deprioritized
 
