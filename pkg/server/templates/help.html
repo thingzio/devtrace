@@ -102,7 +102,7 @@ export TOKEN=dt_your_token_here</code></pre>
       <h3>API Response Example</h3>
       <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Abbreviated response from <code>/api/v1/score/octocat</code>:</p>
       <pre><code>{
-  "version": "v0.4.1",
+  "version": "0.7.0",
   "username": "octocat",
   "provider": "github",
   "profile": {
@@ -137,9 +137,10 @@ export TOKEN=dt_your_token_here</code></pre>
     <div class="landing-feature help-section" style="margin-bottom:20px">
       <h3>Usage Limits</h3>
       <ul>
-        <li><strong>Free</strong> &mdash; 50 contributors/month, 60 API requests/hour, basic scoring</li>
+        <li><strong>Unauthenticated</strong> &mdash; 1 lookup per minute per IP. Sign in with GitHub to unlock higher limits and full features.</li>
+        <li><strong>Free plan</strong> &mdash; 50 unique contributors/month, 60 API requests/hour, basic scoring.</li>
         <li><strong>Quota</strong> &mdash; each unique contributor scored counts against your monthly limit. Rescoring the same contributor does not consume additional quota.</li>
-        <li><strong>Rate limiting</strong> &mdash; API requests are rate-limited per hour. When the limit is reached, requests return HTTP 429. Wait for the next window.</li>
+        <li><strong>Rate limiting</strong> &mdash; unauthenticated requests are limited to 1 per minute. Authenticated requests are rate-limited per hour based on your plan. When the limit is reached, requests return HTTP 429 with a <code>Retry-After</code> header.</li>
         <li><strong>Upgrading</strong> &mdash; higher limits are available on paid plans (coming soon).</li>
       </ul>
     </div>
@@ -150,7 +151,7 @@ export TOKEN=dt_your_token_here</code></pre>
         <li><strong>Stuck in sign-in loop</strong> &mdash; clear your browser cookies for the DevTrace domain and try again.</li>
         <li><strong>Score returns an error</strong> &mdash; check that the GitHub username exists and is spelled correctly. If the GitHub API is rate-limited, wait a few minutes.</li>
         <li><strong>API returns 401</strong> &mdash; your token may be revoked or missing. Generate a new one in <a href="/settings">Settings</a>.</li>
-        <li><strong>API returns 429</strong> &mdash; you've hit the hourly rate limit. Wait for the rate limit window to reset.</li>
+        <li><strong>API returns 429</strong> &mdash; you've hit the rate limit (1/min unauthenticated, or your plan's hourly limit). Check the <code>Retry-After</code> header for when to retry, or sign in for higher limits.</li>
         <li><strong>API returns 403</strong> &mdash; you've reached your monthly contributor quota. Wait for the next billing period or upgrade your plan.</li>
         <li><strong>Score data looks stale</strong> &mdash; scores are cached. The same contributor scored within a short window may return cached results.</li>
       </ul>
