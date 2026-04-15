@@ -154,6 +154,13 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 		full.Behavior = behavior
 	}
 
+	// Compute Tier 2 AI sensing heuristics (Pro only, gated in enrichForPlan).
+	tier2 := score.ComputeTier2Heuristics(behavior, signals)
+	if full.AISensing == nil {
+		full.AISensing = &model.AISensing{}
+	}
+	full.AISensing.Behavioral = tier2
+
 	// Cache the full response.
 	s.cache.set(username, repo, full)
 
@@ -183,19 +190,23 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 		resp.CachedAt = &now
 
 	case "free":
-		// Free gets categories, signals, risk summary, behavior, AI sensing Tier 1.
+		// Free gets categories, signals, risk summary, behavior. No AI sensing.
 		resp.License = nil
-		// AI sensing Tier 1 (metadata) is zero-cost — include for Free.
-		// Deep-copy to avoid mutating the cached original.
+		resp.AISensing = nil
+
+	case "starter":
+		// Starter gets Tier 1 AI sensing (metadata + PR authenticity). No Tier 2.
+		resp.License = nil
 		if resp.AISensing != nil {
 			aiCopy := *resp.AISensing
-			aiCopy.PRAuthenticity = nil // Strip Claude-powered fields (Starter+).
+			aiCopy.Behavioral = nil // Tier 2 is Pro only
 			resp.AISensing = &aiCopy
 		} else {
 			resp.AISensing = &model.AISensing{}
 		}
 
-	case "starter", "pro":
+	case "pro":
+		// Pro gets everything including Tier 2 behavioral heuristics.
 		if resp.AISensing == nil {
 			resp.AISensing = &model.AISensing{}
 		}
