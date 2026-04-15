@@ -239,7 +239,7 @@ rm -f devtrace-site devtrace-ingest
 | `BASE_URL` | `http://localhost:8080` | Public URL |
 | `SCORE_RATE_LIMIT` | `60` | Requests/hour (unauth) |
 | `OAUTH_RATE_LIMIT` | `20` | OAuth starts/minute per IP |
-| `SCORE_CACHE_TTL_SEC` | `300` | Score cache TTL (5 min) |
+| `SCORE_CACHE_TTL_SEC` | `1800` | Score cache TTL (30 min) |
 | `TRUST_PROXY` | `false` | Trust X-Forwarded-For for rate limiting (required on Cloud Run) |
 | `ENABLE_BACKGROUND_OPS` | `false` | Enable sync + scorer background routines |
 | `SCORER_INTERVAL_SEC` | `3600` | Background scorer interval |

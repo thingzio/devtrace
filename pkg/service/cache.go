@@ -21,7 +21,7 @@ type scoreCache struct {
 }
 
 func newScoreCache() *scoreCache {
-	ttlSec := config.GetEnvAsInt("SCORE_CACHE_TTL_SEC", 300) // default 5 minutes
+	ttlSec := config.GetEnvAsInt("SCORE_CACHE_TTL_SEC", 1800) // default 30 minutes
 	c := &scoreCache{
 		entries: make(map[string]*cacheEntry),
 		ttl:     time.Duration(ttlSec) * time.Second,
