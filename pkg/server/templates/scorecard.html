@@ -69,11 +69,17 @@
     <h2>AI Sensing <span class="plan-badge">Pro</span></h2>
     <div class="metric-cards">
       <div class="metric-card">
+        {{if eq .AISensing.Behavioral.VelocityAnomalyRatio 0.0}}
+        <div class="metric-value metric-na">&mdash;</div>
+        <div class="metric-label">Velocity Anomaly</div>
+        <div class="metric-interp interp-muted">insufficient data</div>
+        {{else}}
         <div class="metric-value">{{printf "%.2f" .AISensing.Behavioral.VelocityAnomalyRatio}}&times;</div>
         <div class="metric-label">Velocity Anomaly</div>
         <div class="metric-interp {{velocityClass .AISensing.Behavioral.VelocityAnomalyRatio}}">
           {{velocityLabel .AISensing.Behavioral.VelocityAnomalyRatio}}
         </div>
+        {{end}}
       </div>
       <div class="metric-card">
         <div class="metric-value">{{.AISensing.Behavioral.ActiveHourSpread}}</div>
@@ -83,11 +89,17 @@
         </div>
       </div>
       <div class="metric-card">
+        {{if eq .AISensing.Behavioral.BurstVanishScore 0.0}}
+        <div class="metric-value metric-na">&mdash;</div>
+        <div class="metric-label">Burst-Vanish</div>
+        <div class="metric-interp interp-muted">insufficient data</div>
+        {{else}}
         <div class="metric-value">{{printf "%.2f" .AISensing.Behavioral.BurstVanishScore}}</div>
         <div class="metric-label">Burst-Vanish</div>
         <div class="metric-interp {{burstClass .AISensing.Behavioral.BurstVanishScore}}">
           {{burstLabel .AISensing.Behavioral.BurstVanishScore}}
         </div>
+        {{end}}
       </div>
     </div>
     <div class="synthetic-risk">

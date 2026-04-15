@@ -2708,6 +2708,12 @@ section h2 {
 .interp-green { color: #3fb950; background: rgba(63, 185, 80, 0.1); }
 .interp-amber { color: #d29922; background: rgba(210, 153, 34, 0.1); }
 .interp-red   { color: #f85149; background: rgba(248, 81, 73, 0.1); }
+.interp-muted { color: var(--text-secondary, #8b949e); background: transparent; }
+
+.metric-na {
+  color: var(--text-secondary, #8b949e);
+  opacity: 0.6;
+}
 
 .synthetic-risk {
   margin-top: 1rem;
