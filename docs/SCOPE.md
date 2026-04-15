@@ -1,6 +1,17 @@
 # DevTrace — Project Scope
 
-Inspect the provenance of any open source contributor at a glance. Trace contribution history, assess license obligations, and surface trust signals before they become risks.
+Inspect the provenance of any open source contributor at a glance. Trace contribution history, assess trust signals, and surface risk before it becomes a supply chain incident.
+
+## Competitive Position
+
+DevTrace occupies uncontested space: no existing product provides per-contributor trust scoring with multi-category behavioral decomposition, AI narratives, and self-serve pricing. The market is fragmented across project-level tools (OpenSSF Scorecard), package-level SCA (Socket, Snyk, Endor Labs), internal developer analytics (Arnica, Apiiro), and enterprise SBOM-centric contributor mapping (NetRise Provenance). None score individual external OSS contributors as a standalone product at accessible price points. See [COMP.md](COMP.md) for full analysis.
+
+**Key differentiators to protect:**
+1. Public, portable per-contributor trust score (the "credit score for OSS contributors")
+2. Self-serve tiered pricing in a market where all contributor-aware tools are enterprise-only ($10K+/yr)
+3. AI-powered risk narratives — no competitor offers this at the contributor level
+4. 5-category behavioral decomposition — transparent, auditable scoring vs opaque single numbers
+5. GH Archive behavioral signals at the contributor level (not project or org level)
 
 ## Relationship to DevPulse
 
@@ -65,7 +76,7 @@ Hourly ingest of the GitHub public event firehose, providing API-free behavioral
 
 Aggregate the licenses represented by all projects a contributor has committed to.
 
-**Status: Deferred.** Model types exist (`License`, `LicenseEntry` in `pkg/model/types.go`). Implementation requires enumerating repos with merged PRs and collecting SPDX license IDs.
+**Status: Deprioritized.** Model types exist (`License`, `LicenseEntry` in `pkg/model/types.go`). SCA tools (Snyk, Mend, ORT) handle license compliance well — this does not differentiate DevTrace. If implemented, keep lightweight: SPDX distribution from merged PRs, not deep compliance analysis. See [COMP.md — Tier 2](COMP.md#tier-2-package-level-supply-chain-contributor-data-incidental).
 
 ### 4. AI Agent Co-Development Sensing
 
@@ -78,9 +89,9 @@ Detect and quantify how much of a contributor's work is AI-generated or AI-assis
 - PR authenticity classification structure (Claude-powered, Starter+)
 - AISensing response field: co-authored commits, bot-associated PRs, tool signatures
 
-**Deferred:**
+**Elevated priority (data from [COMP.md](COMP.md#ai-generated-code)):**
 
-- **Tier 2 (behavioral heuristics):** Velocity anomalies, time-of-day spread, commit size uniformity, burst-and-vanish. Data exists in `contributor_activity`, computation not yet implemented.
+- **Tier 2 (behavioral heuristics):** Velocity anomalies, time-of-day spread, commit size uniformity, burst-and-vanish. Data exists in `contributor_activity`, computation not yet implemented. AI-generated code has 2.7x higher vulnerability density and AI lowers the cost of manufacturing fake contributor histories — Tier 2 detection is now a competitive differentiator, not a nice-to-have.
 - **Tier 3 (Claude analysis):** Code style consistency, commit coherence, risk narratives for ambiguous cases. Integration point exists (`pkg/claude/`), analysis prompts not yet built.
 
 **Design principle:** AI sensing is a separate transparency dimension — not folded into the reputation score. Reputation measures trust; AI sensing measures provenance.
@@ -132,27 +143,40 @@ Native to DevTrace (`pkg/score/`). Version tracked by DevTrace release tags.
 | Q13 | Unauthenticated access: score + grade only, IP rate limited. |
 | Q14 | Risk signals: context-aware summaries (reputation vs review language). |
 | Q15 | Plans: Free / Starter / Pro. Feature gating via plan-aware response filtering. |
+| Q16 | License analysis deprioritized — SCA tools cover it better; not a differentiator ([COMP.md](COMP.md)). |
+| Q17 | GitHub Action elevated to next-up — primary GTM wedge, only contributor-report (narrow) competes. |
+| Q18 | AI sensing Tier 2 elevated — AI code proliferation makes behavioral heuristics time-sensitive. |
+| Q19 | Enterprise tier planned — $10K+/yr gap between self-serve and NetRise/Apiiro. |
+| Q20 | Compliance evidence is a new capability — NIST SSDF + EU CRA create implicit contributor vetting demand. |
 
 ---
 
 ## Remaining Work
 
-### Near-term
+### Near-term (competitive priority — see [COMP.md](COMP.md))
 
-- **Admin service** — operator visibility into tenants, pipeline health, token pool (Phase 6)
-- **GitHub Action** — `thingzio/devtrace-action` for PR comment integration
-- **License analysis** — SPDX distribution from merged PRs (Starter+)
+- **GitHub Action** — `thingzio/devtrace-action` for PR comment integration. Primary GTM wedge; only `contributor-report` (narrow GH Action, no persistent scoring) competes. Elevated ahead of admin service.
+- **AI sensing Tier 2** — behavioral heuristics from GH Archive data. AI-generated code growing 10x (GitClear 2025), makes fake contributor histories cheaper. No competitor has this at the contributor level.
 - **Quota headers** — `X-RateLimit-*` and `X-Quota-*` in API responses
-- **Overage billing** — per-request pricing beyond plan quota
+- **Batch API** — bulk contributor scoring. Validates the portfolio-level use case that NetRise Provenance is pursuing at enterprise-only price points.
+
+### Medium-term
+
+- **Admin service** — operator visibility into tenants, pipeline health, token pool. Necessary for operations but not a competitive differentiator.
+- **Enterprise tier** — SSO, audit logs, compliance exports, SLA. Addresses the $10K+/yr market gap where NetRise, Apiiro, and Arnica operate ([COMP.md — Tier 1](COMP.md#tier-1-direct--near-competitors-contributor-level-risk)).
+- **Compliance evidence** — exportable contributor trust reports aligned with NIST SSDF (SP 800-218) practice groups PS/PO and EU CRA due-diligence obligations. No tool currently serves this for contributor vetting ([COMP.md — Regulatory Pressure](COMP.md#regulatory-pressure)).
+- **AI sensing Tier 3** — Claude analysis for ambiguous cases.
 
 ### Completed
 
 - **Deployment and bootstrap** — Cloud Run service + ingest job deployed, Terraform infra, CI/CD pipelines, DNS, secrets, domain mapping, first release (see [BOOTSTRAP.md](BOOTSTRAP.md))
 
+### Deprioritized
+
+- **License analysis** — SPDX distribution from merged PRs. SCA tools (Snyk, Mend, ORT) handle this well; not a DevTrace differentiator ([COMP.md — Tier 2](COMP.md#tier-2-package-level-supply-chain-contributor-data-incidental)).
+
 ### Future
 
-- Tier 2 AI sensing (behavioral heuristics computed from GH Archive data)
-- Tier 3 AI sensing (Claude analysis for ambiguous cases)
-- Batch API for bulk contributor scoring
 - Webhook notifications on score changes
 - CLI tool
+- Multi-platform support (GitLab, Bitbucket) — extends the provider-agnostic identity key (`Q9`)

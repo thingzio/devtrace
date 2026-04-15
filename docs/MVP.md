@@ -30,13 +30,30 @@ Hourly Cloud Run Job, event aggregation, behavioral signals, activity compaction
 
 Terraform infra (Cloud Run, Artifact Registry, secrets, IAM, WIF), CI/CD pipelines (test-on-push, release-on-tag), DNS domain mapping, first production release. See [BOOTSTRAP.md](BOOTSTRAP.md) for the full runbook.
 
-### Phase 6 — Admin Service (next)
-
-Operator visibility: tenant management, pipeline health, token pool monitoring, scoring metrics.
-
-### Phase 7 — GitHub Action (next)
+### Phase 6 — GitHub Action (next)
 
 `thingzio/devtrace-action` — calls API, posts PR comment with score card. Published to GitHub Marketplace.
+
+**Elevated from Phase 7** based on competitive analysis ([COMP.md](COMP.md)): this is the primary GTM wedge. Only `contributor-report` (narrow GH Action with no persistent scoring, API, or AI narratives) competes. Every supply chain attack in [COMP.md — Supply Chain Attacks](COMP.md#high-profile-supply-chain-attacks-contributor-trust-failures) could have been surfaced at PR time.
+
+### Phase 7 — AI Sensing Tier 2
+
+Behavioral heuristics computed from GH Archive data: velocity anomalies, time-of-day spread, commit size uniformity, burst-and-vanish patterns.
+
+**Elevated from deferred** based on competitive analysis ([COMP.md — AI-Generated Code](COMP.md#ai-generated-code)): AI-generated code has 2.7x higher vulnerability density, and AI lowers the cost of manufacturing fake contributor histories. No competitor provides behavioral AI sensing at the contributor level. Data already exists in `contributor_activity`.
+
+### Phase 8 — Admin Service
+
+Operator visibility: tenant management, pipeline health, token pool monitoring, scoring metrics. Necessary for operations but not a competitive differentiator — moved after GTM-critical phases.
+
+### Phase 9 — Enterprise & Compliance
+
+Enterprise tier and compliance evidence capabilities:
+- **Enterprise plan**: SSO, audit logs, compliance exports, SLA, custom scoring policies
+- **Compliance reports**: Exportable contributor trust evidence aligned with NIST SSDF (SP 800-218) and EU CRA (2024/2847) due-diligence obligations
+- **Batch API**: Bulk contributor scoring for portfolio-level risk assessment
+
+Addresses the $10K+/yr market gap where NetRise Provenance, Apiiro, and Arnica operate. See [COMP.md — Strategic Whitespace](COMP.md#strategic-whitespace) and [COMP.md — Regulatory Pressure](COMP.md#regulatory-pressure).
 
 ---
 
@@ -200,7 +217,7 @@ Key properties:
 
 ---
 
-## GitHub Action (Phase 7)
+## GitHub Action (Phase 6)
 
 ```yaml
 # .github/workflows/devtrace.yaml
@@ -223,8 +240,10 @@ jobs:
 
 **Post-MVP:** `threshold` input, GitHub check status (pass/warn/fail), opt-in blocking.
 
+**Competitive rationale:** The only similar tool is `contributor-report` (GH Action with ~11 objective metrics, no persistent scoring, no API, no AI). DevTrace Action brings persistent scoring, AI narratives, and behavioral signals to the PR review workflow. See [COMP.md — Tier 6](COMP.md#tier-6-emerging--academic).
+
 ---
 
 ## Remaining Work
 
-See [SCOPE.md — Remaining Work](SCOPE.md#remaining-work) for the full list.
+See [SCOPE.md — Remaining Work](SCOPE.md#remaining-work) for the prioritized list (updated per [COMP.md](COMP.md) competitive analysis).
