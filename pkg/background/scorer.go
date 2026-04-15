@@ -122,9 +122,11 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client, vers
 // scoreContributor fetches signals, computes a score, and persists the result.
 func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client,
 	username, provider, version string) error {
-	// Build archive hints from activity data to avoid GitHub Search API calls.
+	// Fetch behavioral signals — used for archive hints and scoring.
+	var behavior *model.Behavior
 	var hints *ghclient.ArchiveHints
 	if beh, err := store.GetBehavioralSignals(ctx, username, provider); err == nil && beh != nil {
+		behavior = beh
 		hints = &ghclient.ArchiveHints{
 			PRsMerged:         int64(beh.TotalPRsMerged),
 			PRsClosed:         int64(beh.TotalPRsClosed),
@@ -137,7 +139,7 @@ func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client
 		return fmt.Errorf("fetch signals: %w", err)
 	}
 
-	value := score.Compute(*signals, false) // background scoring has no repo context
+	value := score.Compute(*signals, false, behavior)
 	grade := score.Grade(value)
 
 	_ = store.UpsertContributor(ctx, username, provider)

@@ -97,7 +97,7 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 	}
 
 	hasRepo := repo != ""
-	value := score.Compute(*signals, hasRepo)
+	value := score.Compute(*signals, hasRepo, behavior)
 	grade := score.Grade(value)
 	now := time.Now().UTC()
 
@@ -116,7 +116,7 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 		Score: &model.Score{
 			Grade:      grade,
 			Value:      value,
-			Categories: score.Categories(*signals, hasRepo),
+			Categories: score.Categories(*signals, hasRepo, behavior),
 		},
 		Signals:     signalsFromInput(signals, profile),
 		RiskSummary: generateRiskSummary(signals, value, repo != ""),
@@ -134,7 +134,7 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 			Username:       username,
 			Score:          value,
 			Grade:          grade,
-			Categories:     score.Categories(*signals, hasRepo),
+			Categories:     score.Categories(*signals, hasRepo, behavior),
 			AccountAge:     signals.AgeDays,
 			PRsMerged:      signals.PRsMerged,
 			PRsClosed:      signals.PRsClosed,
