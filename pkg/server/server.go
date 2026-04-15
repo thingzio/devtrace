@@ -50,6 +50,69 @@ var templateFuncs = template.FuncMap{
 	"mul":      func(a, b float64) float64 { return a * b },
 	"int":      func(n int64) int { return int(n) },
 	"prettify": func(s string) string { return strings.ReplaceAll(s, "_", " ") },
+	"velocityLabel": func(v float64) string {
+		if v > 5.0 {
+			return "suspicious"
+		}
+		if v > 2.0 {
+			return "elevated"
+		}
+		return "normal"
+	},
+	"velocityClass": func(v float64) string {
+		if v > 5.0 {
+			return "interp-red"
+		}
+		if v > 2.0 {
+			return "interp-amber"
+		}
+		return "interp-green"
+	},
+	"hourLabel": func(h int) string {
+		if h < 8 {
+			return "narrow"
+		}
+		if h > 16 {
+			return "wide"
+		}
+		return "typical"
+	},
+	"hourClass": func(h int) string {
+		if h < 8 {
+			return "interp-amber"
+		}
+		if h > 16 {
+			return "interp-amber"
+		}
+		return "interp-green"
+	},
+	"burstLabel": func(v float64) string {
+		if v > 5.0 {
+			return "volatile"
+		}
+		if v > 2.0 {
+			return "bursty"
+		}
+		return "steady"
+	},
+	"burstClass": func(v float64) string {
+		if v > 5.0 {
+			return "interp-red"
+		}
+		if v > 2.0 {
+			return "interp-amber"
+		}
+		return "interp-green"
+	},
+	"syntheticClass": func(flags int) string {
+		if flags >= 3 {
+			return "badge-red"
+		}
+		if flags >= 1 {
+			return "badge-amber"
+		}
+		return "badge-green"
+	},
 }
 
 func init() {

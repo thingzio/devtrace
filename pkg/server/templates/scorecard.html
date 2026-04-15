@@ -64,6 +64,51 @@
   </section>
   {{end}}
 
+  {{if .AISensing}}{{if .AISensing.Behavioral}}
+  <section class="ai-sensing">
+    <h2>AI Sensing <span class="plan-badge">Pro</span></h2>
+    <div class="metric-cards">
+      <div class="metric-card">
+        <div class="metric-value">{{printf "%.2f" .AISensing.Behavioral.VelocityAnomalyRatio}}&times;</div>
+        <div class="metric-label">Velocity Anomaly</div>
+        <div class="metric-interp {{velocityClass .AISensing.Behavioral.VelocityAnomalyRatio}}">
+          {{velocityLabel .AISensing.Behavioral.VelocityAnomalyRatio}}
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">{{.AISensing.Behavioral.ActiveHourSpread}}</div>
+        <div class="metric-label">Active Hours</div>
+        <div class="metric-interp {{hourClass .AISensing.Behavioral.ActiveHourSpread}}">
+          {{hourLabel .AISensing.Behavioral.ActiveHourSpread}}
+        </div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">{{printf "%.2f" .AISensing.Behavioral.BurstVanishScore}}</div>
+        <div class="metric-label">Burst-Vanish</div>
+        <div class="metric-interp {{burstClass .AISensing.Behavioral.BurstVanishScore}}">
+          {{burstLabel .AISensing.Behavioral.BurstVanishScore}}
+        </div>
+      </div>
+    </div>
+    <div class="synthetic-risk">
+      <span class="synthetic-badge {{syntheticClass .AISensing.Behavioral.SyntheticRiskFlags}}"
+            onclick="this.parentElement.querySelector('.synthetic-details').classList.toggle('open')">
+        {{.AISensing.Behavioral.SyntheticRiskFlags}} flag{{if ne .AISensing.Behavioral.SyntheticRiskFlags 1}}s{{end}}
+      </span>
+      <span style="margin-left:0.5rem;color:var(--text-secondary);">Synthetic Risk</span>
+      {{if .AISensing.Behavioral.SyntheticRiskDetails}}
+      <div class="synthetic-details">
+        <ul>
+          {{range .AISensing.Behavioral.SyntheticRiskDetails}}
+          <li>{{prettify .}}</li>
+          {{end}}
+        </ul>
+      </div>
+      {{end}}
+    </div>
+  </section>
+  {{end}}{{end}}
+
   {{if .Signals}}
   <section class="signals">
     <h2>Signals</h2>
