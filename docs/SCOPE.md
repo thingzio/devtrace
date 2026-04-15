@@ -155,6 +155,9 @@ Native to DevTrace (`pkg/score/`). Version tracked by DevTrace release tags.
 | Q18 | AI sensing Tier 2 elevated — AI code proliferation makes behavioral heuristics time-sensitive. |
 | Q19 | Enterprise tier planned — $10K+/yr gap between self-serve and NetRise/Apiiro. |
 | Q20 | Compliance evidence is a new capability — NIST SSDF + EU CRA create implicit contributor vetting demand. |
+| Q21 | Admin API: `DEVTRACE_ADMIN_API_KEY`-protected endpoints for plan/status by username. Bash tools in `tools/`. |
+| Q22 | Tenant status: `active`/`suspended` with enforcement in auth middleware (API 403, session redirect). |
+| Q23 | Hybrid scoring fix: all-zero ArchiveHints fall through to GitHub Search API instead of reporting 0 PRs. |
 
 ---
 
@@ -167,7 +170,7 @@ Native to DevTrace (`pkg/score/`). Version tracked by DevTrace release tags.
 
 ### Medium-term
 
-- **Admin service** — operator visibility into tenants, pipeline health, token pool. Necessary for operations but not a competitive differentiator.
+- **Admin service** — full operator visibility into tenants, pipeline health, token pool. Basic admin API shipped (plan/status management via `tools/tenant-*`). Remaining: dashboard UI, metrics.
 - **Enterprise tier** — SSO, audit logs, compliance exports, SLA. Addresses the $10K+/yr market gap where NetRise, Apiiro, and Arnica operate ([COMP.md — Tier 1](COMP.md#tier-1-direct--near-competitors-contributor-level-risk)).
 - **Compliance evidence** — exportable contributor trust reports aligned with NIST SSDF (SP 800-218) practice groups PS/PO and EU CRA due-diligence obligations. No tool currently serves this for contributor vetting ([COMP.md — Regulatory Pressure](COMP.md#regulatory-pressure)).
 - **AI sensing Tier 3** — Claude analysis for ambiguous cases.
@@ -176,7 +179,9 @@ Native to DevTrace (`pkg/score/`). Version tracked by DevTrace release tags.
 
 - **Deployment and bootstrap** — Cloud Run service + ingest job deployed, Terraform infra, CI/CD pipelines, DNS, secrets, domain mapping, first release (see [BOOTSTRAP.md](BOOTSTRAP.md))
 - **GitHub Action** — `thingzio/devtrace-action@v1` shipped. PR comment with trust scores, optional `min-score` threshold enforcement via check runs. See [design doc](plans/2026-04-15-devtrace-action-design.md).
-- **AI sensing Tier 2** — Behavioral heuristics (velocity anomaly, hour spread, burst-vanish, synthetic contributor flags) computed on-demand. Behavioral scoring category improved from 2 to 5 signals. Pro plan only. See [design doc](plans/2026-04-15-ai-sensing-tier2-design.md).
+- **AI sensing Tier 2** — Behavioral heuristics (velocity anomaly, hour spread, burst-vanish, synthetic contributor flags) computed on-demand. Behavioral scoring category improved from 2 to 5 signals. Pro plan only. Scorecard UI renders metric cards + synthetic risk badge. See [design doc](plans/2026-04-15-ai-sensing-tier2-design.md).
+- **Admin API + tenant management** — Plan and status management via `DEVTRACE_ADMIN_API_KEY`-protected endpoints. Bash CLI tools (`tools/tenant-list`, `tools/tenant-plan`, `tools/tenant-status`). Tenant suspension enforced in auth middleware.
+- **Hybrid scoring bugfix** — All-zero ArchiveHints now fall through to GitHub Search API instead of incorrectly reporting 0 merged/closed PRs.
 
 ### Deprioritized
 

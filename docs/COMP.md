@@ -81,6 +81,7 @@
 | AI/synthetic contributor detection | **Yes (Tier 2)** | No | No | No | Anomaly only | No | No |
 | API-first with tiered access | **Yes** | Enterprise API | SDK | Enterprise | Enterprise | Enterprise | Yes (free) |
 | Self-serve SaaS | **Yes** | No | Web3 | Yes | Yes | No | Free |
+| GitHub Action / PR-time scoring | **Yes** | No | No | No | No | No | No |
 | External OSS contributors | **Yes** | Yes | Yes | Partial | No | No | N/A |
 
 ---

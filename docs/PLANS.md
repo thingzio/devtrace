@@ -78,6 +78,7 @@ Everything in Pro plus compliance, governance, and organizational controls. Comp
 | Compliance Reports | — | — | — | [NIST SSDF](https://csrc.nist.gov/pubs/sp/800/218/final) + [EU CRA](https://digital-strategy.ec.europa.eu/en/policies/cyber-resilience-act) |
 | SSO | — | — | — | SAML/OIDC |
 | Audit Logs | — | — | — | Full |
+| Synthetic Contributor Detection | — | — | Flags + details | Flags + details |
 | Custom Scoring Policies | — | — | — | Yes |
 
 ### Deferred Features (prioritized per [COMP.md](COMP.md))
