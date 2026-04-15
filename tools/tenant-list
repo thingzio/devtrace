@@ -6,7 +6,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 has_tools curl jq
 
-DEVTRACE_API_URL="${DEVTRACE_API_URL:-http://localhost:8080}"
+DEVTRACE_API_URL="${DEVTRACE_API_URL:-https://devtrace.thingz.io}"
 DEVTRACE_ADMIN_API_KEY="${DEVTRACE_ADMIN_API_KEY:?DEVTRACE_ADMIN_API_KEY is required}"
 
 msg "Listing tenants..."

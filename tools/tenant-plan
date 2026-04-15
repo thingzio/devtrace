@@ -26,7 +26,7 @@ case "$PLAN" in
     *) err "Unknown plan: $PLAN (must be free, starter, or pro)" ;;
 esac
 
-DEVTRACE_API_URL="${DEVTRACE_API_URL:-http://localhost:8080}"
+DEVTRACE_API_URL="${DEVTRACE_API_URL:-https://devtrace.thingz.io}"
 DEVTRACE_ADMIN_API_KEY="${DEVTRACE_ADMIN_API_KEY:?DEVTRACE_ADMIN_API_KEY is required}"
 
 msg "Updating ${USERNAME} to plan ${PLAN}..."
