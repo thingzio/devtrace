@@ -2,6 +2,11 @@ package plan
 
 import "fmt"
 
+const (
+	valYes  = "Yes"
+	valDash = "\u2014"
+)
+
 // Plan defines the capabilities and limits for a billing tier.
 type Plan struct {
 	Name             string
@@ -113,15 +118,15 @@ func DisplayFeatures() []Feature {
 		{ID: "feature-api-keys", Label: "API Keys", Values: pluck(dp, func(p Plan) string { return p.APIKeysLabel })},
 		{ID: "feature-batch", Label: "Batch API", Values: pluck(dp, func(p Plan) string {
 			if p.BatchAPI {
-				return "Yes"
+				return valYes
 			}
-			return "\u2014"
+			return valDash
 		})},
 		{ID: "feature-webhooks", Label: "Webhooks", Values: pluck(dp, func(p Plan) string {
 			if p.Webhooks {
-				return "Yes"
+				return valYes
 			}
-			return "\u2014"
+			return valDash
 		})},
 		{ID: "feature-alerts", Label: "Risk Alerts", Values: pluck(dp, func(p Plan) string { return p.AlertsLabel })},
 	}
