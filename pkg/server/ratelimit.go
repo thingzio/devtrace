@@ -9,6 +9,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/thingzio/devtrace/pkg/middleware"
+	"github.com/thingzio/devtrace/pkg/plan"
 )
 
 type visitor struct {
@@ -124,6 +127,66 @@ func (rl *ipRateLimiter) wrap(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// authAwareRateLimit returns middleware that applies different rate limits based
+// on authentication status. Unauthenticated requests are limited per-IP using
+// unauthRL. Authenticated requests are limited per-tenant using authRL with
+// the tenant's plan-based RateLimitPerHour.
+//
+// When htmlMode is true, 429 responses render the ratelimit.html template.
+// When false, 429 responses return JSON with Retry-After header.
+func authAwareRateLimit(unauthRL, authRL *ipRateLimiter, htmlMode bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			tn := middleware.TenantFromContext(r.Context())
+
+			var allowed bool
+			var key string
+
+			if tn == nil {
+				// Unauthenticated: limit per IP
+				key = extractIP(r)
+				allowed = unauthRL.allow(key)
+			} else {
+				// Authenticated: limit per tenant using plan rate
+				key = tn.ID
+				p, ok := plan.Get(tn.Plan)
+				if !ok {
+					p = plan.Free()
+				}
+				allowed = authRL.allowWithLimit(key, p.RateLimitPerHour)
+			}
+
+			if !allowed {
+				var retryAfter int
+				if tn == nil {
+					retryAfter = unauthRL.retryAfter(key)
+				} else {
+					retryAfter = authRL.retryAfter(key)
+				}
+
+				if htmlMode {
+					w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+					w.WriteHeader(http.StatusTooManyRequests)
+					renderTemplate(w, "ratelimit.html", pageData{Title: "Rate Limit"})
+					return
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+				w.WriteHeader(http.StatusTooManyRequests)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"error":       "rate limit exceeded",
+					"retry_after": retryAfter,
+					"sign_in_url": "/auth/github",
+				})
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // extractIP returns the client IP. Trusts X-Forwarded-For only when

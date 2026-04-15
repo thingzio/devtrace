@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/thingzio/devtrace/pkg/middleware"
+	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
 func TestRateLimiter(t *testing.T) {
@@ -163,5 +167,102 @@ func TestExtractIPNoTrustProxy(t *testing.T) {
 	got := extractIP(req)
 	if got != "10.0.0.1" {
 		t.Errorf("without TRUST_PROXY, XFF should be ignored: got %q, want 10.0.0.1", got)
+	}
+}
+
+func TestAuthAwareRateLimitUnauth(t *testing.T) {
+	unauthRL := newIPRateLimiter(1, 60)
+	defer close(unauthRL.stop)
+	authRL := newIPRateLimiter(1000, 3600)
+	defer close(authRL.stop)
+
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	t.Run("json mode blocks second unauth request", func(t *testing.T) {
+		handler := authAwareRateLimit(unauthRL, authRL, false)(ok)
+
+		// First request — allowed
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/score/octocat", nil)
+		req.RemoteAddr = "10.0.0.1:1234"
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("request 1: expected 200, got %d", rec.Code)
+		}
+
+		// Second request — blocked
+		rec = httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusTooManyRequests {
+			t.Fatalf("request 2: expected 429, got %d", rec.Code)
+		}
+
+		// Verify JSON response
+		var body map[string]any
+		if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if body["error"] != "rate limit exceeded" {
+			t.Errorf("unexpected error: %v", body["error"])
+		}
+		if body["sign_in_url"] != "/auth/github" {
+			t.Errorf("expected sign_in_url, got: %v", body["sign_in_url"])
+		}
+		if rec.Header().Get("Retry-After") == "" {
+			t.Error("expected Retry-After header")
+		}
+	})
+
+	t.Run("html mode renders template", func(t *testing.T) {
+		// Use a fresh limiter so previous test state doesn't interfere
+		unauthRL2 := newIPRateLimiter(1, 60)
+		defer close(unauthRL2.stop)
+		handler := authAwareRateLimit(unauthRL2, authRL, true)(ok)
+
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/score/octocat", nil)
+		req.RemoteAddr = "10.0.0.2:1234"
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req) // first — allowed
+
+		rec = httptest.NewRecorder()
+		handler.ServeHTTP(rec, req) // second — blocked
+		if rec.Code != http.StatusTooManyRequests {
+			t.Fatalf("expected 429, got %d", rec.Code)
+		}
+		if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "text/html") {
+			t.Errorf("expected text/html, got %q", ct)
+		}
+		if !strings.Contains(rec.Body.String(), "Rate limit reached") {
+			t.Error("expected rate limit page content")
+		}
+	})
+}
+
+func TestAuthAwareRateLimitAuth(t *testing.T) {
+	unauthRL := newIPRateLimiter(1, 60)
+	defer close(unauthRL.stop)
+	authRL := newIPRateLimiter(1000, 3600)
+	defer close(authRL.stop)
+
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := authAwareRateLimit(unauthRL, authRL, false)(ok)
+
+	tn := &tenant.Tenant{ID: "test-tenant-id", Plan: "free"} // free = 60/hr
+
+	// Authenticated user should bypass unauth limit (>1 req allowed)
+	for i := range 3 {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/score/octocat", nil)
+		req.RemoteAddr = "10.0.0.3:1234"
+		ctx := middleware.WithTenantContext(req.Context(), tn)
+		req = req.WithContext(ctx)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("auth request %d: expected 200, got %d", i+1, rec.Code)
+		}
 	}
 }
