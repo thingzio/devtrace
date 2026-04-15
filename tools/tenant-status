@@ -25,7 +25,7 @@ case "$STATUS" in
     *) err "Unknown status: $STATUS (must be active or suspended)" ;;
 esac
 
-API_URL="${API_URL:-http://localhost:8080}"
+DEVTRACE_API_URL="${DEVTRACE_API_URL:-http://localhost:8080}"
 DEVTRACE_ADMIN_API_KEY="${DEVTRACE_ADMIN_API_KEY:?DEVTRACE_ADMIN_API_KEY is required}"
 
 msg "Updating ${USERNAME} status to ${STATUS}..."
@@ -34,7 +34,7 @@ RESPONSE="$(curl -s -w "\n%{http_code}" \
     -H "Authorization: Bearer ${DEVTRACE_ADMIN_API_KEY}" \
     -H "Content-Type: application/json" \
     -d "{\"status\":\"${STATUS}\"}" \
-    "${API_URL}/api/v1/admin/tenant/${USERNAME}/status")"
+    "${DEVTRACE_API_URL}/api/v1/admin/tenant/${USERNAME}/status")"
 
 HTTP_CODE="$(echo "${RESPONSE}" | tail -1)"
 BODY="$(echo "${RESPONSE}" | sed '$d')"

@@ -345,7 +345,7 @@ set-plan: ## Changes a tenant's plan (TENANT=uuid PLAN=free|starter|pro)
 		-H "Authorization: Bearer $(DEVTRACE_ADMIN_API_KEY)" \
 		-H "Content-Type: application/json" \
 		-d '{"plan":"$(PLAN)"}' \
-		$(API_URL)/api/v1/admin/tenant/$(TENANT)/plan | jq .
+		$(DEVTRACE_API_URL)/api/v1/admin/tenant/$(TENANT)/plan | jq .
 
 .PHONY: set-status
 set-status: ## Changes a tenant's status (TENANT=uuid STATUS=active|suspended)
@@ -353,7 +353,7 @@ set-status: ## Changes a tenant's status (TENANT=uuid STATUS=active|suspended)
 		-H "Authorization: Bearer $(DEVTRACE_ADMIN_API_KEY)" \
 		-H "Content-Type: application/json" \
 		-d '{"status":"$(STATUS)"}' \
-		$(API_URL)/api/v1/admin/tenant/$(TENANT)/status | jq .
+		$(DEVTRACE_API_URL)/api/v1/admin/tenant/$(TENANT)/status | jq .
 ```
 
 **Step 2: Commit**

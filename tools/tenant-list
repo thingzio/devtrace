@@ -6,13 +6,13 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 has_tools curl jq
 
-API_URL="${API_URL:-http://localhost:8080}"
+DEVTRACE_API_URL="${DEVTRACE_API_URL:-http://localhost:8080}"
 DEVTRACE_ADMIN_API_KEY="${DEVTRACE_ADMIN_API_KEY:?DEVTRACE_ADMIN_API_KEY is required}"
 
 msg "Listing tenants..."
 RESPONSE="$(curl -s -w "\n%{http_code}" \
     -H "Authorization: Bearer ${DEVTRACE_ADMIN_API_KEY}" \
-    "${API_URL}/api/v1/admin/tenants")"
+    "${DEVTRACE_API_URL}/api/v1/admin/tenants")"
 
 HTTP_CODE="$(echo "${RESPONSE}" | tail -1)"
 BODY="$(echo "${RESPONSE}" | sed '$d')"

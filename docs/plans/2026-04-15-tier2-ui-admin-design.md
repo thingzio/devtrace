@@ -91,7 +91,7 @@ set-plan:
 		-H "Authorization: Bearer $(DEVTRACE_ADMIN_API_KEY)" \
 		-H "Content-Type: application/json" \
 		-d '{"plan":"$(PLAN)"}' \
-		$(API_URL)/api/v1/admin/tenant/$(TENANT)/plan | jq .
+		$(DEVTRACE_API_URL)/api/v1/admin/tenant/$(TENANT)/plan | jq .
 ```
 
 ---
@@ -152,7 +152,7 @@ set-status:
 		-H "Authorization: Bearer $(DEVTRACE_ADMIN_API_KEY)" \
 		-H "Content-Type: application/json" \
 		-d '{"status":"$(STATUS)"}' \
-		$(API_URL)/api/v1/admin/tenant/$(TENANT)/status | jq .
+		$(DEVTRACE_API_URL)/api/v1/admin/tenant/$(TENANT)/status | jq .
 ```
 
 ---
