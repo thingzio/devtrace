@@ -1690,6 +1690,7 @@ a.link {
 }
 
 .landing-plans {
+  margin-top: 40px;
   margin-bottom: 40px;
 }
 
@@ -1958,9 +1959,8 @@ a.link {
 .features {
   display: flex;
   gap: 1.5rem;
-  padding: 2rem;
-  padding-top: 0;
-  max-width: 600px;
+  padding: 0;
+  max-width: 800px;
   margin: 0 auto;
   flex-wrap: wrap;
   justify-content: center;

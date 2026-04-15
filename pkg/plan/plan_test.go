@@ -11,7 +11,7 @@ func TestGetPlan(t *testing.T) {
 		wantKeys        int
 	}{
 		{"free", 50, 60, false, 1},
-		{"starter", 200, 120, false, 1},
+		{"starter", 200, 300, false, 1},
 		{"pro", 2000, 1000, true, 10},
 	}
 

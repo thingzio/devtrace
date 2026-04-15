@@ -28,7 +28,7 @@ Everything in Free plus AI-powered analysis and higher limits.
 | AI sensing | Tier 1 (metadata) + PR authenticity (Claude-powered) |
 | License analysis | Basic distribution (when implemented) |
 | Score history | 90 days |
-| Rate limit | Higher (TBD) |
+| Rate limit | 300 requests/hour |
 | API keys | Multiple |
 
 ### Pro (Paid)
@@ -49,17 +49,16 @@ Everything in Starter plus deep analysis and integration features.
 
 | Feature | Free | Starter | Pro |
 |---------|------|---------|-----|
-| Score + grade | Yes | Yes | Yes |
-| Category breakdown | Yes | Yes | Yes |
-| Signal breakdown | Yes | Yes | Yes |
-| Risk summary (template) | Yes | Yes | Yes |
-| Risk summary (Claude) | - | Yes | Yes |
-| Behavioral signals | Yes | Yes | Yes |
-| AI sensing (Tier 1) | Yes | Yes | Yes |
-| PR authenticity (Claude) | - | Yes | Yes |
-| Repo context signals | Yes | Yes | Yes |
-| Score history | 30 days | 90 days | 365 days |
-| API keys | 1 | Multiple | Multiple |
+| Contributor Scoring | Score + Grade + Signals | Score + Grade + Signals | Score + Grade + Signals |
+| Risk Summary | Metrics-based | AI-powered | AI-powered |
+| AI Sensing | Metadata | Metadata + PR authenticity | Full Context |
+| License Analysis | — | Basic | Full Context |
+| Score History | 30 days | 90 days | 365 days |
+| Rate Limit | 60 req/hour | 300 req/hour | 1,000 req/hour |
+| API Keys | 1 | Multiple | Multiple |
+| Batch API | — | — | Yes |
+| Webhooks | — | — | Yes |
+| Risk Alerts | — | Email | Email + Webhook |
 
 ### Deferred Features
 

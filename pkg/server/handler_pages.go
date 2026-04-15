@@ -32,6 +32,8 @@ type pageData struct {
 	Error     string
 	NavUser   string
 	NavAvatar string
+	Plans     []plan.Plan
+	Features  []plan.Feature
 }
 
 func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Options) http.HandlerFunc {
@@ -267,11 +269,13 @@ func landingHandler(opts Options) http.HandlerFunc {
 			}
 		}
 		pd := pageData{
-			Title:   "Home",
-			Version: opts.Version,
-			Commit:  opts.Commit,
-			Date:    opts.Date,
-			Error:   errMsg,
+			Title:    "Home",
+			Version:  opts.Version,
+			Commit:   opts.Commit,
+			Date:     opts.Date,
+			Error:    errMsg,
+			Plans:    plan.DisplayPlans(),
+			Features: plan.DisplayFeatures(),
 		}
 		if tn := middleware.TenantFromContext(r.Context()); tn != nil {
 			pd.NavUser = tn.Username

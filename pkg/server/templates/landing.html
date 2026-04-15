@@ -17,6 +17,7 @@
   </section>
 
   <section class="features">
+    <h2 style="width:100%;text-align:center;font-size:1.3em;font-weight:700;margin-bottom:0;">Features</h2>
     <div class="feature-card">
       <h3>Reputation Scoring</h3>
       <p>Assess contributor trust using 22 signals across 5 categories before you merge.</p>
@@ -34,6 +35,37 @@
       <p>Score PR authors automatically with a GitHub Action and gate merges on trust.</p>
     </div>
   </section>
+
+  {{if .Plans}}
+  <div id="plans" class="landing-plans">
+    <h2>Plans</h2>
+    <div class="plans-table-wrap">
+      <table class="plans-table">
+        <thead>
+          <tr>
+            <th></th>
+            {{range .Plans}}
+            <th id="plan-{{.Name}}"><a href="#plan-{{.Name}}">{{.DisplayName}}</a>{{if .PriceLabel}} <span style="font-size:0.75em;font-weight:normal;color:var(--gray);">({{.PriceLabel}})</span>{{end}}</th>
+            {{end}}
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Features}}
+          <tr id="{{.ID}}">
+            <td><a href="#{{.ID}}">{{.Label}}</a></td>
+            {{if .Span}}
+            <td colspan="{{len $.Plans}}">{{index .Values 0}}</td>
+            {{else}}
+            {{range .Values}}<td>{{.}}</td>{{end}}
+            {{end}}
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      <p style="margin-top:8px;font-size:0.8em;color:var(--gray);text-align:right;">* All plans are free during the beta preview.</p>
+    </div>
+  </div>
+  {{end}}
 
   {{if .Error}}<p class="error-msg">{{.Error}}</p>{{end}}
 
