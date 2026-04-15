@@ -89,9 +89,16 @@ Detect and quantify how much of a contributor's work is AI-generated or AI-assis
 - PR authenticity classification structure (Claude-powered, Starter+)
 - AISensing response field: co-authored commits, bot-associated PRs, tool signatures
 
-**Elevated priority (data from [COMP.md](COMP.md#ai-generated-code)):**
+**Implemented (Tier 2 — behavioral heuristics, Pro plan):**
 
-- **Tier 2 (behavioral heuristics):** Velocity anomalies, time-of-day spread, commit size uniformity, burst-and-vanish. Data exists in `contributor_activity`, computation not yet implemented. AI-generated code has 2.7x higher vulnerability density and AI lowers the cost of manufacturing fake contributor histories — Tier 2 detection is now a competitive differentiator, not a nice-to-have.
+- Velocity anomaly ratio (current vs baseline PR velocity)
+- Active hour spread (distinct hours of day active over 90d)
+- Burst-vanish score (peak-to-median weekly activity with recency amplifier)
+- Synthetic contributor flags (composite: young account, fork-only, empty profile, no reviews, no consistency, unverified commits — inspired by hackerbot-claw incident)
+- Behavioral category scoring improved: 5 signals (consistency, review participation, repo diversity, burst rate, fork ratio) replacing 2 crude signals
+
+**Deferred:**
+
 - **Tier 3 (Claude analysis):** Code style consistency, commit coherence, risk narratives for ambiguous cases. Integration point exists (`pkg/claude/`), analysis prompts not yet built.
 
 **Design principle:** AI sensing is a separate transparency dimension — not folded into the reputation score. Reputation measures trust; AI sensing measures provenance.

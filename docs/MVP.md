@@ -30,13 +30,13 @@ Hourly Cloud Run Job, event aggregation, behavioral signals, activity compaction
 
 Terraform infra (Cloud Run, Artifact Registry, secrets, IAM, WIF), CI/CD pipelines (test-on-push, release-on-tag), DNS domain mapping, first production release. See [BOOTSTRAP.md](BOOTSTRAP.md) for the full runbook.
 
-### Phase 6 — GitHub Action (next)
+### Phase 6 — GitHub Action ✅
 
 `thingzio/devtrace-action` — calls API, posts PR comment with score card. Published to GitHub Marketplace.
 
 **Elevated from Phase 7** based on competitive analysis ([COMP.md](COMP.md)): this is the primary GTM wedge. Only `contributor-report` (narrow GH Action with no persistent scoring, API, or AI narratives) competes. Every supply chain attack in [COMP.md — Supply Chain Attacks](COMP.md#high-profile-supply-chain-attacks-contributor-trust-failures) could have been surfaced at PR time.
 
-### Phase 7 — AI Sensing Tier 2
+### Phase 7 — AI Sensing Tier 2 ✅
 
 Behavioral heuristics computed from GH Archive data: velocity anomalies, time-of-day spread, commit size uniformity, burst-and-vanish patterns.
 
