@@ -33,7 +33,7 @@ func CreateAPIToken(ctx context.Context, db *sql.DB, tenantID, name string) (str
 
 	var id string
 	err := db.QueryRowContext(ctx,
-		`INSERT INTO api_token (tenant_id, name, token_hash) VALUES ($1, $2, $3) RETURNING id`,
+		`INSERT INTO devtrace_api_token (tenant_id, name, token_hash) VALUES ($1, $2, $3) RETURNING id`,
 		tenantID, name, hashed).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("creating api token: %w", err)
@@ -50,7 +50,7 @@ func ValidateAPIToken(ctx context.Context, db *sql.DB, rawToken string) (*Tenant
 		SELECT t.id, t.github_id, t.username, COALESCE(t.email,''), COALESCE(t.avatar_url,''),
 		       COALESCE(t.name,''), COALESCE(t.company,''), COALESCE(t.location,''), COALESCE(t.bio,''),
 		       t.plan, t.max_contributors, t.tos_accepted_at, t.created_at, t.updated_at
-		FROM api_token at
+		FROM devtrace_api_token at
 		JOIN devtrace_tenant t ON t.id = at.tenant_id
 		WHERE at.token_hash = $1`, hashed)
 
@@ -67,7 +67,7 @@ func ValidateAPIToken(ctx context.Context, db *sql.DB, rawToken string) (*Tenant
 	go func() { //nolint:gosec // intentional background context for fire-and-forget
 		//nolint:errcheck // best-effort timestamp update, failure is non-critical
 		db.ExecContext(context.Background(),
-			`UPDATE api_token SET last_used_at = NOW() WHERE token_hash = $1`, hashed)
+			`UPDATE devtrace_api_token SET last_used_at = NOW() WHERE token_hash = $1`, hashed)
 	}()
 
 	return t, nil
@@ -77,7 +77,7 @@ func ValidateAPIToken(ctx context.Context, db *sql.DB, rawToken string) (*Tenant
 func ListAPITokens(ctx context.Context, db *sql.DB, tenantID string) ([]APITokenInfo, error) {
 	rows, err := db.QueryContext(ctx,
 		`SELECT id, name, last_used_at, created_at
-		 FROM api_token WHERE tenant_id = $1 ORDER BY created_at DESC`, tenantID)
+		 FROM devtrace_api_token WHERE tenant_id = $1 ORDER BY created_at DESC`, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("listing api tokens: %w", err)
 	}
@@ -101,7 +101,7 @@ func ListAPITokens(ctx context.Context, db *sql.DB, tenantID string) ([]APIToken
 // RevokeAPIToken deletes a token owned by the given tenant.
 func RevokeAPIToken(ctx context.Context, db *sql.DB, tenantID, tokenID string) error {
 	res, err := db.ExecContext(ctx,
-		`DELETE FROM api_token WHERE id = $1 AND tenant_id = $2`, tokenID, tenantID)
+		`DELETE FROM devtrace_api_token WHERE id = $1 AND tenant_id = $2`, tokenID, tenantID)
 	if err != nil {
 		return fmt.Errorf("revoking api token: %w", err)
 	}

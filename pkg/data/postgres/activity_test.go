@@ -18,7 +18,7 @@ func TestBatchUpsertActivity(t *testing.T) {
 
 	// Clean up from prior runs.
 	_, _ = store.DB().ExecContext(ctx,
-		`DELETE FROM contributor_activity WHERE username IN ('act-user-a', 'act-user-b')`)
+		`DELETE FROM devtrace_contributor_activity WHERE username IN ('act-user-a', 'act-user-b')`)
 
 	hour := time.Date(2025, 8, 1, 10, 0, 0, 0, time.UTC)
 	summaries := []postgres.HourlySummary{
@@ -38,7 +38,7 @@ func TestBatchUpsertActivity(t *testing.T) {
 	// Verify row count.
 	var count int
 	err = store.DB().QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM contributor_activity WHERE username IN ('act-user-a', 'act-user-b')`).Scan(&count)
+		`SELECT COUNT(*) FROM devtrace_contributor_activity WHERE username IN ('act-user-a', 'act-user-b')`).Scan(&count)
 	if err != nil {
 		t.Fatalf("count rows: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestBatchUpsertActivity(t *testing.T) {
 	// Verify counts were added (original: 2+1+3, overlap: 3+2+1).
 	var prsOpened, prsMerged, reviewsGiven int
 	err = store.DB().QueryRowContext(ctx,
-		`SELECT prs_opened, prs_merged, reviews_given FROM contributor_activity
+		`SELECT prs_opened, prs_merged, reviews_given FROM devtrace_contributor_activity
 		 WHERE username = 'act-user-a' AND hour = $1`, hour).Scan(&prsOpened, &prsMerged, &reviewsGiven)
 	if err != nil {
 		t.Fatalf("query merged row: %v", err)
@@ -90,7 +90,7 @@ func TestGetBehavioralSignals(t *testing.T) {
 
 	// Clean up from prior runs.
 	_, _ = store.DB().ExecContext(ctx,
-		`DELETE FROM contributor_activity WHERE username = $1`, user)
+		`DELETE FROM devtrace_contributor_activity WHERE username = $1`, user)
 
 	// No data returns nil.
 	sig, err := store.GetBehavioralSignals(ctx, user, provider)
@@ -172,7 +172,7 @@ func TestCompactActivity(t *testing.T) {
 
 	// Clean up from prior runs.
 	_, _ = store.DB().ExecContext(ctx,
-		`DELETE FROM contributor_activity WHERE username = $1`, user)
+		`DELETE FROM devtrace_contributor_activity WHERE username = $1`, user)
 
 	// Insert hourly rows across 45 days — old enough for 30-day compaction.
 	now := time.Now().UTC().Truncate(time.Hour)
@@ -199,7 +199,7 @@ func TestCompactActivity(t *testing.T) {
 	// Count rows before compaction.
 	var beforeCount int
 	_ = store.DB().QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM contributor_activity WHERE username = $1`, user).Scan(&beforeCount)
+		`SELECT COUNT(*) FROM devtrace_contributor_activity WHERE username = $1`, user).Scan(&beforeCount)
 	if beforeCount != inserted {
 		t.Fatalf("before compact: got %d rows, want %d", beforeCount, inserted)
 	}
@@ -216,7 +216,7 @@ func TestCompactActivity(t *testing.T) {
 	// Rows after compaction should be fewer.
 	var afterCount int
 	_ = store.DB().QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM contributor_activity WHERE username = $1`, user).Scan(&afterCount)
+		`SELECT COUNT(*) FROM devtrace_contributor_activity WHERE username = $1`, user).Scan(&afterCount)
 	if afterCount >= beforeCount {
 		t.Errorf("after compact: %d rows should be fewer than before: %d", afterCount, beforeCount)
 	}
@@ -224,7 +224,7 @@ func TestCompactActivity(t *testing.T) {
 	// Totals should be preserved: sum of prs_opened should equal inserted count.
 	var totalPRs int
 	_ = store.DB().QueryRowContext(ctx,
-		`SELECT COALESCE(SUM(prs_opened), 0) FROM contributor_activity WHERE username = $1`, user).Scan(&totalPRs)
+		`SELECT COALESCE(SUM(prs_opened), 0) FROM devtrace_contributor_activity WHERE username = $1`, user).Scan(&totalPRs)
 	if totalPRs != inserted {
 		t.Errorf("total prs_opened after compact: got %d, want %d", totalPRs, inserted)
 	}

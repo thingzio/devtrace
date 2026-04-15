@@ -30,20 +30,20 @@ type HourlySummary struct {
 // Deprecated: Use model.Behavior directly. Kept as an alias for backward compatibility.
 type BehavioralSignals = model.Behavior
 
-// BatchUpsertActivity upserts hourly summaries into contributor_activity.
+// BatchUpsertActivity upserts hourly summaries into devtrace_contributor_activity.
 // On conflict, counts are added to existing values. Returns the number of rows upserted.
 // All rows are written in a single transaction, so partial progress is impossible;
 // on error the entire batch is rolled back and count 0 is returned.
 func (s *Store) BatchUpsertActivity(ctx context.Context, summaries []HourlySummary) (int, error) {
-	const query = `INSERT INTO contributor_activity (username, provider, hour, prs_opened, prs_merged, prs_closed,
+	const query = `INSERT INTO devtrace_contributor_activity (username, provider, hour, prs_opened, prs_merged, prs_closed,
 		reviews_given, issue_comments, distinct_repos, repos)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
 	ON CONFLICT (username, provider, hour) DO UPDATE SET
-		prs_opened = contributor_activity.prs_opened + EXCLUDED.prs_opened,
-		prs_merged = contributor_activity.prs_merged + EXCLUDED.prs_merged,
-		prs_closed = contributor_activity.prs_closed + EXCLUDED.prs_closed,
-		reviews_given = contributor_activity.reviews_given + EXCLUDED.reviews_given,
-		issue_comments = contributor_activity.issue_comments + EXCLUDED.issue_comments,
+		prs_opened = devtrace_contributor_activity.prs_opened + EXCLUDED.prs_opened,
+		prs_merged = devtrace_contributor_activity.prs_merged + EXCLUDED.prs_merged,
+		prs_closed = devtrace_contributor_activity.prs_closed + EXCLUDED.prs_closed,
+		reviews_given = devtrace_contributor_activity.reviews_given + EXCLUDED.reviews_given,
+		issue_comments = devtrace_contributor_activity.issue_comments + EXCLUDED.issue_comments,
 		distinct_repos = EXCLUDED.distinct_repos,
 		repos = EXCLUDED.repos`
 
@@ -76,7 +76,7 @@ func (s *Store) BatchUpsertActivity(ctx context.Context, summaries []HourlySumma
 	return count, nil
 }
 
-// GetBehavioralSignals computes behavioral metrics from the last 180 days of contributor_activity.
+// GetBehavioralSignals computes behavioral metrics from the last 180 days of devtrace_contributor_activity.
 // Returns nil when no data exists for the contributor.
 func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider string) (*BehavioralSignals, error) {
 	var (
@@ -102,7 +102,7 @@ func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider str
 			COUNT(DISTINCT date_trunc('week', hour)),
 			MIN(hour),
 			EXTRACT(EPOCH FROM NOW() - MIN(hour)) / 2592000.0
-		FROM contributor_activity
+		FROM devtrace_contributor_activity
 		WHERE username = $1 AND provider = $2 AND hour > NOW() - INTERVAL '180 days'`,
 		username, provider,
 	).Scan(&prVelocity30d, &totalPRs, &totalPRsMerged, &totalPRsClosed,
@@ -121,7 +121,7 @@ func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider str
 	var distinctRepos90d int
 	err = s.db.QueryRowContext(ctx,
 		`SELECT COUNT(DISTINCT r)
-		 FROM contributor_activity, jsonb_array_elements_text(repos) r
+		 FROM devtrace_contributor_activity, jsonb_array_elements_text(repos) r
 		 WHERE username = $1 AND provider = $2 AND hour > NOW() - INTERVAL '90 days'`,
 		username, provider,
 	).Scan(&distinctRepos90d)
@@ -167,7 +167,7 @@ func (s *Store) CompactActivity(ctx context.Context, olderThan time.Duration) (i
 	// Step 1: Insert weekly aggregates from hourly rows older than cutoff.
 	// The week bucket is the Monday 00:00 UTC of each row's week.
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO contributor_activity
+		INSERT INTO devtrace_contributor_activity
 			(username, provider, hour, prs_opened, prs_merged, prs_closed,
 			 reviews_given, issue_comments, distinct_repos, repos)
 		SELECT
@@ -177,16 +177,16 @@ func (s *Store) CompactActivity(ctx context.Context, olderThan time.Duration) (i
 			SUM(reviews_given), SUM(issue_comments),
 			0,
 			'[]'::jsonb
-		FROM contributor_activity
+		FROM devtrace_contributor_activity
 		WHERE hour < $1
 		  AND hour != date_trunc('week', hour)
 		GROUP BY username, provider, date_trunc('week', hour)
 		ON CONFLICT (username, provider, hour) DO UPDATE SET
-			prs_opened = contributor_activity.prs_opened + EXCLUDED.prs_opened,
-			prs_merged = contributor_activity.prs_merged + EXCLUDED.prs_merged,
-			prs_closed = contributor_activity.prs_closed + EXCLUDED.prs_closed,
-			reviews_given = contributor_activity.reviews_given + EXCLUDED.reviews_given,
-			issue_comments = contributor_activity.issue_comments + EXCLUDED.issue_comments,
+			prs_opened = devtrace_contributor_activity.prs_opened + EXCLUDED.prs_opened,
+			prs_merged = devtrace_contributor_activity.prs_merged + EXCLUDED.prs_merged,
+			prs_closed = devtrace_contributor_activity.prs_closed + EXCLUDED.prs_closed,
+			reviews_given = devtrace_contributor_activity.reviews_given + EXCLUDED.reviews_given,
+			issue_comments = devtrace_contributor_activity.issue_comments + EXCLUDED.issue_comments,
 			distinct_repos = 0,
 			repos = '[]'::jsonb`, cutoff)
 	if err != nil {
@@ -195,7 +195,7 @@ func (s *Store) CompactActivity(ctx context.Context, olderThan time.Duration) (i
 
 	// Step 2: Delete the original hourly rows (but not the weekly bucket rows we just created).
 	res, err := tx.ExecContext(ctx, `
-		DELETE FROM contributor_activity
+		DELETE FROM devtrace_contributor_activity
 		WHERE hour < $1
 		  AND hour != date_trunc('week', hour)`, cutoff)
 	if err != nil {

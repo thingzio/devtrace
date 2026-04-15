@@ -17,7 +17,7 @@ type ScoreHistoryEntry struct {
 // ordered oldest-first (suitable for left-to-right chart rendering).
 func (s *Store) GetScoreHistory(ctx context.Context, username, provider string, limit int) ([]ScoreHistoryEntry, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT score, grade, scored_at FROM reputation_history
+		`SELECT score, grade, scored_at FROM devtrace_reputation_history
 		 WHERE username = $1 AND provider = $2
 		 ORDER BY scored_at DESC LIMIT $3`, username, provider, limit)
 	if err != nil {
@@ -48,7 +48,7 @@ func (s *Store) GetScoreHistory(ctx context.Context, username, provider string, 
 // The contributor row must already exist (FK constraint).
 func (s *Store) SaveScoreHistory(ctx context.Context, username, provider string, score float64, grade string, deep bool) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO reputation_history (username, provider, score, grade, deep) VALUES ($1, $2, $3, $4, $5)`,
+		`INSERT INTO devtrace_reputation_history (username, provider, score, grade, deep) VALUES ($1, $2, $3, $4, $5)`,
 		username, provider, score, grade, deep)
 	if err != nil {
 		return fmt.Errorf("save score history: %w", err)
@@ -60,7 +60,7 @@ func (s *Store) SaveScoreHistory(ctx context.Context, username, provider string,
 // Uses ON CONFLICT DO NOTHING so it is idempotent.
 func (s *Store) UpsertContributor(ctx context.Context, username, provider string) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO contributor (username, provider) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		`INSERT INTO devtrace_contributor (username, provider) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
 		username, provider)
 	if err != nil {
 		return fmt.Errorf("upsert contributor: %w", err)

@@ -24,7 +24,7 @@ func CreateSession(ctx context.Context, db *sql.DB, tenantID string, ttl time.Du
 	hashed := HashToken(rawToken)
 
 	_, err := db.ExecContext(ctx,
-		`INSERT INTO session (id, tenant_id, expires_at) VALUES ($1, $2, NOW() + $3::interval)`,
+		`INSERT INTO devtrace_session (id, tenant_id, expires_at) VALUES ($1, $2, NOW() + $3::interval)`,
 		hashed, tenantID, ttl.String())
 	if err != nil {
 		return "", fmt.Errorf("creating session: %w", err)
@@ -39,7 +39,7 @@ func ValidateSession(ctx context.Context, db *sql.DB, rawToken string) (*Tenant,
 		SELECT t.id, t.github_id, t.username, COALESCE(t.email,''), COALESCE(t.avatar_url,''),
 		       COALESCE(t.name,''), COALESCE(t.company,''), COALESCE(t.location,''), COALESCE(t.bio,''),
 		       t.plan, t.max_contributors, t.tos_accepted_at, t.created_at, t.updated_at
-		FROM session s
+		FROM devtrace_session s
 		JOIN devtrace_tenant t ON t.id = s.tenant_id
 		WHERE s.id = $1 AND s.expires_at > NOW()`, hashed)
 
@@ -55,7 +55,7 @@ func ValidateSession(ctx context.Context, db *sql.DB, rawToken string) (*Tenant,
 
 // DestroySession removes a session by its raw token.
 func DestroySession(ctx context.Context, db *sql.DB, rawToken string) error {
-	_, err := db.ExecContext(ctx, `DELETE FROM session WHERE id = $1`, HashToken(rawToken))
+	_, err := db.ExecContext(ctx, `DELETE FROM devtrace_session WHERE id = $1`, HashToken(rawToken))
 	if err != nil {
 		return fmt.Errorf("destroying session: %w", err)
 	}
@@ -66,7 +66,7 @@ func DestroySession(ctx context.Context, db *sql.DB, rawToken string) error {
 func GetLastSignIn(ctx context.Context, db *sql.DB, tenantID string) *time.Time {
 	var t sql.NullTime
 	if err := db.QueryRowContext(ctx,
-		`SELECT MAX(created_at) FROM session WHERE tenant_id = $1`, tenantID).Scan(&t); err != nil || !t.Valid {
+		`SELECT MAX(created_at) FROM devtrace_session WHERE tenant_id = $1`, tenantID).Scan(&t); err != nil || !t.Valid {
 		return nil
 	}
 	return &t.Time

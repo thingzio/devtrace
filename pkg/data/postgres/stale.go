@@ -22,7 +22,7 @@ type StaleContributor struct {
 func (s *Store) GetStaleContributors(ctx context.Context, lowDays, highDays, limit int) ([]StaleContributor, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT r.username, r.provider, r.score, r.scored_at
-		 FROM reputation r
+		 FROM devtrace_reputation r
 		 WHERE (r.score < 0.5 AND r.scored_at < NOW() - MAKE_INTERVAL(days => $1))
 		    OR (r.score >= 0.5 AND r.scored_at < NOW() - MAKE_INTERVAL(days => $2))
 		 ORDER BY r.scored_at ASC
@@ -50,7 +50,7 @@ func (s *Store) UpdateReputation(ctx context.Context, username, provider string,
 		return fmt.Errorf("marshal signals: %w", err)
 	}
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE reputation SET score = $1, grade = $2, model_version = $3, deep = true, signals = $4::jsonb, scored_at = NOW()
+		`UPDATE devtrace_reputation SET score = $1, grade = $2, model_version = $3, deep = true, signals = $4::jsonb, scored_at = NOW()
 		 WHERE username = $5 AND provider = $6`,
 		value, grade, version, signalsJSON, username, provider)
 	return err

@@ -19,11 +19,11 @@ type QueueEntry struct {
 // only when priority is upgraded.
 func (s *Store) EnqueueForScoring(ctx context.Context, username, provider string, priority int) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO scoring_queue (username, provider, priority)
+		`INSERT INTO devtrace_scoring_queue (username, provider, priority)
 		 VALUES ($1, $2, $3)
 		 ON CONFLICT (username, provider) DO UPDATE SET
-			priority = LEAST(scoring_queue.priority, EXCLUDED.priority),
-			queued_at = CASE WHEN EXCLUDED.priority < scoring_queue.priority THEN NOW() ELSE scoring_queue.queued_at END`,
+			priority = LEAST(devtrace_scoring_queue.priority, EXCLUDED.priority),
+			queued_at = CASE WHEN EXCLUDED.priority < devtrace_scoring_queue.priority THEN NOW() ELSE devtrace_scoring_queue.queued_at END`,
 		username, provider, priority)
 	if err != nil {
 		return fmt.Errorf("enqueue for scoring: %w", err)
@@ -36,7 +36,7 @@ func (s *Store) EnqueueForScoring(ctx context.Context, username, provider string
 func (s *Store) DequeueForScoring(ctx context.Context, limit int) ([]QueueEntry, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT username, provider, priority, queued_at
-		 FROM scoring_queue
+		 FROM devtrace_scoring_queue
 		 ORDER BY priority ASC, queued_at ASC
 		 LIMIT $1
 		 FOR UPDATE SKIP LOCKED`, limit)
@@ -59,7 +59,7 @@ func (s *Store) DequeueForScoring(ctx context.Context, limit int) ([]QueueEntry,
 // RemoveFromQueue deletes a contributor from the scoring queue after processing.
 func (s *Store) RemoveFromQueue(ctx context.Context, username, provider string) error {
 	_, err := s.db.ExecContext(ctx,
-		`DELETE FROM scoring_queue WHERE username = $1 AND provider = $2`,
+		`DELETE FROM devtrace_scoring_queue WHERE username = $1 AND provider = $2`,
 		username, provider)
 	if err != nil {
 		return fmt.Errorf("remove from queue: %w", err)
@@ -71,7 +71,7 @@ func (s *Store) RemoveFromQueue(ctx context.Context, username, provider string) 
 func (s *Store) ContributorExists(ctx context.Context, username, provider string) (bool, error) {
 	var exists bool
 	err := s.db.QueryRowContext(ctx,
-		`SELECT EXISTS(SELECT 1 FROM reputation WHERE username = $1 AND provider = $2)`,
+		`SELECT EXISTS(SELECT 1 FROM devtrace_reputation WHERE username = $1 AND provider = $2)`,
 		username, provider).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("contributor exists: %w", err)
@@ -83,7 +83,7 @@ func (s *Store) ContributorExists(ctx context.Context, username, provider string
 // The ingest job uses this to determine if a repo owner is a tenant.
 func (s *Store) GetTenantRepos(ctx context.Context) (map[string]bool, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT target_login FROM github_app_installation WHERE suspended_at IS NULL`)
+		`SELECT target_login FROM devtrace_app_installation WHERE suspended_at IS NULL`)
 	if err != nil {
 		return nil, fmt.Errorf("get tenant repos: %w", err)
 	}

@@ -98,9 +98,9 @@ func TestContributorExists(t *testing.T) {
 
 	// Clean up from prior runs.
 	_, _ = store.DB().ExecContext(ctx,
-		`DELETE FROM reputation WHERE username = $1 AND provider = $2`, user, provider)
+		`DELETE FROM devtrace_reputation WHERE username = $1 AND provider = $2`, user, provider)
 	_, _ = store.DB().ExecContext(ctx,
-		`DELETE FROM contributor WHERE username = $1 AND provider = $2`, user, provider)
+		`DELETE FROM devtrace_contributor WHERE username = $1 AND provider = $2`, user, provider)
 
 	exists, err := store.ContributorExists(ctx, user, provider)
 	if err != nil {
@@ -112,12 +112,12 @@ func TestContributorExists(t *testing.T) {
 
 	// Insert contributor + reputation row.
 	_, err = store.DB().ExecContext(ctx,
-		`INSERT INTO contributor (username, provider) VALUES ($1, $2)`, user, provider)
+		`INSERT INTO devtrace_contributor (username, provider) VALUES ($1, $2)`, user, provider)
 	if err != nil {
 		t.Fatalf("insert contributor: %v", err)
 	}
 	_, err = store.DB().ExecContext(ctx,
-		`INSERT INTO reputation (username, provider, score, grade, model_version)
+		`INSERT INTO devtrace_reputation (username, provider, score, grade, model_version)
 		 VALUES ($1, $2, 0.5, 'C', 'test')`, user, provider)
 	if err != nil {
 		t.Fatalf("insert reputation: %v", err)
@@ -133,9 +133,9 @@ func TestContributorExists(t *testing.T) {
 
 	// Clean up.
 	_, _ = store.DB().ExecContext(ctx,
-		`DELETE FROM reputation WHERE username = $1 AND provider = $2`, user, provider)
+		`DELETE FROM devtrace_reputation WHERE username = $1 AND provider = $2`, user, provider)
 	_, _ = store.DB().ExecContext(ctx,
-		`DELETE FROM contributor WHERE username = $1 AND provider = $2`, user, provider)
+		`DELETE FROM devtrace_contributor WHERE username = $1 AND provider = $2`, user, provider)
 }
 
 func TestGetTenantRepos(t *testing.T) {

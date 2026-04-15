@@ -17,7 +17,7 @@ func TestSaveAndListInstallations(t *testing.T) {
 		t.Fatalf("upsert tenant: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = db.ExecContext(ctx, "DELETE FROM github_app_installation WHERE tenant_id = $1", tn.ID)
+		_, _ = db.ExecContext(ctx, "DELETE FROM devtrace_app_installation WHERE tenant_id = $1", tn.ID)
 		cleanup(t, db, ghID)
 	})
 
@@ -54,7 +54,7 @@ func TestSuspendInstallation(t *testing.T) {
 		t.Fatalf("upsert tenant: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = db.ExecContext(ctx, "DELETE FROM github_app_installation WHERE tenant_id = $1", tn.ID)
+		_, _ = db.ExecContext(ctx, "DELETE FROM devtrace_app_installation WHERE tenant_id = $1", tn.ID)
 		cleanup(t, db, ghID)
 	})
 
@@ -90,7 +90,7 @@ func TestGetActiveInstallations(t *testing.T) {
 		t.Fatalf("upsert tenant: %v", err)
 	}
 	t.Cleanup(func() {
-		_, _ = db.ExecContext(ctx, "DELETE FROM github_app_installation WHERE tenant_id = $1", tn.ID)
+		_, _ = db.ExecContext(ctx, "DELETE FROM devtrace_app_installation WHERE tenant_id = $1", tn.ID)
 		cleanup(t, db, ghID)
 	})
 

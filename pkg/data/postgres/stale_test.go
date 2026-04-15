@@ -43,7 +43,7 @@ func TestUpdateReputation(t *testing.T) {
 	// Insert initial reputation row.
 	db := store.DB()
 	if _, err := db.ExecContext(ctx,
-		`INSERT INTO reputation (username, provider, score, grade, model_version, deep)
+		`INSERT INTO devtrace_reputation (username, provider, score, grade, model_version, deep)
 		 VALUES ($1, $2, 0.40, 'D', '3.2.0', false)
 		 ON CONFLICT DO NOTHING`,
 		user, provider); err != nil {
@@ -68,7 +68,7 @@ func TestUpdateReputation(t *testing.T) {
 	var g string
 	var deep bool
 	if err := db.QueryRowContext(ctx,
-		`SELECT score, grade, deep FROM reputation WHERE username = $1 AND provider = $2`,
+		`SELECT score, grade, deep FROM devtrace_reputation WHERE username = $1 AND provider = $2`,
 		user, provider).Scan(&s, &g, &deep); err != nil {
 		t.Fatalf("query updated reputation: %v", err)
 	}

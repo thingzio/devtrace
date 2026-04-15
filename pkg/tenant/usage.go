@@ -11,7 +11,7 @@ import (
 // source indicates how the score was triggered ("ui" or "api").
 func RecordUsage(ctx context.Context, db *sql.DB, tenantID, username, provider, source string, deep bool) error {
 	_, err := db.ExecContext(ctx,
-		`INSERT INTO usage_record (tenant_id, username_scored, provider, source, deep) VALUES ($1, $2, $3, $4, $5)`,
+		`INSERT INTO devtrace_usage_record (tenant_id, username_scored, provider, source, deep) VALUES ($1, $2, $3, $4, $5)`,
 		tenantID, username, provider, source, deep)
 	if err != nil {
 		return fmt.Errorf("recording usage: %w", err)
@@ -23,7 +23,7 @@ func RecordUsage(ctx context.Context, db *sql.DB, tenantID, username, provider, 
 func GetUsageCount(ctx context.Context, db *sql.DB, tenantID string, since time.Time) (int, error) {
 	var count int
 	err := db.QueryRowContext(ctx,
-		`SELECT COUNT(DISTINCT username_scored) FROM usage_record WHERE tenant_id = $1 AND scored_at >= $2`,
+		`SELECT COUNT(DISTINCT username_scored) FROM devtrace_usage_record WHERE tenant_id = $1 AND scored_at >= $2`,
 		tenantID, since).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("getting usage count: %w", err)
@@ -51,7 +51,7 @@ type RecentScored struct {
 func GetRecentScored(ctx context.Context, db *sql.DB, tenantID string, limit int) ([]RecentScored, error) {
 	rows, err := db.QueryContext(ctx,
 		`SELECT DISTINCT ON (username_scored) username_scored, provider, source, deep, scored_at
-		 FROM usage_record WHERE tenant_id = $1
+		 FROM devtrace_usage_record WHERE tenant_id = $1
 		 ORDER BY username_scored, scored_at DESC`,
 		tenantID)
 	if err != nil {

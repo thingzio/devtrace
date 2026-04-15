@@ -19,7 +19,7 @@ func TestSyncState(t *testing.T) {
 	const key = "test-sync-cursor"
 
 	// Clean up any leftover state from prior runs.
-	_, _ = store.DB().ExecContext(ctx, `DELETE FROM sync_state WHERE key = $1`, key)
+	_, _ = store.DB().ExecContext(ctx, `DELETE FROM devtrace_sync_state WHERE key = $1`, key)
 
 	// Should return zero time when key does not exist.
 	got, err := store.GetSyncState(ctx, key)
@@ -83,7 +83,7 @@ func TestSyncDeveloperToDevTrace(t *testing.T) {
 	// Verify contributor row exists.
 	var displayName string
 	err := store.DB().QueryRowContext(ctx,
-		`SELECT display_name FROM contributor WHERE username = $1 AND provider = 'github'`,
+		`SELECT display_name FROM devtrace_contributor WHERE username = $1 AND provider = 'github'`,
 		dev.Username).Scan(&displayName)
 	if err != nil {
 		t.Fatalf("query contributor: %v", err)
@@ -96,7 +96,7 @@ func TestSyncDeveloperToDevTrace(t *testing.T) {
 	var score float64
 	var grade string
 	err = store.DB().QueryRowContext(ctx,
-		`SELECT score, grade FROM reputation WHERE username = $1 AND provider = 'github'`,
+		`SELECT score, grade FROM devtrace_reputation WHERE username = $1 AND provider = 'github'`,
 		dev.Username).Scan(&score, &grade)
 	if err != nil {
 		t.Fatalf("query reputation: %v", err)
@@ -111,7 +111,7 @@ func TestSyncDeveloperToDevTrace(t *testing.T) {
 	// Verify history row exists.
 	var histCount int
 	err = store.DB().QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM reputation_history WHERE username = $1 AND provider = 'github'`,
+		`SELECT COUNT(*) FROM devtrace_reputation_history WHERE username = $1 AND provider = 'github'`,
 		dev.Username).Scan(&histCount)
 	if err != nil {
 		t.Fatalf("query reputation_history: %v", err)
@@ -127,7 +127,7 @@ func TestSyncDeveloperToDevTrace(t *testing.T) {
 	}
 
 	err = store.DB().QueryRowContext(ctx,
-		`SELECT score, grade FROM reputation WHERE username = $1 AND provider = 'github'`,
+		`SELECT score, grade FROM devtrace_reputation WHERE username = $1 AND provider = 'github'`,
 		dev.Username).Scan(&score, &grade)
 	if err != nil {
 		t.Fatalf("query reputation (update): %v", err)

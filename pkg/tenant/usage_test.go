@@ -38,7 +38,7 @@ func TestRecordAndGetUsage(t *testing.T) {
 	}
 
 	// Clean up any prior test data.
-	_, _ = db.ExecContext(ctx, `DELETE FROM usage_record WHERE tenant_id = $1`, tn.ID)
+	_, _ = db.ExecContext(ctx, `DELETE FROM devtrace_usage_record WHERE tenant_id = $1`, tn.ID)
 
 	// Record 3 events: 2 unique users.
 	for _, u := range []string{"alice", "bob", "alice"} {

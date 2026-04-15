@@ -1,12 +1,16 @@
--- DevTrace schema. All statements use IF NOT EXISTS for idempotent re-application.
+-- DevTrace schema (squashed). All tables use devtrace_ prefix.
+-- All statements use IF NOT EXISTS for idempotent re-application.
 
--- Schema version tracking (devtrace-scoped).
+-- Drop old schema version tracking if present (from pre-squash migrations).
+DROP TABLE IF EXISTS devtrace_schema_version CASCADE;
+
+-- Schema version tracking.
 CREATE TABLE IF NOT EXISTS devtrace_schema_version (
     version INTEGER PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Tenants (DevTrace-owned, independent from DevPulse).
+-- Tenants.
 CREATE TABLE IF NOT EXISTS devtrace_tenant (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     github_id BIGINT UNIQUE NOT NULL,
@@ -25,7 +29,7 @@ CREATE TABLE IF NOT EXISTS devtrace_tenant (
 );
 
 -- Contributor profiles (provider-agnostic identity).
-CREATE TABLE IF NOT EXISTS contributor (
+CREATE TABLE IF NOT EXISTS devtrace_contributor (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
     display_name TEXT,
@@ -42,7 +46,7 @@ CREATE TABLE IF NOT EXISTS contributor (
 );
 
 -- Reputation scores.
-CREATE TABLE IF NOT EXISTS reputation (
+CREATE TABLE IF NOT EXISTS devtrace_reputation (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
     score REAL NOT NULL,
@@ -54,14 +58,14 @@ CREATE TABLE IF NOT EXISTS reputation (
     risk_summary TEXT,
     scored_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (username, provider),
-    FOREIGN KEY (username, provider) REFERENCES contributor(username, provider) ON DELETE CASCADE
+    FOREIGN KEY (username, provider) REFERENCES devtrace_contributor(username, provider) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_reputation_score ON reputation(score);
-CREATE INDEX IF NOT EXISTS idx_reputation_scored_at ON reputation(scored_at);
+CREATE INDEX IF NOT EXISTS idx_devtrace_reputation_score ON devtrace_reputation(score);
+CREATE INDEX IF NOT EXISTS idx_devtrace_reputation_scored_at ON devtrace_reputation(scored_at);
 
 -- Reputation history (trend charts).
-CREATE TABLE IF NOT EXISTS reputation_history (
+CREATE TABLE IF NOT EXISTS devtrace_reputation_history (
     id BIGSERIAL PRIMARY KEY,
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
@@ -69,13 +73,13 @@ CREATE TABLE IF NOT EXISTS reputation_history (
     grade TEXT NOT NULL,
     deep BOOLEAN NOT NULL DEFAULT FALSE,
     scored_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    FOREIGN KEY (username, provider) REFERENCES contributor(username, provider) ON DELETE CASCADE
+    FOREIGN KEY (username, provider) REFERENCES devtrace_contributor(username, provider) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_reputation_history_lookup ON reputation_history(username, provider, scored_at);
+CREATE INDEX IF NOT EXISTS idx_devtrace_rep_history_lookup ON devtrace_reputation_history(username, provider, scored_at);
 
 -- License profiles.
-CREATE TABLE IF NOT EXISTS license_profile (
+CREATE TABLE IF NOT EXISTS devtrace_license_profile (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
     total_repos_with_merged_prs INTEGER NOT NULL DEFAULT 0,
@@ -83,11 +87,11 @@ CREATE TABLE IF NOT EXISTS license_profile (
     distribution JSONB,
     scored_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (username, provider),
-    FOREIGN KEY (username, provider) REFERENCES contributor(username, provider) ON DELETE CASCADE
+    FOREIGN KEY (username, provider) REFERENCES devtrace_contributor(username, provider) ON DELETE CASCADE
 );
 
 -- AI sensing signals.
-CREATE TABLE IF NOT EXISTS ai_signal (
+CREATE TABLE IF NOT EXISTS devtrace_ai_signal (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
     co_authored_commits INTEGER NOT NULL DEFAULT 0,
@@ -97,11 +101,11 @@ CREATE TABLE IF NOT EXISTS ai_signal (
     ai_associated_ratio REAL NOT NULL DEFAULT 0,
     scored_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (username, provider),
-    FOREIGN KEY (username, provider) REFERENCES contributor(username, provider) ON DELETE CASCADE
+    FOREIGN KEY (username, provider) REFERENCES devtrace_contributor(username, provider) ON DELETE CASCADE
 );
 
--- API tokens (DevTrace-minted).
-CREATE TABLE IF NOT EXISTS api_token (
+-- API tokens.
+CREATE TABLE IF NOT EXISTS devtrace_api_token (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES devtrace_tenant(id) ON DELETE CASCADE,
     name TEXT NOT NULL,
@@ -110,11 +114,11 @@ CREATE TABLE IF NOT EXISTS api_token (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_api_token_hash ON api_token(token_hash);
-CREATE INDEX IF NOT EXISTS idx_api_token_tenant ON api_token(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_devtrace_api_token_hash ON devtrace_api_token(token_hash);
+CREATE INDEX IF NOT EXISTS idx_devtrace_api_token_tenant ON devtrace_api_token(tenant_id);
 
 -- Sessions (UI auth).
-CREATE TABLE IF NOT EXISTS session (
+CREATE TABLE IF NOT EXISTS devtrace_session (
     id TEXT PRIMARY KEY,
     tenant_id UUID NOT NULL REFERENCES devtrace_tenant(id) ON DELETE CASCADE,
     expires_at TIMESTAMPTZ NOT NULL,
@@ -122,7 +126,7 @@ CREATE TABLE IF NOT EXISTS session (
 );
 
 -- GitHub App installations.
-CREATE TABLE IF NOT EXISTS github_app_installation (
+CREATE TABLE IF NOT EXISTS devtrace_app_installation (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES devtrace_tenant(id) ON DELETE CASCADE,
     installation_id BIGINT UNIQUE NOT NULL,
@@ -134,35 +138,36 @@ CREATE TABLE IF NOT EXISTS github_app_installation (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_installation_app_id ON github_app_installation(app_id) WHERE app_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_devtrace_install_app_id ON devtrace_app_installation(app_id) WHERE app_id IS NOT NULL;
 
 -- Usage tracking (quota enforcement).
-CREATE TABLE IF NOT EXISTS usage_record (
+CREATE TABLE IF NOT EXISTS devtrace_usage_record (
     id BIGSERIAL PRIMARY KEY,
     tenant_id UUID NOT NULL REFERENCES devtrace_tenant(id) ON DELETE CASCADE,
     username_scored TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
+    source TEXT NOT NULL DEFAULT 'api',
     deep BOOLEAN NOT NULL DEFAULT FALSE,
     scored_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_usage_tenant_period ON usage_record(tenant_id, scored_at);
+CREATE INDEX IF NOT EXISTS idx_devtrace_usage_tenant_period ON devtrace_usage_record(tenant_id, scored_at);
 
 -- Rate limit tracking (IP-based for unauth).
-CREATE TABLE IF NOT EXISTS rate_limit (
+CREATE TABLE IF NOT EXISTS devtrace_rate_limit (
     key TEXT PRIMARY KEY,
     count INTEGER NOT NULL DEFAULT 0,
     window_start TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Sync state tracking (key-value for background sync cursors).
-CREATE TABLE IF NOT EXISTS sync_state (
+CREATE TABLE IF NOT EXISTS devtrace_sync_state (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
 
 -- Hourly behavioral summaries from GH Archive.
-CREATE TABLE IF NOT EXISTS contributor_activity (
+CREATE TABLE IF NOT EXISTS devtrace_contributor_activity (
     id BIGSERIAL,
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
@@ -177,10 +182,10 @@ CREATE TABLE IF NOT EXISTS contributor_activity (
     PRIMARY KEY (username, provider, hour)
 );
 
-CREATE INDEX IF NOT EXISTS idx_activity_hour ON contributor_activity(hour);
+CREATE INDEX IF NOT EXISTS idx_devtrace_activity_hour ON devtrace_contributor_activity(hour);
 
 -- Priority-based scoring queue.
-CREATE TABLE IF NOT EXISTS scoring_queue (
+CREATE TABLE IF NOT EXISTS devtrace_scoring_queue (
     username TEXT NOT NULL,
     provider TEXT NOT NULL DEFAULT 'github',
     priority INTEGER NOT NULL DEFAULT 2,
@@ -188,4 +193,4 @@ CREATE TABLE IF NOT EXISTS scoring_queue (
     PRIMARY KEY (username, provider)
 );
 
-CREATE INDEX IF NOT EXISTS idx_scoring_queue_priority ON scoring_queue(priority, queued_at);
+CREATE INDEX IF NOT EXISTS idx_devtrace_scoring_queue_priority ON devtrace_scoring_queue(priority, queued_at);

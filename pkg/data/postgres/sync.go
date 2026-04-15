@@ -81,7 +81,7 @@ func (s *Store) SyncDeveloperToDevTrace(ctx context.Context, d DevPulseDeveloper
 
 	// Upsert contributor.
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO contributor (username, provider, display_name, email, avatar_url)
+		`INSERT INTO devtrace_contributor (username, provider, display_name, email, avatar_url)
 		 VALUES ($1, 'github', $2, $3, $4)
 		 ON CONFLICT (username, provider) DO UPDATE
 		    SET display_name = EXCLUDED.display_name,
@@ -94,7 +94,7 @@ func (s *Store) SyncDeveloperToDevTrace(ctx context.Context, d DevPulseDeveloper
 
 	// Upsert reputation.
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO reputation (username, provider, score, grade, model_version, deep, signals)
+		`INSERT INTO devtrace_reputation (username, provider, score, grade, model_version, deep, signals)
 		 VALUES ($1, 'github', $2, $3, $4, $5, $6::jsonb)
 		 ON CONFLICT (username, provider) DO UPDATE
 		    SET score         = EXCLUDED.score,
@@ -109,7 +109,7 @@ func (s *Store) SyncDeveloperToDevTrace(ctx context.Context, d DevPulseDeveloper
 
 	// Append to reputation_history.
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO reputation_history (username, provider, score, grade, deep)
+		`INSERT INTO devtrace_reputation_history (username, provider, score, grade, deep)
 		 VALUES ($1, 'github', $2, $3, $4)`,
 		d.Username, d.Reputation, grade, d.ReputationDeep); err != nil {
 		return fmt.Errorf("insert reputation_history: %w", err)
@@ -123,7 +123,7 @@ func (s *Store) SyncDeveloperToDevTrace(ctx context.Context, d DevPulseDeveloper
 func (s *Store) GetSyncState(ctx context.Context, key string) (time.Time, error) {
 	var val string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT value FROM sync_state WHERE key = $1`, key).Scan(&val)
+		`SELECT value FROM devtrace_sync_state WHERE key = $1`, key).Scan(&val)
 	if errors.Is(err, sql.ErrNoRows) {
 		return time.Time{}, nil
 	}
@@ -141,7 +141,7 @@ func (s *Store) GetSyncState(ctx context.Context, key string) (time.Time, error)
 // SaveSyncState upserts the given time value under key in sync_state.
 func (s *Store) SaveSyncState(ctx context.Context, key string, val time.Time) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO sync_state (key, value) VALUES ($1, $2)
+		`INSERT INTO devtrace_sync_state (key, value) VALUES ($1, $2)
 		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
 		key, val.Format(time.RFC3339))
 	if err != nil {
