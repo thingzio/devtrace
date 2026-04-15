@@ -290,6 +290,10 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 		mux.HandleFunc("POST /webhook/github", webhookHandler(db, webhookSecret))
 	}
 
+	// Admin API — protected by ADMIN_API_KEY env var
+	mux.HandleFunc("PUT /api/v1/admin/tenant/{id}/plan", adminUpdatePlanHandler(db))
+	mux.HandleFunc("PUT /api/v1/admin/tenant/{id}/status", adminUpdateStatusHandler(db))
+
 	cleanup := func() {
 		unauthRL.close()
 		authRL.close()
