@@ -361,8 +361,9 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 	}
 
 	// Admin API — protected by ADMIN_API_KEY env var
-	mux.HandleFunc("PUT /api/v1/admin/tenant/{id}/plan", adminUpdatePlanHandler(db))
-	mux.HandleFunc("PUT /api/v1/admin/tenant/{id}/status", adminUpdateStatusHandler(db))
+	mux.HandleFunc("GET /api/v1/admin/tenants", adminListTenantsHandler(db))
+	mux.HandleFunc("PUT /api/v1/admin/tenant/{username}/plan", adminUpdatePlanHandler(db))
+	mux.HandleFunc("PUT /api/v1/admin/tenant/{username}/status", adminUpdateStatusHandler(db))
 
 	cleanup := func() {
 		unauthRL.close()

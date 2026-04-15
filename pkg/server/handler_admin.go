@@ -28,7 +28,6 @@ func adminAuth(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
-// adminBearerToken extracts the Bearer token from the Authorization header.
 func adminBearerToken(r *http.Request) string {
 	auth := r.Header.Get("Authorization")
 	if !strings.HasPrefix(auth, "Bearer ") {
@@ -37,15 +36,58 @@ func adminBearerToken(r *http.Request) string {
 	return strings.TrimPrefix(auth, "Bearer ")
 }
 
+func adminListTenantsHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !adminAuth(w, r) {
+			return
+		}
+
+		tenants, err := tenant.ListTenants(r.Context(), db)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list tenants"})
+			return
+		}
+
+		type tenantRow struct {
+			ID              string `json:"tenant_id"`
+			Username        string `json:"username"`
+			Plan            string `json:"plan"`
+			Status          string `json:"status"`
+			MaxContributors int    `json:"max_contributors"`
+			CreatedAt       string `json:"created_at"`
+		}
+
+		rows := make([]tenantRow, 0, len(tenants))
+		for _, t := range tenants {
+			rows = append(rows, tenantRow{
+				ID:              t.ID,
+				Username:        t.Username,
+				Plan:            t.Plan,
+				Status:          t.Status,
+				MaxContributors: t.MaxContributors,
+				CreatedAt:       t.CreatedAt.Format(time.RFC3339),
+			})
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{"tenants": rows})
+	}
+}
+
 func adminUpdatePlanHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !adminAuth(w, r) {
 			return
 		}
 
-		tenantID := r.PathValue("id")
-		if tenantID == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing tenant id"})
+		username := r.PathValue("username")
+		if username == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing username"})
+			return
+		}
+
+		tn, err := tenant.GetTenantByUsername(r.Context(), db, username)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "tenant not found"})
 			return
 		}
 
@@ -63,18 +105,18 @@ func adminUpdatePlanHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		tn, err := tenant.UpdateTenantPlan(r.Context(), db, tenantID, req.Plan, p.MaxContributors)
+		updated, err := tenant.UpdateTenantPlan(r.Context(), db, tn.ID, req.Plan, p.MaxContributors)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update plan"})
 			return
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
-			"tenant_id":        tn.ID,
-			"username":         tn.Username,
-			"plan":             tn.Plan,
-			"max_contributors": tn.MaxContributors,
-			"updated_at":       tn.UpdatedAt.Format(time.RFC3339),
+			"tenant_id":        updated.ID,
+			"username":         updated.Username,
+			"plan":             updated.Plan,
+			"max_contributors": updated.MaxContributors,
+			"updated_at":       updated.UpdatedAt.Format(time.RFC3339),
 		})
 	}
 }
@@ -85,9 +127,15 @@ func adminUpdateStatusHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		tenantID := r.PathValue("id")
-		if tenantID == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing tenant id"})
+		username := r.PathValue("username")
+		if username == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing username"})
+			return
+		}
+
+		tn, err := tenant.GetTenantByUsername(r.Context(), db, username)
+		if err != nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "tenant not found"})
 			return
 		}
 
@@ -106,17 +154,17 @@ func adminUpdateStatusHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		tn, err := tenant.UpdateTenantStatus(r.Context(), db, tenantID, req.Status)
+		updated, err := tenant.UpdateTenantStatus(r.Context(), db, tn.ID, req.Status)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update status"})
 			return
 		}
 
 		writeJSON(w, http.StatusOK, map[string]any{
-			"tenant_id":  tn.ID,
-			"username":   tn.Username,
-			"status":     tn.Status,
-			"updated_at": tn.UpdatedAt.Format(time.RFC3339),
+			"tenant_id":  updated.ID,
+			"username":   updated.Username,
+			"status":     updated.Status,
+			"updated_at": updated.UpdatedAt.Format(time.RFC3339),
 		})
 	}
 }
