@@ -1,6 +1,10 @@
 package score
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/thingzio/devtrace/pkg/model"
+)
 
 func TestComputeSuspended(t *testing.T) {
 	s := InputSignals{
@@ -8,7 +12,7 @@ func TestComputeSuspended(t *testing.T) {
 		AgeDays:   1000,
 		Commits:   500,
 	}
-	if got := Compute(s, false); got != 0 {
+	if got := Compute(s, false, nil); got != 0 {
 		t.Errorf("suspended account: got %f, want 0", got)
 	}
 }
@@ -35,7 +39,7 @@ func TestComputeEstablished(t *testing.T) {
 		UnverifiedCommits: 10,
 		OrgMember:         true,
 	}
-	got := Compute(s, true) // established has repo context
+	got := Compute(s, true, nil) // established has repo context
 	if got < 0.5 || got > 1.0 {
 		t.Errorf("established contributor: got %f, want [0.5, 1.0]", got)
 	}
@@ -45,7 +49,7 @@ func TestComputeNewAccount(t *testing.T) {
 	s := InputSignals{
 		AgeDays: 1,
 	}
-	got := Compute(s, false)
+	got := Compute(s, false, nil)
 	if got >= 0.5 {
 		t.Errorf("new empty account: got %f, want < 0.5", got)
 	}
@@ -88,7 +92,7 @@ func TestComputeBounds(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := Compute(tc.s, true) // bounds test with full context
+			got := Compute(tc.s, true, nil) // bounds test with full context
 			if got < 0 || got > 1 {
 				t.Errorf("score out of bounds: got %f", got)
 			}
@@ -106,7 +110,7 @@ func TestCategoryWeightsSum(t *testing.T) {
 }
 
 func TestCategoriesKeysWithRepo(t *testing.T) {
-	cats := Categories(InputSignals{AgeDays: 365}, true)
+	cats := Categories(InputSignals{AgeDays: 365}, true, nil)
 	expected := []string{"code_provenance", "identity", "engagement", "community", "behavioral"}
 	for _, k := range expected {
 		if _, ok := cats[k]; !ok {
@@ -116,7 +120,7 @@ func TestCategoriesKeysWithRepo(t *testing.T) {
 }
 
 func TestCategoriesKeysWithoutRepo(t *testing.T) {
-	cats := Categories(InputSignals{AgeDays: 365}, false)
+	cats := Categories(InputSignals{AgeDays: 365}, false, nil)
 	expected := []string{"identity", "engagement", "community", "behavioral"}
 	for _, k := range expected {
 		if _, ok := cats[k]; !ok {
@@ -129,10 +133,45 @@ func TestCategoriesKeysWithoutRepo(t *testing.T) {
 }
 
 func TestCategoriesSuspended(t *testing.T) {
-	cats := Categories(InputSignals{Suspended: true, AgeDays: 1000}, false)
+	cats := Categories(InputSignals{Suspended: true, AgeDays: 1000}, false, nil)
 	for k, v := range cats {
 		if v != 0 {
 			t.Errorf("suspended category %s: got %f, want 0", k, v)
 		}
+	}
+}
+
+func TestBehavioralWithBehavior(t *testing.T) {
+	s := InputSignals{
+		AgeDays:           365,
+		PublicRepos:       10,
+		ForkedRepos:       2,
+		RecentPRRepoCount: 3,
+	}
+	b := &model.Behavior{
+		ConsistencyScore: 0.8,
+		ReviewsGiven30d:  5,
+		DistinctRepos90d: 4,
+	}
+
+	withBeh := Compute(s, false, b)
+	withoutBeh := Compute(s, false, nil)
+
+	if withBeh <= withoutBeh {
+		t.Errorf("behavioral signals should improve score: with=%f, without=%f", withBeh, withoutBeh)
+	}
+}
+
+func TestBehavioralNilBehaviorFallback(t *testing.T) {
+	s := InputSignals{
+		AgeDays:           365,
+		PublicRepos:       10,
+		ForkedRepos:       2,
+		RecentPRRepoCount: 3,
+	}
+
+	got := Compute(s, false, nil)
+	if got < 0 || got > 1 {
+		t.Errorf("nil behavior score out of bounds: %f", got)
 	}
 }

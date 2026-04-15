@@ -1,6 +1,10 @@
 package score
 
-import "math"
+import (
+	"math"
+
+	"github.com/thingzio/devtrace/pkg/model"
+)
 
 const (
 	// Category weights (sum to 1.0).
@@ -13,8 +17,11 @@ const (
 	prAcceptWeight    = 0.05
 	followerWeight    = 0.05
 	repoCountWeight   = 0.10
-	burstWeight       = 0.10
-	forkOnlyWeight    = 0.10
+	consistencyWeight    = 0.06
+	reviewParticipWeight = 0.04
+	repoDiversityWeight  = 0.04
+	burstWeight          = 0.03
+	forkOnlyWeight       = 0.03
 
 	// Ceilings and parameters.
 	ageCeilDays              = 730
@@ -29,6 +36,8 @@ const (
 	prCountCeil              = 20.0
 	burstCeil                = 5.0
 	forkOriginalCeil         = 5.0
+	reviewCountCeil          = 10.0
+	repoDiversityCeil        = 8.0
 )
 
 // Exported category weights derived from signal constants.
@@ -37,7 +46,7 @@ var (
 	CategoryIdentityWeight   = ageWeight + associationWeight + profileWeight
 	CategoryEngagementWeight = proportionWeight + recencyWeight + prAcceptWeight
 	CategoryCommunityWeight  = followerWeight + repoCountWeight
-	CategoryBehavioralWeight = burstWeight + forkOnlyWeight
+	CategoryBehavioralWeight = consistencyWeight + reviewParticipWeight + repoDiversityWeight + burstWeight + forkOnlyWeight
 )
 
 // InputSignals holds the raw inputs to the reputation model.
@@ -80,7 +89,7 @@ type InputSignals struct {
 // Compute returns a reputation score in [0.0, 1.0] using the v3 weighted model.
 // When hasRepo is false, repo-dependent signal weights are redistributed across
 // available signals so the score reflects what can actually be evaluated.
-func Compute(s InputSignals, hasRepo bool) float64 {
+func Compute(s InputSignals, hasRepo bool, beh *model.Behavior) float64 {
 	if s.Suspended {
 		return 0
 	}
@@ -134,19 +143,7 @@ func Compute(s InputSignals, hasRepo bool) float64 {
 	rep += logCurve(float64(s.PublicRepos), repoCountCeil) * repoCountWeight
 
 	// --- Category 5: Behavioral (0.20) ---
-	if s.RecentPRRepoCount > 0 && s.AgeDays > 0 {
-		ageMonths := math.Max(float64(s.AgeDays)/30.0, 1.0)
-		burstRate := float64(s.RecentPRRepoCount) / ageMonths
-		rep += (1.0 - clampedRatio(burstRate, burstCeil)) * burstWeight
-	} else {
-		rep += burstWeight
-	}
-
-	totalOwnedRepos := s.PublicRepos
-	if totalOwnedRepos > 0 {
-		originalRepos := float64(totalOwnedRepos - s.ForkedRepos)
-		rep += clampedRatio(originalRepos, forkOriginalCeil) * forkOnlyWeight
-	}
+	rep += behavioralScore(s, beh)
 
 	// Scale up when repo-dependent weights were excluded.
 	rep *= scale
@@ -159,7 +156,7 @@ func Compute(s InputSignals, hasRepo bool) float64 {
 
 // Categories returns per-category scores for the given signals.
 // When hasRepo is false, repo-dependent categories are omitted (not zero).
-func Categories(s InputSignals, hasRepo bool) map[string]float64 {
+func Categories(s InputSignals, hasRepo bool, beh *model.Behavior) map[string]float64 {
 	if s.Suspended {
 		cats := map[string]float64{
 			"identity":   0,
@@ -223,22 +220,46 @@ func Categories(s InputSignals, hasRepo bool) map[string]float64 {
 	cats["community"] = toFixed(community*scale, 4)
 
 	// Behavioral
-	var behavioral float64
+	cats["behavioral"] = toFixed(behavioralScore(s, beh)*scale, 4)
+
+	return cats
+}
+
+// behavioralScore computes the behavioral category (0.20 weight).
+func behavioralScore(s InputSignals, beh *model.Behavior) float64 {
+	var score float64
+
+	// Consistency (0.06) — from GH Archive
+	if beh != nil {
+		score += beh.ConsistencyScore * consistencyWeight
+	}
+
+	// Review participation (0.04) — from GH Archive
+	if beh != nil {
+		score += clampedRatio(float64(beh.ReviewsGiven30d), reviewCountCeil) * reviewParticipWeight
+	}
+
+	// Repo diversity (0.04) — from GH Archive
+	if beh != nil {
+		score += clampedRatio(float64(beh.DistinctRepos90d), repoDiversityCeil) * repoDiversityWeight
+	}
+
+	// Burst rate (0.03) — from GitHub API
 	if s.RecentPRRepoCount > 0 && s.AgeDays > 0 {
 		ageMonths := math.Max(float64(s.AgeDays)/30.0, 1.0)
 		burstRate := float64(s.RecentPRRepoCount) / ageMonths
-		behavioral += (1.0 - clampedRatio(burstRate, burstCeil)) * burstWeight
+		score += (1.0 - clampedRatio(burstRate, burstCeil)) * burstWeight
 	} else {
-		behavioral += burstWeight
+		score += burstWeight
 	}
-	totalOwnedRepos := s.PublicRepos
-	if totalOwnedRepos > 0 {
-		originalRepos := float64(totalOwnedRepos - s.ForkedRepos)
-		behavioral += clampedRatio(originalRepos, forkOriginalCeil) * forkOnlyWeight
-	}
-	cats["behavioral"] = toFixed(behavioral*scale, 4)
 
-	return cats
+	// Fork ratio (0.03) — from GitHub API
+	if s.PublicRepos > 0 {
+		originalRepos := float64(s.PublicRepos - s.ForkedRepos)
+		score += clampedRatio(originalRepos, forkOriginalCeil) * forkOnlyWeight
+	}
+
+	return score
 }
 
 // repoEngagementScore returns the repo-dependent portion of the engagement score
