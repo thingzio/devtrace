@@ -63,6 +63,7 @@ echo "==> Starting devtrace-site on port $SITE_PORT..."
 # GITHUB_TOKEN is required for startup but not used by e2e tests
 # (bot detection, unauth scoring, and HTTP routing don't call GitHub API).
 DATABASE_URL="$DEV_DB" PORT="$SITE_PORT" DEVTRACE_DEBUG=true BASE_URL="http://localhost:$SITE_PORT" \
+  UNAUTH_RATE_LIMIT=100 \
   GITHUB_TOKEN="${GITHUB_TOKEN:-e2e-placeholder}" \
   "$SITE" >"$TMPDIR_E2E/site.log" 2>&1 &
 SITE_PID=$!
