@@ -49,7 +49,7 @@ func ValidateAPIToken(ctx context.Context, db *sql.DB, rawToken string) (*Tenant
 	row := db.QueryRowContext(ctx, `
 		SELECT t.id, t.github_id, t.username, COALESCE(t.email,''), COALESCE(t.avatar_url,''),
 		       COALESCE(t.name,''), COALESCE(t.company,''), COALESCE(t.location,''), COALESCE(t.bio,''),
-		       t.plan, t.max_contributors, t.tos_accepted_at, t.created_at, t.updated_at
+		       t.plan, t.status, t.max_contributors, t.tos_accepted_at, t.created_at, t.updated_at
 		FROM devtrace_api_token at
 		JOIN devtrace_tenant t ON t.id = at.tenant_id
 		WHERE at.token_hash = $1`, hashed)

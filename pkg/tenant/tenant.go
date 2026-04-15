@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+const (
+	StatusActive    = "active"
+	StatusSuspended = "suspended"
+)
+
 type Tenant struct {
 	ID              string
 	GitHubID        int64
@@ -18,6 +23,7 @@ type Tenant struct {
 	Location        string
 	Bio             string
 	Plan            string
+	Status          string
 	MaxContributors int
 	ToSAcceptedAt   *time.Time
 	CreatedAt       time.Time
@@ -31,14 +37,14 @@ func UpsertTenant(ctx context.Context, db *sql.DB, githubID int64, username, ema
 			username=$2, email=$3, avatar_url=$4, name=$5, company=$6, location=$7, bio=$8, updated_at=NOW()
 		RETURNING id, github_id, username, email, avatar_url,
 			COALESCE(name,''), COALESCE(company,''), COALESCE(location,''), COALESCE(bio,''),
-			plan, max_contributors, tos_accepted_at, created_at, updated_at`
+			plan, status, max_contributors, tos_accepted_at, created_at, updated_at`
 	return scanTenant(db.QueryRowContext(ctx, q, githubID, username, email, avatarURL, name, company, location, bio))
 }
 
 func GetTenantByID(ctx context.Context, db *sql.DB, id string) (*Tenant, error) {
 	const q = `SELECT id, github_id, username, email, avatar_url,
 		COALESCE(name,''), COALESCE(company,''), COALESCE(location,''), COALESCE(bio,''),
-		plan, max_contributors, tos_accepted_at, created_at, updated_at
+		plan, status, max_contributors, tos_accepted_at, created_at, updated_at
 		FROM devtrace_tenant WHERE id = $1`
 	return scanTenant(db.QueryRowContext(ctx, q, id))
 }
@@ -46,7 +52,7 @@ func GetTenantByID(ctx context.Context, db *sql.DB, id string) (*Tenant, error) 
 func GetTenantByGitHubID(ctx context.Context, db *sql.DB, githubID int64) (*Tenant, error) {
 	const q = `SELECT id, github_id, username, email, avatar_url,
 		COALESCE(name,''), COALESCE(company,''), COALESCE(location,''), COALESCE(bio,''),
-		plan, max_contributors, tos_accepted_at, created_at, updated_at
+		plan, status, max_contributors, tos_accepted_at, created_at, updated_at
 		FROM devtrace_tenant WHERE github_id = $1`
 	return scanTenant(db.QueryRowContext(ctx, q, githubID))
 }
@@ -73,7 +79,7 @@ func scanTenant(row *sql.Row) (*Tenant, error) {
 	if err := row.Scan(
 		&t.ID, &t.GitHubID, &t.Username, &t.Email, &t.AvatarURL,
 		&t.Name, &t.Company, &t.Location, &t.Bio,
-		&t.Plan, &t.MaxContributors, &tosAccepted, &t.CreatedAt, &t.UpdatedAt,
+		&t.Plan, &t.Status, &t.MaxContributors, &tosAccepted, &t.CreatedAt, &t.UpdatedAt,
 	); err != nil {
 		return nil, fmt.Errorf("scan tenant: %w", err)
 	}
