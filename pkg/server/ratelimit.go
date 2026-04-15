@@ -77,6 +77,26 @@ func (rl *ipRateLimiter) allow(ip string) bool {
 	return v.count <= rl.limit
 }
 
+// allowWithLimit works like allow but uses the given limit instead of rl.limit.
+// This lets callers apply dynamic per-key thresholds (e.g. plan-based limits).
+func (rl *ipRateLimiter) allowWithLimit(key string, limit int) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	v, ok := rl.visitors[key]
+	if !ok || now.After(v.resetAt) {
+		rl.visitors[key] = &visitor{
+			count:   1,
+			resetAt: now.Add(rl.window),
+		}
+		return true
+	}
+
+	v.count++
+	return v.count <= limit
+}
+
 func (rl *ipRateLimiter) retryAfter(ip string) int {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()

@@ -65,6 +65,39 @@ func TestRateLimiter(t *testing.T) {
 	}
 }
 
+func TestAllowWithLimit(t *testing.T) {
+	rl := newIPRateLimiter(100, 1) // high default, irrelevant for allowWithLimit
+	defer close(rl.stop)
+
+	// Dynamic limit of 2 for key "user-a"
+	if !rl.allowWithLimit("user-a", 2) {
+		t.Fatal("request 1: should be allowed")
+	}
+	if !rl.allowWithLimit("user-a", 2) {
+		t.Fatal("request 2: should be allowed")
+	}
+	if rl.allowWithLimit("user-a", 2) {
+		t.Fatal("request 3: should be denied")
+	}
+
+	// Different key should be independent
+	if !rl.allowWithLimit("user-b", 1) {
+		t.Fatal("user-b request 1: should be allowed")
+	}
+	if rl.allowWithLimit("user-b", 1) {
+		t.Fatal("user-b request 2: should be denied")
+	}
+
+	// Count persists across calls — user-a count is now 4, limit 5 allows it
+	if !rl.allowWithLimit("user-a", 5) {
+		t.Fatal("user-a with higher limit: count is 4, should be allowed under limit 5")
+	}
+	// But original limit still enforced
+	if rl.allowWithLimit("user-a", 2) {
+		t.Fatal("user-a back to limit 2: count is 5, should be denied")
+	}
+}
+
 func TestExtractIP(t *testing.T) {
 	tests := []struct {
 		name       string
