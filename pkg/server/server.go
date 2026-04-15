@@ -273,8 +273,8 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 	// Score API — accepts any auth, rate-limited (JSON 429)
 	mux.Handle("GET /api/v1/score/{username}", requireAny(authAwareRateLimit(unauthRL, authRL, false)(scoreHandler(db, store, scoreSvc))))
 
-	// Score history API (trend chart data)
-	mux.Handle("GET /api/v1/score/{username}/history", requireAny(authAwareRateLimit(unauthRL, authRL, false)(historyHandler(store))))
+	// Score history API (trend chart data) — no rate limit, UI-only read
+	mux.Handle("GET /api/v1/score/{username}/history", requireAny(historyHandler(store)))
 
 	// Token management — requires session auth (UI only)
 	mux.Handle("POST /api/v1/token", requireSession(createTokenHandler(db)))
