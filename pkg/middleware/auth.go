@@ -53,6 +53,11 @@ func RequireAuth(db *sql.DB, loginURL string) func(http.Handler) http.Handler {
 				http.Redirect(w, r, loginURL, http.StatusFound)
 				return
 			}
+			if tn.Status == tenant.StatusSuspended {
+				ClearSessionCookie(w)
+				http.Redirect(w, r, loginURL+"?error=suspended", http.StatusFound)
+				return
+			}
 			ctx := context.WithValue(r.Context(), tenantContextKey, tn)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -75,6 +80,10 @@ func RequireAPIToken(db *sql.DB) func(http.Handler) http.Handler {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid api token"})
 				return
 			}
+			if tn.Status == tenant.StatusSuspended {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "account suspended"})
+				return
+			}
 			ctx := context.WithValue(r.Context(), tenantContextKey, tn)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -90,6 +99,10 @@ func RequireAnyAuth(db *sql.DB) func(http.Handler) http.Handler {
 			// Try API token first
 			if token := extractBearerToken(r); token != "" {
 				if tn, err := tenant.ValidateAPIToken(r.Context(), db, token); err == nil {
+					if tn.Status == tenant.StatusSuspended {
+						writeJSON(w, http.StatusForbidden, map[string]string{"error": "account suspended"})
+						return
+					}
 					ctx := context.WithValue(r.Context(), tenantContextKey, tn)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
@@ -102,6 +115,10 @@ func RequireAnyAuth(db *sql.DB) func(http.Handler) http.Handler {
 			// Try session cookie
 			if cookie, err := r.Cookie(SessionCookieName()); err == nil {
 				if tn, err := tenant.ValidateSession(r.Context(), db, cookie.Value); err == nil {
+					if tn.Status == tenant.StatusSuspended {
+						writeJSON(w, http.StatusForbidden, map[string]string{"error": "account suspended"})
+						return
+					}
 					ctx := context.WithValue(r.Context(), tenantContextKey, tn)
 					next.ServeHTTP(w, r.WithContext(ctx))
 					return
