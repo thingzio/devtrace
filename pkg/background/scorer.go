@@ -65,7 +65,6 @@ func StartBackgroundScorer(ctx context.Context, store *postgres.Store, gh ghclie
 
 func runContinuousScorer(ctx context.Context, store scorerStore, gh ghclient.Client,
 	qc quotaChecker, version string, batchSize, minQuotaPct int) {
-
 	for {
 		if ctx.Err() != nil {
 			slog.Info("continuous scorer stopped")

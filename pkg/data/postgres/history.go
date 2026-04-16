@@ -7,33 +7,16 @@ import (
 )
 
 // DailyScoringCount holds one day's scoring count.
-type DailyScoringCount struct {
-	Day   time.Time
-	Count int
-}
+type DailyScoringCount = DailyCount
 
 // DailyScoringCounts returns per-day scoring counts for the last N days.
-func (s *Store) DailyScoringCounts(ctx context.Context, days int) ([]DailyScoringCount, error) {
-	rows, err := s.db.QueryContext(ctx,
+func (s *Store) DailyScoringCounts(ctx context.Context, days int) ([]DailyCount, error) {
+	return s.dailyCounts(ctx,
 		`SELECT DATE(scored_at) AS day, COUNT(*) AS count
 		 FROM devtrace_reputation_history
 		 WHERE scored_at > NOW() - MAKE_INTERVAL(days => $1)
 		 GROUP BY DATE(scored_at)
-		 ORDER BY day ASC`, days)
-	if err != nil {
-		return nil, fmt.Errorf("daily scoring counts: %w", err)
-	}
-	defer rows.Close()
-
-	var result []DailyScoringCount
-	for rows.Next() {
-		var d DailyScoringCount
-		if err := rows.Scan(&d.Day, &d.Count); err != nil {
-			return nil, fmt.Errorf("scan daily scoring count: %w", err)
-		}
-		result = append(result, d)
-	}
-	return result, rows.Err()
+		 ORDER BY day ASC`, days, "daily scoring counts")
 }
 
 // ScoreHistoryEntry represents a single point on a score trend chart.

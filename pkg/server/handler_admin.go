@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -34,6 +35,34 @@ type activityBar struct {
 	Label   string
 	Count   int
 	Percent int
+}
+
+func buildBars(days []time.Time, counts []int) []activityBar {
+	if len(days) == 0 {
+		return nil
+	}
+	maxCount := 0
+	for _, c := range counts {
+		if c > maxCount {
+			maxCount = c
+		}
+	}
+	bars := make([]activityBar, len(days))
+	for i := range days {
+		pct := 0
+		if maxCount > 0 {
+			pct = (counts[i] * 100) / maxCount
+		}
+		if pct < 2 {
+			pct = 2
+		}
+		bars[i] = activityBar{
+			Label:   days[i].Format("01/02"),
+			Count:   counts[i],
+			Percent: pct,
+		}
+	}
+	return bars
 }
 
 func auditLog(action string, tn *tenant.Tenant, path, remoteAddr, detail string) {
@@ -76,117 +105,84 @@ func adminDashboardHandler(store *postgres.Store, pool *ghclient.TokenPool, opts
 			data["FlashUser"] = user
 		}
 
-		ctx := r.Context()
-
 		if store != nil {
-			tenants, err := tenant.ListTenants(ctx, store.DB())
-			if err != nil {
-				slog.Error("admin: list tenants", "error", err)
-			} else {
-				data["Tenants"] = tenants
-			}
-
-			if days, dErr := store.DailyScoringCounts(r.Context(), 7); dErr == nil && len(days) > 0 {
-				maxCount := 0
-				for _, d := range days {
-					if d.Count > maxCount {
-						maxCount = d.Count
-					}
-				}
-				bars := make([]activityBar, len(days))
-				for i, d := range days {
-					pct := 0
-					if maxCount > 0 {
-						pct = (d.Count * 100) / maxCount
-					}
-					if pct < 2 {
-						pct = 2
-					}
-					bars[i] = activityBar{
-						Label:   d.Day.Format("01/02"),
-						Count:   d.Count,
-						Percent: pct,
-					}
-				}
-				data["ScoringBars"] = bars
-			}
-
-			depth, err := store.QueueDepth(ctx)
-			if err != nil {
-				slog.Error("admin: queue depth", "error", err)
-			} else {
-				data["QueueDepth"] = depth
-			}
-
-			stale, err := store.StaleCount(ctx, 7, 30)
-			if err != nil {
-				slog.Error("admin: stale count", "error", err)
-			} else {
-				data["StaleCount"] = stale
-			}
-
-			ps, err := store.PipelineStats(ctx)
-			if err != nil {
-				slog.Error("admin: pipeline stats", "error", err)
-			} else {
-				data["PipelineStats"] = ps
-				data["IngestAge"] = timeSince(ps.LastIngest)
-				data["ScorerAge"] = timeSince(ps.LastScored)
-			}
-
-			if days, dErr := store.DailyActivityCounts(r.Context(), 7); dErr == nil && len(days) > 0 {
-				maxCount := 0
-				for _, d := range days {
-					if d.Count > maxCount {
-						maxCount = d.Count
-					}
-				}
-				bars := make([]activityBar, len(days))
-				for i, d := range days {
-					pct := 0
-					if maxCount > 0 {
-						pct = (d.Count * 100) / maxCount
-					}
-					if pct < 2 {
-						pct = 2 // minimum visible height
-					}
-					bars[i] = activityBar{
-						Label:   d.Day.Format("01/02"),
-						Count:   d.Count,
-						Percent: pct,
-					}
-				}
-				data["ActivityBars"] = bars
-			}
+			loadStoreMetrics(r.Context(), store, data)
 		}
-
 		if pool != nil {
-			quotas := pool.CheckQuotas(r.Context())
-			pct, _ := ghclient.AggregateQuota(quotas)
-			rows := make([]tokenQuotaRow, len(quotas))
-			for i, q := range quotas {
-				rows[i] = tokenQuotaRow{
-					Index:     q.Index,
-					Limit:     q.Limit,
-					Used:      q.Limit - q.Remaining,
-					Remaining: q.Remaining,
-					Error:     q.Error,
-				}
-				if q.Limit > 0 {
-					rows[i].Percent = (q.Remaining * 100) / q.Limit
-				}
-				if !q.Reset.IsZero() {
-					rows[i].Reset = q.Reset.Format("15:04:05")
-				}
-			}
-			data["PoolQuotas"] = rows
-			data["PoolTotal"] = pool.Size()
-			data["PoolActive"] = pool.ActiveCount()
-			data["PoolAggregatePct"] = pct
+			loadPoolQuotas(r.Context(), pool, data)
 		}
 
 		renderTemplate(w, "admin.html", data)
 	}
+}
+
+func loadStoreMetrics(ctx context.Context, store *postgres.Store, data map[string]any) {
+	tenants, err := tenant.ListTenants(ctx, store.DB())
+	if err != nil {
+		slog.Error("admin: list tenants", "error", err)
+	} else {
+		data["Tenants"] = tenants
+	}
+
+	if sc, err := store.DailyScoringCounts(ctx, 7); err == nil {
+		data["ScoringBars"] = dailyCountBars(sc)
+	}
+
+	if depth, err := store.QueueDepth(ctx); err == nil {
+		data["QueueDepth"] = depth
+	}
+
+	if stale, err := store.StaleCount(ctx, 7, 30); err == nil {
+		data["StaleCount"] = stale
+	}
+
+	if ps, err := store.PipelineStats(ctx); err == nil {
+		data["PipelineStats"] = ps
+		data["IngestAge"] = timeSince(ps.LastIngest)
+		data["ScorerAge"] = timeSince(ps.LastScored)
+	}
+
+	if ac, err := store.DailyActivityCounts(ctx, 7); err == nil {
+		data["ActivityBars"] = dailyCountBars(ac)
+	}
+}
+
+func dailyCountBars(dc []postgres.DailyCount) []activityBar {
+	if len(dc) == 0 {
+		return nil
+	}
+	days := make([]time.Time, len(dc))
+	counts := make([]int, len(dc))
+	for i, d := range dc {
+		days[i] = d.Day
+		counts[i] = d.Count
+	}
+	return buildBars(days, counts)
+}
+
+func loadPoolQuotas(ctx context.Context, pool *ghclient.TokenPool, data map[string]any) {
+	quotas := pool.CheckQuotas(ctx)
+	pct, _ := ghclient.AggregateQuota(quotas)
+	rows := make([]tokenQuotaRow, len(quotas))
+	for i, q := range quotas {
+		rows[i] = tokenQuotaRow{
+			Index:     q.Index,
+			Limit:     q.Limit,
+			Used:      q.Limit - q.Remaining,
+			Remaining: q.Remaining,
+			Error:     q.Error,
+		}
+		if q.Limit > 0 {
+			rows[i].Percent = (q.Remaining * 100) / q.Limit
+		}
+		if !q.Reset.IsZero() {
+			rows[i].Reset = q.Reset.Format("15:04:05")
+		}
+	}
+	data["PoolQuotas"] = rows
+	data["PoolTotal"] = pool.Size()
+	data["PoolActive"] = pool.ActiveCount()
+	data["PoolAggregatePct"] = pct
 }
 
 func timeSince(t time.Time) string {
