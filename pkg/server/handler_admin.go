@@ -1,170 +1,195 @@
 package server
 
 import (
-	"crypto/subtle"
 	"database/sql"
-	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
-	"os"
-	"strings"
+	"net/url"
 	"time"
 
+	"github.com/thingzio/devtrace/pkg/data/postgres"
+	ghclient "github.com/thingzio/devtrace/pkg/github"
+	"github.com/thingzio/devtrace/pkg/middleware"
 	"github.com/thingzio/devtrace/pkg/plan"
 	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
-// adminAuth checks the DEVTRACE_ADMIN_API_KEY env var against the Authorization: Bearer header.
-func adminAuth(w http.ResponseWriter, r *http.Request) bool {
-	key := os.Getenv("DEVTRACE_ADMIN_API_KEY")
-	if key == "" {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "admin api not configured"})
-		return false
+func auditLog(action string, tn *tenant.Tenant, path, remoteAddr, detail string) {
+	username := "<anonymous>"
+	if tn != nil {
+		username = tn.Username
 	}
-	token := adminBearerToken(r)
-	if subtle.ConstantTimeCompare([]byte(token), []byte(key)) != 1 {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid admin key"})
-		return false
-	}
-	return true
+	slog.Warn("admin action",
+		"action", action,
+		"admin", username,
+		"path", path,
+		"remote", remoteAddr,
+		"detail", detail,
+	)
 }
 
-func adminBearerToken(r *http.Request) string {
-	auth := r.Header.Get("Authorization")
-	if !strings.HasPrefix(auth, "Bearer ") {
-		return ""
-	}
-	return strings.TrimPrefix(auth, "Bearer ")
-}
-
-func adminListTenantsHandler(db *sql.DB) http.HandlerFunc {
+func adminDashboardHandler(store *postgres.Store, pool *ghclient.TokenPool, opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !adminAuth(w, r) {
+		tn := middleware.TenantFromContext(r.Context())
+		if tn == nil {
+			http.NotFound(w, r)
 			return
 		}
 
-		tenants, err := tenant.ListTenants(r.Context(), db)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list tenants"})
-			return
+		auditLog("view_dashboard", tn, r.URL.Path, r.RemoteAddr, "")
+
+		data := map[string]any{
+			"Title":     "Admin",
+			"Version":   opts.Version,
+			"Commit":    opts.Commit,
+			"Date":      opts.Date,
+			"NavUser":   tn.Username,
+			"NavAvatar": tn.AvatarURL,
 		}
 
-		type tenantRow struct {
-			ID              string `json:"tenant_id"`
-			Username        string `json:"username"`
-			Plan            string `json:"plan"`
-			Status          string `json:"status"`
-			MaxContributors int    `json:"max_contributors"`
-			CreatedAt       string `json:"created_at"`
+		if msg := r.URL.Query().Get("msg"); msg != "" {
+			data["FlashMsg"] = msg
+		}
+		if user := r.URL.Query().Get("user"); user != "" {
+			data["FlashUser"] = user
 		}
 
-		rows := make([]tenantRow, 0, len(tenants))
-		for _, t := range tenants {
-			rows = append(rows, tenantRow{
-				ID:              t.ID,
-				Username:        t.Username,
-				Plan:            t.Plan,
-				Status:          t.Status,
-				MaxContributors: t.MaxContributors,
-				CreatedAt:       t.CreatedAt.Format(time.RFC3339),
-			})
+		ctx := r.Context()
+
+		if store != nil {
+			tenants, err := tenant.ListTenants(ctx, store.DB())
+			if err != nil {
+				slog.Error("admin: list tenants", "error", err)
+			} else {
+				data["Tenants"] = tenants
+			}
+
+			metrics, err := store.ScoringMetrics(ctx)
+			if err != nil {
+				slog.Error("admin: scoring metrics", "error", err)
+			} else {
+				data["ScoringMetrics"] = metrics
+			}
+
+			depth, err := store.QueueDepth(ctx)
+			if err != nil {
+				slog.Error("admin: queue depth", "error", err)
+			} else {
+				data["QueueDepth"] = depth
+			}
+
+			stale, err := store.StaleCount(ctx, 7, 30)
+			if err != nil {
+				slog.Error("admin: stale count", "error", err)
+			} else {
+				data["StaleCount"] = stale
+			}
+
+			ps, err := store.PipelineStats(ctx)
+			if err != nil {
+				slog.Error("admin: pipeline stats", "error", err)
+			} else {
+				data["PipelineStats"] = ps
+				data["IngestAge"] = timeSince(ps.LastIngest)
+				data["ScorerAge"] = timeSince(ps.LastScored)
+			}
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{"tenants": rows})
+		if pool != nil {
+			data["PoolTotal"] = pool.Size()
+			data["PoolActive"] = pool.ActiveCount()
+			data["PoolExhausted"] = pool.Size() - pool.ActiveCount()
+			data["PoolUsage"] = pool.UsageCounts()
+		}
+
+		renderTemplate(w, "admin.html", data)
 	}
 }
 
-func adminUpdatePlanHandler(db *sql.DB) http.HandlerFunc {
+func timeSince(t time.Time) string {
+	if t.IsZero() {
+		return "never"
+	}
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+}
+
+func adminUpdatePlanFormHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !adminAuth(w, r) {
-			return
-		}
+		tn := middleware.TenantFromContext(r.Context())
 
 		username := r.PathValue("username")
+		newPlan := r.FormValue("plan")
+
 		if username == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing username"})
+			http.Redirect(w, r, "/admin?msg=error", http.StatusFound)
 			return
 		}
 
-		tn, lookupErr := tenant.GetTenantByUsername(r.Context(), db, username)
-		if lookupErr != nil {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "tenant not found"})
-			return
-		}
-
-		var req struct {
-			Plan string `json:"plan"`
-		}
-		if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
-			return
-		}
-
-		p, ok := plan.Get(req.Plan)
+		_, ok := plan.Get(newPlan)
 		if !ok {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid plan: must be free, starter, or pro"})
+			http.Redirect(w, r, "/admin?msg=invalid_plan&user="+url.QueryEscape(username), http.StatusFound)
 			return
 		}
 
-		updated, updateErr := tenant.UpdateTenantPlan(r.Context(), db, tn.ID, req.Plan, p.MaxContributors)
-		if updateErr != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update plan"})
+		target, err := tenant.GetTenantByUsername(r.Context(), db, username)
+		if err != nil {
+			http.Redirect(w, r, "/admin?msg=not_found&user="+url.QueryEscape(username), http.StatusFound)
 			return
 		}
 
-		writeJSON(w, http.StatusOK, map[string]any{
-			"tenant_id":        updated.ID,
-			"username":         updated.Username,
-			"plan":             updated.Plan,
-			"max_contributors": updated.MaxContributors,
-			"updated_at":       updated.UpdatedAt.Format(time.RFC3339),
-		})
+		p, _ := plan.Get(newPlan)
+		if _, err := tenant.UpdateTenantPlan(r.Context(), db, target.ID, newPlan, p.MaxContributors); err != nil {
+			slog.Error("admin: update plan", "username", username, "error", err)
+			http.Redirect(w, r, "/admin?msg=error&user="+url.QueryEscape(username), http.StatusFound)
+			return
+		}
+
+		auditLog("update_plan", tn, r.URL.Path, r.RemoteAddr, fmt.Sprintf("user=%s plan=%s", username, newPlan))
+		http.Redirect(w, r, "/admin?msg=plan_updated&user="+url.QueryEscape(username), http.StatusFound)
 	}
 }
 
-func adminUpdateStatusHandler(db *sql.DB) http.HandlerFunc {
+func adminUpdateStatusFormHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !adminAuth(w, r) {
-			return
-		}
+		tn := middleware.TenantFromContext(r.Context())
 
 		username := r.PathValue("username")
+		newStatus := r.FormValue("status")
+
 		if username == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing username"})
+			http.Redirect(w, r, "/admin?msg=error", http.StatusFound)
 			return
 		}
 
-		tn, lookupErr := tenant.GetTenantByUsername(r.Context(), db, username)
-		if lookupErr != nil {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "tenant not found"})
+		if newStatus != tenant.StatusActive && newStatus != tenant.StatusSuspended {
+			http.Redirect(w, r, "/admin?msg=invalid_status&user="+url.QueryEscape(username), http.StatusFound)
 			return
 		}
 
-		var req struct {
-			Status string `json:"status"`
-		}
-		if decErr := json.NewDecoder(r.Body).Decode(&req); decErr != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		target, err := tenant.GetTenantByUsername(r.Context(), db, username)
+		if err != nil {
+			http.Redirect(w, r, "/admin?msg=not_found&user="+url.QueryEscape(username), http.StatusFound)
 			return
 		}
 
-		if req.Status != tenant.StatusActive && req.Status != tenant.StatusSuspended {
-			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "invalid status: must be " + tenant.StatusActive + " or " + tenant.StatusSuspended,
-			})
+		if _, err := tenant.UpdateTenantStatus(r.Context(), db, target.ID, newStatus); err != nil {
+			slog.Error("admin: update status", "username", username, "error", err)
+			http.Redirect(w, r, "/admin?msg=error&user="+url.QueryEscape(username), http.StatusFound)
 			return
 		}
 
-		updated, updateErr := tenant.UpdateTenantStatus(r.Context(), db, tn.ID, req.Status)
-		if updateErr != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update status"})
-			return
-		}
-
-		writeJSON(w, http.StatusOK, map[string]any{
-			"tenant_id":  updated.ID,
-			"username":   updated.Username,
-			"status":     updated.Status,
-			"updated_at": updated.UpdatedAt.Format(time.RFC3339),
-		})
+		auditLog("update_status", tn, r.URL.Path, r.RemoteAddr, fmt.Sprintf("user=%s status=%s", username, newStatus))
+		http.Redirect(w, r, "/admin?msg=status_updated&user="+url.QueryEscape(username), http.StatusFound)
 	}
 }
