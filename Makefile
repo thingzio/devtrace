@@ -61,7 +61,7 @@ lint-yaml: ## Lints YAML files with yamllint
 	yamllint -c .yamllint.yaml $(YAML_FILES)
 
 TF_DIR := infra/saas
-export TF_CLI_CONFIG_FILE := $(TF_DIR)/terraformrc
+export TF_CLI_CONFIG_FILE := $(wildcard $(TF_DIR)/terraformrc)
 
 .PHONY: lint-tf
 lint-tf: ## Scans Terraform for security misconfigurations
