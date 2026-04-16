@@ -62,6 +62,7 @@ type scorerStore interface {
 	RemoveFromQueue(ctx context.Context, username, provider string) error
 	GetStaleContributors(ctx context.Context, lowDays, highDays, limit int) ([]postgres.StaleContributor, error)
 	GetBehavioralSignals(ctx context.Context, username, provider string) (*model.Behavior, error)
+	GetCachedSignals(ctx context.Context, username, provider string) (*score.InputSignals, error)
 	UpsertContributor(ctx context.Context, username, provider string) error
 	SaveScoreHistory(ctx context.Context, username, provider string, value float64, grade string, deep bool) error
 	UpdateReputation(ctx context.Context, username, provider string, value float64, grade, version string, signals *score.InputSignals) error
@@ -314,13 +315,27 @@ func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client
 	var hints *ghclient.ArchiveHints
 	if beh, err := store.GetBehavioralSignals(ctx, username, provider); err == nil && beh != nil {
 		behavior = beh
-		// Background scorer always trusts archive hints to avoid burning
+
+		merged := int64(beh.TotalPRsMerged)
+		closed := int64(beh.TotalPRsClosed)
+		recentRepos := int64(beh.DistinctRepos90d)
+
+		// Use previously cached reputation signals as a floor so that
+		// contributors scored before the archive ingest keep their
+		// correct PR counts even when archive coverage is incomplete.
+		if cached, cerr := store.GetCachedSignals(ctx, username, provider); cerr == nil && cached != nil {
+			merged = max(merged, cached.PRsMerged)
+			closed = max(closed, cached.PRsClosed)
+			recentRepos = max(recentRepos, cached.RecentPRRepoCount)
+		}
+
+		// Background scorer always trusts hints to avoid burning
 		// the scarce Search API quota (30 req/min). The interactive path
 		// in service/score.go uses the ActiveDays threshold instead.
 		hints = &ghclient.ArchiveHints{
-			PRsMerged:         int64(beh.TotalPRsMerged),
-			PRsClosed:         int64(beh.TotalPRsClosed),
-			RecentPRRepoCount: int64(beh.DistinctRepos90d),
+			PRsMerged:         merged,
+			PRsClosed:         closed,
+			RecentPRRepoCount: recentRepos,
 			Trusted:           true,
 		}
 	}

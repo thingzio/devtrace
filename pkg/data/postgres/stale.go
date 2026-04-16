@@ -57,6 +57,26 @@ func (s *Store) StaleCount(ctx context.Context, lowDays, highDays int) (int, err
 	return count, nil
 }
 
+// GetCachedSignals returns the previously stored signals for a contributor.
+// Returns nil when no reputation record exists.
+func (s *Store) GetCachedSignals(ctx context.Context, username, provider string) (*score.InputSignals, error) {
+	var raw []byte
+	err := s.db.QueryRowContext(ctx,
+		`SELECT signals FROM devtrace_reputation WHERE username = $1 AND provider = $2`,
+		username, provider).Scan(&raw)
+	if err != nil {
+		return nil, fmt.Errorf("get cached signals: %w", err)
+	}
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var sig score.InputSignals
+	if err := json.Unmarshal(raw, &sig); err != nil {
+		return nil, fmt.Errorf("unmarshal cached signals: %w", err)
+	}
+	return &sig, nil
+}
+
 // UpdateReputation updates a contributor's reputation after rescoring.
 func (s *Store) UpdateReputation(ctx context.Context, username, provider string, value float64, grade, version string, signals *score.InputSignals) error {
 	signalsJSON, err := json.Marshal(signals)

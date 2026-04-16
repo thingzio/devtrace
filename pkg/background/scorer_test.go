@@ -53,6 +53,10 @@ func (m *mockScorerStore) GetBehavioralSignals(_ context.Context, _, _ string) (
 	return nil, nil
 }
 
+func (m *mockScorerStore) GetCachedSignals(_ context.Context, _, _ string) (*score.InputSignals, error) {
+	return nil, nil
+}
+
 func (m *mockScorerStore) GetStaleContributors(_ context.Context, _, _, limit int) ([]postgres.StaleContributor, error) {
 	if m.staleErr != nil {
 		return nil, m.staleErr
