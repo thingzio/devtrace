@@ -24,6 +24,24 @@ func TestGetStaleContributorsEmpty(t *testing.T) {
 	}
 }
 
+func TestStaleCount(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	count, err := store.StaleCount(ctx, 7, 30)
+	if err != nil {
+		t.Fatalf("stale count: %v", err)
+	}
+	if count < 0 {
+		t.Fatalf("expected non-negative count, got %d", count)
+	}
+	t.Logf("stale count (7/30): %d", count)
+}
+
 func TestUpdateReputation(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()

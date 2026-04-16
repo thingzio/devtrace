@@ -6,6 +6,31 @@ import (
 	"time"
 )
 
+// ScoringMetrics holds time-bucketed scoring counts for the admin dashboard.
+type ScoringMetrics struct {
+	Last1h   int
+	Last24h  int
+	Last72h  int
+	ThisWeek int
+}
+
+// ScoringMetrics returns time-bucketed counts of scores recorded.
+func (s *Store) ScoringMetrics(ctx context.Context) (*ScoringMetrics, error) {
+	var m ScoringMetrics
+	err := s.db.QueryRowContext(ctx,
+		`SELECT
+			COUNT(*) FILTER (WHERE scored_at > NOW() - INTERVAL '1 hour'),
+			COUNT(*) FILTER (WHERE scored_at > NOW() - INTERVAL '24 hours'),
+			COUNT(*) FILTER (WHERE scored_at > NOW() - INTERVAL '72 hours'),
+			COUNT(*) FILTER (WHERE scored_at > DATE_TRUNC('week', NOW()))
+		 FROM devtrace_reputation_history`).Scan(
+		&m.Last1h, &m.Last24h, &m.Last72h, &m.ThisWeek)
+	if err != nil {
+		return nil, fmt.Errorf("scoring metrics: %w", err)
+	}
+	return &m, nil
+}
+
 // ScoreHistoryEntry represents a single point on a score trend chart.
 type ScoreHistoryEntry struct {
 	Score    float64   `json:"score"`

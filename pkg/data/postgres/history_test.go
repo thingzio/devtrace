@@ -5,6 +5,27 @@ import (
 	"testing"
 )
 
+func TestScoringMetrics(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	m, err := store.ScoringMetrics(ctx)
+	if err != nil {
+		t.Fatalf("scoring metrics: %v", err)
+	}
+	if m == nil {
+		t.Fatal("expected non-nil metrics")
+	}
+	if m.Last1h < 0 || m.Last24h < 0 || m.Last72h < 0 || m.ThisWeek < 0 {
+		t.Errorf("expected non-negative counts: %+v", m)
+	}
+	t.Logf("scoring metrics: %+v", m)
+}
+
 func TestSaveAndGetHistory(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()

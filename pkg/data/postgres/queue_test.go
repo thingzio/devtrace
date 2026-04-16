@@ -138,6 +138,44 @@ func TestContributorExists(t *testing.T) {
 		`DELETE FROM devtrace_contributor WHERE username = $1 AND provider = $2`, user, provider)
 }
 
+func TestQueueDepth(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	// Baseline depth (may include rows from other tests).
+	baseline, err := store.QueueDepth(ctx)
+	if err != nil {
+		t.Fatalf("queue depth (baseline): %v", err)
+	}
+	if baseline < 0 {
+		t.Fatalf("expected non-negative depth, got %d", baseline)
+	}
+
+	// Enqueue one entry and verify depth increases.
+	const user = "qdepth-test-user"
+	const provider = "github"
+	_ = store.RemoveFromQueue(ctx, user, provider)
+
+	if err := store.EnqueueForScoring(ctx, user, provider, 3); err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	after, err := store.QueueDepth(ctx)
+	if err != nil {
+		t.Fatalf("queue depth (after enqueue): %v", err)
+	}
+	if after < baseline+1 {
+		t.Errorf("expected depth >= %d, got %d", baseline+1, after)
+	}
+
+	// Clean up.
+	_ = store.RemoveFromQueue(ctx, user, provider)
+}
+
 func TestGetTenantRepos(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()

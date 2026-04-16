@@ -11,6 +11,40 @@ import (
 	"github.com/thingzio/devtrace/pkg/model"
 )
 
+// PipelineStats holds pipeline health metrics inferred from DB timestamps.
+type PipelineStats struct {
+	LastIngest      time.Time
+	LastScored      time.Time
+	TotalActivities int
+}
+
+// PipelineStats returns pipeline health indicators from existing tables.
+func (s *Store) PipelineStats(ctx context.Context) (*PipelineStats, error) {
+	var ps PipelineStats
+	var lastIngest sql.NullTime
+
+	err := s.db.QueryRowContext(ctx,
+		`SELECT MAX(hour), COUNT(*) FROM devtrace_contributor_activity`).Scan(&lastIngest, &ps.TotalActivities)
+	if err != nil {
+		return nil, fmt.Errorf("pipeline stats activity: %w", err)
+	}
+	if lastIngest.Valid {
+		ps.LastIngest = lastIngest.Time
+	}
+
+	var lastScored sql.NullTime
+	err = s.db.QueryRowContext(ctx,
+		`SELECT MAX(scored_at) FROM devtrace_reputation_history`).Scan(&lastScored)
+	if err != nil {
+		return nil, fmt.Errorf("pipeline stats history: %w", err)
+	}
+	if lastScored.Valid {
+		ps.LastScored = lastScored.Time
+	}
+
+	return &ps, nil
+}
+
 // HourlySummary represents one hour of aggregated contributor activity from GH Archive.
 type HourlySummary struct {
 	Username      string

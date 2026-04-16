@@ -79,6 +79,17 @@ func (s *Store) ContributorExists(ctx context.Context, username, provider string
 	return exists, nil
 }
 
+// QueueDepth returns the number of entries in the scoring queue.
+func (s *Store) QueueDepth(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM devtrace_scoring_queue`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("queue depth: %w", err)
+	}
+	return count, nil
+}
+
 // GetTenantRepos returns the set of org/user logins with active GitHub App installations.
 // The ingest job uses this to determine if a repo owner is a tenant.
 func (s *Store) GetTenantRepos(ctx context.Context) (map[string]bool, error) {

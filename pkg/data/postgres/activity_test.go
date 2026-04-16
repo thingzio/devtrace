@@ -8,6 +8,27 @@ import (
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 )
 
+func TestPipelineStats(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	ps, err := store.PipelineStats(ctx)
+	if err != nil {
+		t.Fatalf("pipeline stats: %v", err)
+	}
+	if ps == nil {
+		t.Fatal("expected non-nil pipeline stats")
+	}
+	if ps.TotalActivities < 0 {
+		t.Errorf("expected non-negative total activities, got %d", ps.TotalActivities)
+	}
+	t.Logf("pipeline stats: ingest=%v scored=%v total=%d", ps.LastIngest, ps.LastScored, ps.TotalActivities)
+}
+
 func TestBatchUpsertActivity(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()
@@ -103,7 +124,7 @@ func TestGetBehavioralSignals(t *testing.T) {
 
 	// Insert test data spanning 60 days.
 	now := time.Now().UTC().Truncate(time.Hour)
-	for i := 0; i < 60; i++ {
+	for i := range 60 {
 		h := now.Add(-time.Duration(i) * 24 * time.Hour)
 		repos := []string{"org/repo1"}
 		if i%3 == 0 {
@@ -177,8 +198,8 @@ func TestCompactActivity(t *testing.T) {
 	// Insert hourly rows across 45 days — old enough for 30-day compaction.
 	now := time.Now().UTC().Truncate(time.Hour)
 	var inserted int
-	for day := 0; day < 45; day++ {
-		for hour := 0; hour < 3; hour++ { // 3 rows per day
+	for day := range 45 {
+		for hour := range 3 { // 3 rows per day
 			h := now.Add(-time.Duration(day)*24*time.Hour - time.Duration(hour)*time.Hour)
 			s := postgres.HourlySummary{
 				Username:      user,

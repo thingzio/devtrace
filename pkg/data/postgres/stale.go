@@ -43,6 +43,20 @@ func (s *Store) GetStaleContributors(ctx context.Context, lowDays, highDays, lim
 	return result, rows.Err()
 }
 
+// StaleCount returns the number of contributors whose scores are stale.
+func (s *Store) StaleCount(ctx context.Context, lowDays, highDays int) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM devtrace_reputation
+		 WHERE (score < 0.5 AND scored_at < NOW() - MAKE_INTERVAL(days => $1))
+		    OR (score >= 0.5 AND scored_at < NOW() - MAKE_INTERVAL(days => $2))`,
+		lowDays, highDays).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("stale count: %w", err)
+	}
+	return count, nil
+}
+
 // UpdateReputation updates a contributor's reputation after rescoring.
 func (s *Store) UpdateReputation(ctx context.Context, username, provider string, value float64, grade, version string, signals *score.InputSignals) error {
 	signalsJSON, err := json.Marshal(signals)
