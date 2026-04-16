@@ -174,6 +174,20 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("init GitHub client: %w", err)
 	}
 
+	installNotify := make(chan struct{}, 1)
+
+	var pool *ghclient.TokenPool
+	if pc, ok := ghClient.(*ghclient.PoolClient); ok {
+		pool = pc.Pool()
+
+		// Start background token refresh.
+		appCfg, _ := tenant.LoadGitHubAppConfig()
+		refreshStop := ghclient.StartPoolRefresh(ctx, pool, func(ctx context.Context) ([]ghclient.PoolEntry, error) {
+			return mintPoolEntries(ctx, store, appCfg)
+		}, installNotify, 0)
+		defer refreshStop()
+	}
+
 	// Start background operations (disabled by default for local dev).
 	if config.GetEnvBool("ENABLE_BACKGROUND_OPS") {
 		syncStop := background.StartDevPulseSync(ctx, store)
@@ -205,12 +219,6 @@ func Run(ctx context.Context, opts Options) error {
 		RedirectURL:  config.GetEnv("BASE_URL", "http://localhost:8080") + "/auth/github/callback",
 	}
 
-	var pool *ghclient.TokenPool
-	if pc, ok := ghClient.(*ghclient.PoolClient); ok {
-		pool = pc.Pool()
-	}
-
-	installNotify := make(chan struct{}, 1)
 	mux, routerCleanup := makeRouter(store, scoreSvc, pool, oauthCfg, opts, installNotify)
 	defer routerCleanup()
 
@@ -257,31 +265,12 @@ func Run(ctx context.Context, opts Options) error {
 func buildGitHubClient(ctx context.Context, store *postgres.Store) (ghclient.Client, error) {
 	appCfg, appErr := tenant.LoadGitHubAppConfig()
 
-	// Try to build a token pool from all active GitHub App installations.
 	if appErr == nil && store != nil {
-		installations, err := tenant.GetAllActiveInstallations(ctx, store.DB(), appCfg.AppID)
-		if err == nil && len(installations) > 0 {
-			var tokens []string
-			for _, inst := range installations {
-				tok, err := tenant.MintInstallationToken(ctx, appCfg, inst.InstallationID)
-				if err != nil {
-					slog.Error("skip installation token", "installation_id", inst.InstallationID, "error", err)
-					continue
-				}
-				tokens = append(tokens, tok.Token)
-				slog.Debug("minted installation token", "installation_id", inst.InstallationID, "org", inst.TargetLogin)
-			}
-
-			// Also add GITHUB_TOKEN if set (dev/CI fallback).
-			if pat := config.GetEnv("GITHUB_TOKEN", ""); pat != "" {
-				tokens = append(tokens, pat)
-			}
-
-			if len(tokens) > 0 {
-				pool := ghclient.NewTokenPool(tokens...)
-				slog.Info("using token pool GitHub client", "tokens", pool.Size())
-				return ghclient.NewPoolClient(pool), nil
-			}
+		entries, err := mintPoolEntries(ctx, store, appCfg)
+		if err == nil && len(entries) > 0 {
+			pool := ghclient.NewTokenPoolFromEntries(entries)
+			slog.Info("using token pool GitHub client", "tokens", pool.Size())
+			return ghclient.NewPoolClient(pool), nil
 		}
 	}
 
@@ -294,13 +283,45 @@ func buildGitHubClient(ctx context.Context, store *postgres.Store) (ghclient.Cli
 		}
 	}
 
-	// Fall back to PAT.
 	token := config.GetEnv("GITHUB_TOKEN", "")
 	if token == "" {
 		return nil, fmt.Errorf("GITHUB_TOKEN or GitHub App config required")
 	}
 	slog.Info("using PAT GitHub client")
 	return ghclient.NewPATClient(ctx, token), nil
+}
+
+// mintPoolEntries loads all active installations, mints tokens, and returns pool entries.
+func mintPoolEntries(ctx context.Context, store *postgres.Store, appCfg *tenant.GitHubAppConfig) ([]ghclient.PoolEntry, error) {
+	installations, err := tenant.GetAllActiveInstallations(ctx, store.DB(), appCfg.AppID)
+	if err != nil {
+		return nil, fmt.Errorf("list installations: %w", err)
+	}
+
+	var entries []ghclient.PoolEntry
+	for _, inst := range installations {
+		tok, err := tenant.MintInstallationToken(ctx, appCfg, inst.InstallationID)
+		if err != nil {
+			slog.Error("skip installation token", "installation_id", inst.InstallationID, "error", err)
+			continue
+		}
+		entries = append(entries, ghclient.PoolEntry{
+			InstallationID: inst.InstallationID,
+			Label:          inst.TargetLogin,
+			Token:          tok.Token,
+			ExpiresAt:      tok.ExpiresAt,
+		})
+		slog.Debug("minted installation token", "installation_id", inst.InstallationID, "org", inst.TargetLogin)
+	}
+
+	if pat := config.GetEnv("GITHUB_TOKEN", ""); pat != "" {
+		entries = append(entries, ghclient.PoolEntry{
+			Label: "PAT",
+			Token: pat,
+		})
+	}
+
+	return entries, nil
 }
 
 func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghclient.TokenPool, oauthCfg *oauth.Config, opts Options, installNotify chan<- struct{}) (*http.ServeMux, func()) {
