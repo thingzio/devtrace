@@ -29,6 +29,21 @@ func TestPipelineStats(t *testing.T) {
 	t.Logf("pipeline stats: ingest=%v scored=%v total=%d", ps.LastIngest, ps.LastScored, ps.TotalActivities)
 }
 
+func TestDailyActivityCounts(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	if err := store.Migrate(ctx); err != nil {
+		t.Skipf("migrate: %v", err)
+	}
+
+	counts, err := store.DailyActivityCounts(ctx, 7)
+	if err != nil {
+		t.Fatalf("DailyActivityCounts: %v", err)
+	}
+	// Empty or non-empty depending on test DB state — just verify no error
+	_ = counts
+}
+
 func TestBatchUpsertActivity(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()

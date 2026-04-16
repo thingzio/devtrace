@@ -45,6 +45,36 @@ func (s *Store) PipelineStats(ctx context.Context) (*PipelineStats, error) {
 	return &ps, nil
 }
 
+// DailyActivityCount holds a single day's total activity count.
+type DailyActivityCount struct {
+	Day   time.Time
+	Count int
+}
+
+// DailyActivityCounts returns per-day total activity counts for the last N days.
+func (s *Store) DailyActivityCounts(ctx context.Context, days int) ([]DailyActivityCount, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DATE(hour) AS day, COUNT(*) AS count
+		 FROM devtrace_contributor_activity
+		 WHERE hour > NOW() - MAKE_INTERVAL(days => $1)
+		 GROUP BY DATE(hour)
+		 ORDER BY day ASC`, days)
+	if err != nil {
+		return nil, fmt.Errorf("daily activity counts: %w", err)
+	}
+	defer rows.Close()
+
+	var result []DailyActivityCount
+	for rows.Next() {
+		var d DailyActivityCount
+		if err := rows.Scan(&d.Day, &d.Count); err != nil {
+			return nil, fmt.Errorf("scan daily count: %w", err)
+		}
+		result = append(result, d)
+	}
+	return result, rows.Err()
+}
+
 // HourlySummary represents one hour of aggregated contributor activity from GH Archive.
 type HourlySummary struct {
 	Username      string

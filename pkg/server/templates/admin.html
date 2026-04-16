@@ -12,10 +12,29 @@
     <h2>Pipeline Health</h2>
     {{if .PipelineStats}}
     <dl>
-      <dt>Last Ingest</dt><dd>{{.IngestAge}}</dd>
-      <dt>Last Scored</dt><dd>{{.ScorerAge}}</dd>
+      <dt>Newest Activity Data</dt><dd>{{.IngestAge}}</dd>
+      <dt>Last Score Written</dt><dd>{{.ScorerAge}}</dd>
       <dt>Total Activity Records</dt><dd>{{.PipelineStats.TotalActivities}}</dd>
     </dl>
+    {{if .ActivityBars}}
+    <div style="margin-top:1rem;">
+      <h3 style="font-size:0.9rem;color:var(--text-secondary,#8b949e);margin-bottom:0.5rem;">Activity (7 days)</h3>
+      <div style="display:flex;align-items:flex-end;gap:4px;height:80px;">
+        {{range .ActivityBars}}
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;" title="{{.Count}} records">
+          <div style="flex:1;width:100%;display:flex;align-items:flex-end;">
+            <div style="width:100%;background:var(--accent-color,#58a6ff);border-radius:2px 2px 0 0;height:{{.Percent}}%;"></div>
+          </div>
+        </div>
+        {{end}}
+      </div>
+      <div style="display:flex;gap:4px;margin-top:4px;">
+        {{range .ActivityBars}}
+        <div style="flex:1;text-align:center;font-size:0.65rem;color:var(--text-secondary,#8b949e);">{{.Label}}</div>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
     {{else}}<p>No pipeline data available.</p>{{end}}
   </section>
 

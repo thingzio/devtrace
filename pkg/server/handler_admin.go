@@ -20,6 +20,12 @@ const (
 	durationNever = "never"
 )
 
+type activityBar struct {
+	Label   string
+	Count   int
+	Percent int
+}
+
 func auditLog(action string, tn *tenant.Tenant, path, remoteAddr, detail string) {
 	username := anonymousUser
 	if tn != nil {
@@ -98,6 +104,31 @@ func adminDashboardHandler(store *postgres.Store, pool *ghclient.TokenPool, opts
 				data["PipelineStats"] = ps
 				data["IngestAge"] = timeSince(ps.LastIngest)
 				data["ScorerAge"] = timeSince(ps.LastScored)
+			}
+
+			if days, dErr := store.DailyActivityCounts(r.Context(), 7); dErr == nil && len(days) > 0 {
+				maxCount := 0
+				for _, d := range days {
+					if d.Count > maxCount {
+						maxCount = d.Count
+					}
+				}
+				bars := make([]activityBar, len(days))
+				for i, d := range days {
+					pct := 0
+					if maxCount > 0 {
+						pct = (d.Count * 100) / maxCount
+					}
+					if pct < 2 {
+						pct = 2 // minimum visible height
+					}
+					bars[i] = activityBar{
+						Label:   d.Day.Format("01/02"),
+						Count:   d.Count,
+						Percent: pct,
+					}
+				}
+				data["ActivityBars"] = bars
 			}
 		}
 
