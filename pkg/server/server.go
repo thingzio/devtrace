@@ -193,7 +193,13 @@ func Run(ctx context.Context, opts Options) error {
 		scorerStop := background.StartBackgroundScorer(ctx, store, ghClient, opts.Version)
 		defer scorerStop()
 
+		backfillDays := config.GetEnvAsInt("GHARCHIVE_BACKFILL_DAYS", 0)
 		ingestStop := background.StartIngestLoop(ctx, func(ctx context.Context) error {
+			if backfillDays > 0 {
+				if err := ingest.Backfill(ctx, store, backfillDays); err != nil {
+					slog.Error("backfill failed", "error", err)
+				}
+			}
 			return ingest.Run(ctx, store)
 		}, 0)
 		defer ingestStop()
