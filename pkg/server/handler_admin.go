@@ -20,6 +20,16 @@ const (
 	durationNever = "never"
 )
 
+type tokenQuotaRow struct {
+	Index     int
+	Limit     int
+	Used      int
+	Remaining int
+	Percent   int
+	Reset     string
+	Error     string
+}
+
 type activityBar struct {
 	Label   string
 	Count   int
@@ -151,10 +161,28 @@ func adminDashboardHandler(store *postgres.Store, pool *ghclient.TokenPool, opts
 		}
 
 		if pool != nil {
+			quotas := pool.CheckQuotas(r.Context())
+			pct, _ := ghclient.AggregateQuota(quotas)
+			rows := make([]tokenQuotaRow, len(quotas))
+			for i, q := range quotas {
+				rows[i] = tokenQuotaRow{
+					Index:     q.Index,
+					Limit:     q.Limit,
+					Used:      q.Limit - q.Remaining,
+					Remaining: q.Remaining,
+					Error:     q.Error,
+				}
+				if q.Limit > 0 {
+					rows[i].Percent = (q.Remaining * 100) / q.Limit
+				}
+				if !q.Reset.IsZero() {
+					rows[i].Reset = q.Reset.Format("15:04:05")
+				}
+			}
+			data["PoolQuotas"] = rows
 			data["PoolTotal"] = pool.Size()
 			data["PoolActive"] = pool.ActiveCount()
-			data["PoolExhausted"] = pool.Size() - pool.ActiveCount()
-			data["PoolUsage"] = pool.UsageCounts()
+			data["PoolAggregatePct"] = pct
 		}
 
 		renderTemplate(w, "admin.html", data)

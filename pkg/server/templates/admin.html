@@ -67,22 +67,27 @@
 
   <section class="settings-section">
     <h2>Token Pool</h2>
-    {{if .PoolTotal}}
+    {{if .PoolQuotas}}
     <dl>
-      <dt>Total</dt><dd>{{.PoolTotal}}</dd>
-      <dt>Active</dt><dd>{{.PoolActive}}</dd>
-      <dt>Exhausted</dt><dd>{{.PoolExhausted}}</dd>
+      <dt>Tokens</dt><dd>{{.PoolTotal}} total, {{.PoolActive}} active</dd>
+      <dt>Aggregate Quota</dt><dd>{{.PoolAggregatePct}}% remaining</dd>
     </dl>
-    {{if .PoolUsage}}
     <table class="data-table">
-      <thead><tr><th>Token #</th><th>Calls</th></tr></thead>
+      <thead>
+        <tr><th>#</th><th>Limit</th><th>Used</th><th>Remaining</th><th>%</th><th>Reset</th></tr>
+      </thead>
       <tbody>
-        {{range $i, $count := .PoolUsage}}
-        <tr><td>{{$i}}</td><td>{{$count}}</td></tr>
+        {{range .PoolQuotas}}
+        <tr>
+          {{if .Error}}
+          <td>{{.Index}}</td><td colspan="5">{{.Error}}</td>
+          {{else}}
+          <td>{{.Index}}</td><td>{{.Limit}}</td><td>{{.Used}}</td><td>{{.Remaining}}</td><td>{{.Percent}}%</td><td>{{.Reset}}</td>
+          {{end}}
+        </tr>
         {{end}}
       </tbody>
     </table>
-    {{end}}
     {{else}}<p>No token pool configured.</p>{{end}}
   </section>
 
