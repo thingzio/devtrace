@@ -18,8 +18,8 @@ var (
 )
 
 func main() {
-	logging.SetupLogger()
-	slog.Info("starting devtrace-site", "version", version, "commit", commit, "date", date)
+	logging.SetupLogger(version)
+	slog.Info("starting devtrace-site", "commit", commit, "date", date)
 
 	os.Exit(run())
 }

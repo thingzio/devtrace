@@ -82,7 +82,6 @@ func StartBackgroundScorer(ctx context.Context, store *postgres.Store, gh ghclie
 	concurrency := config.GetEnvAsInt("SCORER_CONCURRENCY", defaultConcurrency)
 
 	slog.Info("starting continuous scorer",
-		"version", version,
 		"batch_size", batchSize,
 		"min_quota_pct", minQuotaPct,
 		"concurrency", concurrency,
@@ -118,7 +117,7 @@ func runContinuousScorer(ctx context.Context, store scorerStore, gh ghclient.Cli
 		// Emit periodic stats (non-blocking check).
 		select {
 		case <-statsTicker.C:
-			logScorerStats(ctx, store, stats, version)
+			logScorerStats(ctx, store, stats)
 		default:
 		}
 
@@ -127,7 +126,7 @@ func runContinuousScorer(ctx context.Context, store scorerStore, gh ghclient.Cli
 			quotas := qc.CheckQuotas(ctx)
 			pct, earliestReset := ghclient.AggregateQuota(quotas)
 			if pct < minQuotaPct {
-				logScorerStats(ctx, store, stats, version)
+				logScorerStats(ctx, store, stats)
 				wait := max(time.Until(earliestReset)+jitter(), time.Minute)
 				slog.Warn("scorer pausing: quota below threshold",
 					"aggregate_pct", pct,
@@ -152,7 +151,7 @@ func runContinuousScorer(ctx context.Context, store scorerStore, gh ghclient.Cli
 	}
 }
 
-func logScorerStats(ctx context.Context, store scorerStore, stats *scorerStats, version string) {
+func logScorerStats(ctx context.Context, store scorerStore, stats *scorerStats) {
 	windowScored, windowErrors, windowHints := stats.window()
 	stats.resetWindow()
 
@@ -162,7 +161,6 @@ func logScorerStats(ctx context.Context, store scorerStore, stats *scorerStats, 
 	}
 
 	slog.Info("scorer stats",
-		"version", version,
 		"total_scored", stats.totalScored.Load(),
 		"window_scored", windowScored,
 		"window_errors", windowErrors,
@@ -228,7 +226,6 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client,
 	}
 	if s > 0 || sk > 0 {
 		slog.Info("queue scoring complete",
-			"version", version,
 			"scored", s,
 			"errors", e,
 			"skipped", sk,
@@ -284,7 +281,6 @@ func rescoreStale(ctx context.Context, store scorerStore, gh ghclient.Client,
 		stats.record(s, e, 0)
 	}
 	slog.Info("stale rescoring complete",
-		"version", version,
 		"scored", s,
 		"errors", e,
 		"total", len(stale),
