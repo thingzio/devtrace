@@ -110,6 +110,14 @@ func oauthCallbackHandler(db *sql.DB, cfg *oauth.Config) http.HandlerFunc {
 			http.Redirect(w, r, "/tos", http.StatusFound)
 			return
 		}
+
+		// Nudge users without an app installation to settings.
+		installs, _ := tenant.GetActiveInstallations(r.Context(), db, tn.ID)
+		if len(installs) == 0 {
+			http.Redirect(w, r, "/settings?msg=install_app", http.StatusFound)
+			return
+		}
+
 		http.Redirect(w, r, "/dashboard", http.StatusFound)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/thingzio/devtrace/pkg/config"
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	"github.com/thingzio/devtrace/pkg/middleware"
 	"github.com/thingzio/devtrace/pkg/plan"
@@ -201,6 +202,16 @@ func settingsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			slog.Error("settings: list api tokens", "tenant", tn.ID, "error", err)
 		}
 
+		hasInstall := false
+		if installs, ierr := tenant.GetActiveInstallations(r.Context(), db, tn.ID); ierr == nil && len(installs) > 0 {
+			hasInstall = true
+		}
+
+		appInstallURL := ""
+		if slug := config.GetEnv("GITHUB_APP_SLUG", ""); slug != "" {
+			appInstallURL = "https://github.com/apps/" + slug + "/installations/new"
+		}
+
 		renderTemplate(w, "settings.html", map[string]any{
 			"Title":            "Settings",
 			"Version":          opts.Version,
@@ -221,6 +232,9 @@ func settingsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			"created_at":       tn.CreatedAt.Format("2006-01-02"),
 			"last_login":       lastLogin,
 			"tokens":           tokens,
+			"has_install":      hasInstall,
+			"app_install_url":  appInstallURL,
+			"flash_msg":        r.URL.Query().Get("msg"),
 		})
 	}
 }

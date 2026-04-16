@@ -4,6 +4,14 @@
   <a href="/dashboard" class="back-link">&larr; Dashboard</a>
   <h1>Settings</h1>
 
+  {{if and (not .has_install) .app_install_url}}
+  <section class="settings-section">
+    <h2>GitHub App</h2>
+    <p>Install the DevTrace GitHub App to enable contributor scoring for your repositories.</p>
+    <a href="{{.app_install_url}}" class="btn btn-primary">Install GitHub App</a>
+  </section>
+  {{end}}
+
   <section class="settings-section">
     <h2>Profile</h2>
     <dl>
