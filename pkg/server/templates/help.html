@@ -35,7 +35,7 @@
             <li><strong>Behavioral</strong> &mdash; account age, suspension status, contribution patterns</li>
             <li><strong>Community</strong> &mdash; followers, public repos, fork ratio</li>
             <li><strong>Engagement</strong> &mdash; PRs merged, PRs closed, recent PR activity across repos</li>
-            <li><strong>AI Sensing</strong> &mdash; AI-generated contribution transparency signals</li>
+            <li><strong>AI Sensing</strong> &mdash; AI-generated contribution transparency signals. Pro plans include behavioral heuristics: Velocity Anomaly (recent vs. baseline PR rate), Active Hours (hour-of-day spread), Burst-Vanish (peak/median activity ratio), and Synthetic Risk (composite flag from profile, reviews, and commit patterns).</li>
           </ul>
         </li>
         <li><strong>Risk Summary</strong> &mdash; AI-generated narrative summarizing the contributor's reputation, strengths, and areas of concern.</li>
@@ -138,10 +138,11 @@ export TOKEN=dt_your_token_here</code></pre>
       <h3>Usage Limits</h3>
       <ul>
         <li><strong>Unauthenticated</strong> &mdash; 1 lookup per minute per IP. Sign in with GitHub to unlock higher limits and full features.</li>
-        <li><strong>Free plan</strong> &mdash; 50 unique contributors/month, 60 API requests/hour, basic scoring.</li>
+        <li><strong>Free plan</strong> &mdash; 50 unique contributors/month, 60 API requests/hour, basic scoring with category breakdown and risk summary.</li>
+        <li><strong>Starter plan</strong> &mdash; 500 unique contributors/month, 600 API requests/hour, includes PR authenticity analysis.</li>
+        <li><strong>Pro plan</strong> &mdash; 2,000 unique contributors/month, 2,400 API requests/hour, full AI Sensing with behavioral heuristics (Velocity Anomaly, Active Hours, Burst-Vanish, Synthetic Risk).</li>
         <li><strong>Quota</strong> &mdash; each unique contributor scored counts against your monthly limit. Rescoring the same contributor does not consume additional quota.</li>
         <li><strong>Rate limiting</strong> &mdash; unauthenticated requests are limited to 1 per minute. Authenticated requests are rate-limited per hour based on your plan. When the limit is reached, requests return HTTP 429 with a <code>Retry-After</code> header.</li>
-        <li><strong>Upgrading</strong> &mdash; higher limits are available on paid plans (coming soon).</li>
       </ul>
     </div>
 

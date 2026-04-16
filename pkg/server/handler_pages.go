@@ -12,12 +12,6 @@ import (
 	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
-func stubPageHandler(title string) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		renderTemplate(w, "stub.html", pageData{Title: title})
-	}
-}
-
 var errMessages = map[string]string{
 	"auth_failed":  "Authentication failed. Please try again.",
 	"auth_expired": "Your sign-in session expired. Please try again.",
@@ -264,6 +258,22 @@ func tosAcceptHandler(store *postgres.Store) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, r, "/dashboard", http.StatusFound)
+	}
+}
+
+func changelogPageHandler(opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data := pageData{
+			Title:   "Changelog",
+			Version: opts.Version,
+			Commit:  opts.Commit,
+			Date:    opts.Date,
+		}
+		if tn := middleware.TenantFromContext(r.Context()); tn != nil {
+			data.NavUser = tn.Username
+			data.NavAvatar = tn.AvatarURL
+		}
+		renderTemplate(w, "changelog.html", data)
 	}
 }
 

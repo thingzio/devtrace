@@ -126,10 +126,10 @@ When choosing between approaches, prioritize in this order:
 cmd/devtrace-site/     HTTP server entrypoint (dashboard, OAuth, webhooks, scoring API)
 pkg/server/            HTTP server, handlers, rate limiting, templates
 pkg/server/static/     Frontend: CSS, JS, images (embedded via go:embed)
-pkg/server/templates/  HTML templates: layout, home, landing, scorecard, settings, help
+pkg/server/templates/  HTML templates: layout, home, landing, scorecard, settings, help, changelog, admin
 pkg/score/             Scoring engine: heuristics, grade calculation
 pkg/ingest/            GitHub data ingestion: archive fetching, aggregation, runner
-pkg/background/        Background workers: ingestion scheduler, scoring, sync
+pkg/background/        Background workers: ingestion scheduler, continuous scoring
 pkg/service/           Service layer: score caching, orchestration
 pkg/bot/               Bot detection and analysis
 pkg/claude/            Claude API client for AI-powered risk sensing
@@ -149,7 +149,7 @@ infra/saas/            Terraform for GCP infrastructure
 tools/                 Dev scripts (version bump, e2e, seed, setup)
 ```
 
-Single binary (`devtrace-site`) with embedded background workers. The server handles HTTP requests (dashboard, OAuth, webhooks, scoring API, admin dashboard) while background goroutines run ingestion and scoring pipelines. Admin dashboard at `/admin` is gated by `DEVTRACE_ADMIN_USERS` env var — returns 404 for non-admins.
+Single binary (`devtrace-site`) with embedded background workers. The server handles HTTP requests (dashboard, OAuth, webhooks, scoring API, admin dashboard) while background goroutines run ingestion and continuous scoring pipelines. Admin dashboard at `/admin` is gated by `DEVTRACE_ADMIN_USERS` env var — returns 404 for non-admins. Public pages include changelog (`/changelog`) and help (`/help`).
 
 Data flow: GitHub App webhook → tenant repos → background ingest worker → GitHub Archive/API → PostgreSQL → scoring engine → dashboard/API
 

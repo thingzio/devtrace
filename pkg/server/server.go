@@ -123,7 +123,7 @@ var templateFuncs = template.FuncMap{
 }
 
 func init() {
-	simplePages := []string{"admin.html", "landing.html", "scorecard.html", "tos.html", "settings.html", "stub.html", "help.html", "ratelimit.html"}
+	simplePages := []string{"admin.html", "landing.html", "scorecard.html", "tos.html", "settings.html", "stub.html", "help.html", "ratelimit.html", "changelog.html"}
 	pageTemplates = make(map[string]*template.Template, len(simplePages)+1)
 	for _, p := range simplePages {
 		pageTemplates[p] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
@@ -347,7 +347,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	// Public
 	mux.Handle("GET /{$}", requireAny(landingHandler(opts)))
 	mux.HandleFunc("GET /health", health.Handler())
-	mux.HandleFunc("GET /changelog", stubPageHandler("Changelog"))
+	mux.HandleFunc("GET /changelog", changelogPageHandler(opts))
 	mux.HandleFunc("GET /help", helpPageHandler(db, opts))
 	mux.HandleFunc("POST /help/contact", helpContactHandler(db, opts))
 	mux.Handle("GET /auth/github", oauthRL.wrap(oauthStartHandler(oauthCfg)))

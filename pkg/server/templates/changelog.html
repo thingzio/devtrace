@@ -1,0 +1,55 @@
+{{define "content"}}
+<div class="landing">
+  <div style="max-width:700px;margin:0 auto;padding:0 0 1rem;">
+    <a href="javascript:history.back()" class="back-link">&larr; Back</a>
+  </div>
+  <div class="landing-hero">
+    <h1>Changelog</h1>
+    <p>What's new in DevTrace</p>
+  </div>
+
+  <div style="max-width:700px;margin:0 auto">
+
+    <div class="landing-feature" style="margin-bottom:24px">
+      <h3>April 16, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.11.9</span></h3>
+      <ul>
+        <li><strong>AI Sensing descriptions</strong> &mdash; each behavioral metric card now includes a brief explanation of what it measures and its data requirements.</li>
+        <li><strong>Synthetic Risk details visible by default</strong> &mdash; flag details are now shown inline without requiring a click to expand.</li>
+        <li><strong>Admin dashboard improvements</strong> &mdash; scoring chart now shows hourly granularity (last 12 hours) instead of daily. Added total contributors and total scored counts alongside queue depth and stale contributors.</li>
+        <li><strong>Tenant management</strong> &mdash; admin tenants table now supports search by username or name, sortable columns, pagination (25 per page), and tenant deletion.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:24px">
+      <h3>April 15, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.10.x</span></h3>
+      <ul>
+        <li><strong>AI Sensing (Pro)</strong> &mdash; behavioral heuristics for Pro plan: Velocity Anomaly, Active Hours, Burst-Vanish, and Synthetic Risk composite scoring.</li>
+        <li><strong>Score trend chart</strong> &mdash; contributors scored more than once now show a historical trend chart on their scorecard page.</li>
+        <li><strong>Repository-scoped scoring</strong> &mdash; score contributors in the context of a specific repo with <code>?repo=owner/name</code>.</li>
+        <li><strong>Trusted organizations</strong> &mdash; pass <code>?trusted_orgs=org1&amp;trusted_orgs=org2</code> to boost scores for org members.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:24px">
+      <h3>April 14, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.9.x</span></h3>
+      <ul>
+        <li><strong>Plan tiers</strong> &mdash; Free, Starter, and Pro plans with tiered contributor limits, API rate limits, and feature access.</li>
+        <li><strong>GitHub App integration</strong> &mdash; install the DevTrace GitHub App on your organization to enable background ingestion and continuous scoring.</li>
+        <li><strong>Risk summary</strong> &mdash; AI-generated narrative summarizing each contributor's reputation, strengths, and areas of concern.</li>
+        <li><strong>Score history API</strong> &mdash; <code>/api/v1/score/{username}/history</code> endpoint for trend analysis.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:24px">
+      <h3>April 13, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.8.x</span></h3>
+      <ul>
+        <li><strong>Initial release</strong> &mdash; contributor trust scoring across 22 signals in 5 categories (Identity, Behavioral, Community, Engagement, AI Sensing).</li>
+        <li><strong>Dashboard</strong> &mdash; search and score any GitHub contributor, view quota usage, and recently scored contributors.</li>
+        <li><strong>API access</strong> &mdash; REST API with Bearer token authentication for programmatic scoring.</li>
+        <li><strong>Theme support</strong> &mdash; light, dark, and system appearance modes.</li>
+      </ul>
+    </div>
+
+  </div>
+</div>
+{{end}}
