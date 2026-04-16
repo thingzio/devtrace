@@ -205,7 +205,12 @@ func Run(ctx context.Context, opts Options) error {
 		RedirectURL:  config.GetEnv("BASE_URL", "http://localhost:8080") + "/auth/github/callback",
 	}
 
-	mux, routerCleanup := makeRouter(store, scoreSvc, oauthCfg, opts)
+	var pool *ghclient.TokenPool
+	if pc, ok := ghClient.(*ghclient.PoolClient); ok {
+		pool = pc.Pool()
+	}
+
+	mux, routerCleanup := makeRouter(store, scoreSvc, pool, oauthCfg, opts)
 	defer routerCleanup()
 
 	port := config.GetEnv("PORT", "8080")
@@ -297,7 +302,7 @@ func buildGitHubClient(ctx context.Context, store *postgres.Store) (ghclient.Cli
 	return ghclient.NewPATClient(ctx, token), nil
 }
 
-func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg *oauth.Config, opts Options) (*http.ServeMux, func()) {
+func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghclient.TokenPool, oauthCfg *oauth.Config, opts Options) (*http.ServeMux, func()) {
 	var db *sql.DB
 	if store != nil {
 		db = store.DB()
@@ -360,7 +365,11 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, oauthCfg 
 		mux.HandleFunc("POST /webhook/github", webhookHandler(db, webhookSecret))
 	}
 
-	// Admin dashboard routes — wired in Task 6
+	// Admin — session auth + admin user list, returns 404 for non-admins
+	requireAdmin := middleware.RequireAdmin(db)
+	mux.Handle("GET /admin", requireAdmin(adminDashboardHandler(store, pool, opts)))
+	mux.Handle("POST /admin/tenant/{username}/plan", requireAdmin(adminUpdatePlanFormHandler(db)))
+	mux.Handle("POST /admin/tenant/{username}/status", requireAdmin(adminUpdateStatusFormHandler(db)))
 
 	cleanup := func() {
 		unauthRL.close()
