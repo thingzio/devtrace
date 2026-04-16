@@ -26,6 +26,7 @@ type mockScorerStore struct {
 	upsertErr      error
 	saveHistoryErr error
 	updateRepErr   error
+	queueDepth     int
 }
 
 func (m *mockScorerStore) DequeueForScoring(_ context.Context, limit int) ([]postgres.QueueEntry, error) {
@@ -70,6 +71,10 @@ func (m *mockScorerStore) SaveScoreHistory(_ context.Context, username, _ string
 func (m *mockScorerStore) UpdateReputation(_ context.Context, username, _ string, _ float64, _, _ string, _ *score.InputSignals) error {
 	m.reputations = append(m.reputations, username)
 	return m.updateRepErr
+}
+
+func (m *mockScorerStore) QueueDepth(_ context.Context) (int, error) {
+	return m.queueDepth, nil
 }
 
 // --- mock GitHub client ---

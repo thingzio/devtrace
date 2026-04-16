@@ -32,6 +32,7 @@ type scorerStore interface {
 	UpsertContributor(ctx context.Context, username, provider string) error
 	SaveScoreHistory(ctx context.Context, username, provider string, value float64, grade string, deep bool) error
 	UpdateReputation(ctx context.Context, username, provider string, value float64, grade, version string, signals *score.InputSignals) error
+	QueueDepth(ctx context.Context) (int, error)
 }
 
 // quotaChecker abstracts quota checking for testing.
