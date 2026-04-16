@@ -11,13 +11,30 @@ import (
 
 const tokenResetWindow = 50 * time.Minute // GitHub rate limits reset after 1 hour
 
+const tokenExpiryBuffer = 5 * time.Minute
+
+// PoolEntry describes a token source for the pool.
+type PoolEntry struct {
+	InstallationID int64
+	Label          string    // target login (org/user) or "PAT"
+	Token          string
+	ExpiresAt      time.Time // zero means never expires (PAT)
+}
+
+type poolEntry struct {
+	installationID int64
+	label          string
+	token          string
+	expiresAt      time.Time
+}
+
 // TokenPool manages a pool of GitHub API tokens using round-robin selection.
 // Thread-safe. Supports marking tokens as exhausted after rate limit errors.
 // Exhausted tokens auto-reset after the rate limit window (1 hour).
 // Adapted from DevPulse pkg/data/ghutil/tokenpool.go.
 type TokenPool struct {
 	mu          sync.Mutex
-	tokens      []string
+	entries     []poolEntry
 	counts      []int
 	exhausted   []bool
 	exhaustedAt []time.Time
@@ -27,17 +44,36 @@ type TokenPool struct {
 // NewTokenPool creates a pool from one or more tokens. Tokens can be passed
 // individually or as a single comma-separated string.
 func NewTokenPool(tokens ...string) *TokenPool {
-	var list []string
+	var list []poolEntry
 	for _, t := range tokens {
 		for part := range strings.SplitSeq(t, ",") {
 			part = strings.TrimSpace(part)
 			if part != "" {
-				list = append(list, part)
+				list = append(list, poolEntry{token: part})
 			}
 		}
 	}
 	return &TokenPool{
-		tokens:      list,
+		entries:     list,
+		counts:      make([]int, len(list)),
+		exhausted:   make([]bool, len(list)),
+		exhaustedAt: make([]time.Time, len(list)),
+	}
+}
+
+// NewTokenPoolFromEntries creates a pool from typed entries with metadata.
+func NewTokenPoolFromEntries(entries []PoolEntry) *TokenPool {
+	list := make([]poolEntry, len(entries))
+	for i, e := range entries {
+		list[i] = poolEntry{
+			installationID: e.InstallationID,
+			label:          e.Label,
+			token:          e.Token,
+			expiresAt:      e.ExpiresAt,
+		}
+	}
+	return &TokenPool{
+		entries:     list,
 		counts:      make([]int, len(list)),
 		exhausted:   make([]bool, len(list)),
 		exhaustedAt: make([]time.Time, len(list)),
@@ -46,11 +82,12 @@ func NewTokenPool(tokens ...string) *TokenPool {
 
 // Token returns the next non-exhausted token in the round-robin rotation.
 // Returns "" when all tokens are exhausted or the pool is empty.
+// Entries with a non-zero ExpiresAt that falls within tokenExpiryBuffer are skipped.
 func (p *TokenPool) Token() string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	n := len(p.tokens)
+	n := len(p.entries)
 	if n == 0 {
 		return ""
 	}
@@ -63,10 +100,16 @@ func (p *TokenPool) Token() string {
 		if p.exhausted[idx] && now.Sub(p.exhaustedAt[idx]) > tokenResetWindow {
 			p.exhausted[idx] = false
 		}
-		if !p.exhausted[idx] {
-			p.counts[idx]++
-			return p.tokens[idx]
+		if p.exhausted[idx] {
+			continue
 		}
+		// Skip entries that are near expiry.
+		entry := p.entries[idx]
+		if !entry.expiresAt.IsZero() && now.Add(tokenExpiryBuffer).After(entry.expiresAt) {
+			continue
+		}
+		p.counts[idx]++
+		return entry.token
 	}
 
 	return ""
@@ -77,8 +120,8 @@ func (p *TokenPool) Exhaust(token string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for i, t := range p.tokens {
-		if t == token {
+	for i, e := range p.entries {
+		if e.token == token {
 			p.exhausted[i] = true
 			p.exhaustedAt[i] = time.Now()
 			return
@@ -93,7 +136,7 @@ func (p *TokenPool) ActiveCount() int {
 
 	now := time.Now()
 	count := 0
-	for i := range p.tokens {
+	for i := range p.entries {
 		if !p.exhausted[i] || now.Sub(p.exhaustedAt[i]) > tokenResetWindow {
 			count++
 		}
@@ -105,7 +148,7 @@ func (p *TokenPool) ActiveCount() int {
 func (p *TokenPool) Size() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return len(p.tokens)
+	return len(p.entries)
 }
 
 // UsageCounts returns a copy of per-token call counts (indexed by pool position).
@@ -120,6 +163,7 @@ func (p *TokenPool) UsageCounts() []int {
 // TokenQuota holds rate limit info for a single GitHub API token.
 type TokenQuota struct {
 	Index     int
+	Label     string
 	Limit     int
 	Remaining int
 	Reset     time.Time
@@ -130,14 +174,15 @@ type TokenQuota struct {
 // This endpoint is free (does not count against quota).
 func (p *TokenPool) CheckQuotas(ctx context.Context) []TokenQuota {
 	p.mu.Lock()
-	tokens := make([]string, len(p.tokens))
-	copy(tokens, p.tokens)
+	snapshot := make([]poolEntry, len(p.entries))
+	copy(snapshot, p.entries)
 	p.mu.Unlock()
 
-	quotas := make([]TokenQuota, len(tokens))
-	for i, token := range tokens {
-		quotas[i] = checkTokenRateLimit(ctx, token)
+	quotas := make([]TokenQuota, len(snapshot))
+	for i, entry := range snapshot {
+		quotas[i] = checkTokenRateLimit(ctx, entry.token)
 		quotas[i].Index = i
+		quotas[i].Label = entry.label
 	}
 	return quotas
 }

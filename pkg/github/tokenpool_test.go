@@ -239,6 +239,60 @@ func TestAggregateQuotaEarliestReset(t *testing.T) {
 	}
 }
 
+func TestNewTokenPoolFromEntries(t *testing.T) {
+	t.Parallel()
+	entries := []PoolEntry{
+		{Label: "org-a", Token: "tok-a", ExpiresAt: time.Now().Add(time.Hour)},
+		{Label: "org-b", Token: "tok-b", ExpiresAt: time.Now().Add(time.Hour)},
+		{Label: "PAT", Token: "pat-1"},
+	}
+	pool := NewTokenPoolFromEntries(entries)
+	if pool.Size() != 3 {
+		t.Fatalf("size: got %d, want 3", pool.Size())
+	}
+	if got := pool.Token(); got != "tok-a" {
+		t.Errorf("first: got %q, want tok-a", got)
+	}
+}
+
+func TestPoolEntryExpiry(t *testing.T) {
+	t.Parallel()
+	entries := []PoolEntry{
+		{Label: "expired", Token: "tok-old", ExpiresAt: time.Now().Add(2 * time.Minute)},
+		{Label: "fresh", Token: "tok-new", ExpiresAt: time.Now().Add(time.Hour)},
+	}
+	pool := NewTokenPoolFromEntries(entries)
+	got := pool.Token()
+	if got != "tok-new" {
+		t.Errorf("should skip near-expiry token: got %q, want tok-new", got)
+	}
+}
+
+func TestPoolMixedPATAndInstallation(t *testing.T) {
+	t.Parallel()
+	entries := []PoolEntry{
+		{Label: "org-a", Token: "inst-tok", ExpiresAt: time.Now().Add(2 * time.Minute)},
+		{Label: "PAT", Token: "pat-tok"},
+	}
+	pool := NewTokenPoolFromEntries(entries)
+	got := pool.Token()
+	if got != "pat-tok" {
+		t.Errorf("should skip near-expiry, use PAT: got %q, want pat-tok", got)
+	}
+}
+
+func TestPoolAllExpired(t *testing.T) {
+	t.Parallel()
+	entries := []PoolEntry{
+		{Label: "a", Token: "tok-a", ExpiresAt: time.Now().Add(time.Minute)},
+		{Label: "b", Token: "tok-b", ExpiresAt: time.Now().Add(2 * time.Minute)},
+	}
+	pool := NewTokenPoolFromEntries(entries)
+	if got := pool.Token(); got != "" {
+		t.Errorf("all near-expiry should return empty: got %q", got)
+	}
+}
+
 func TestCheckQuotasEmptyPool(t *testing.T) {
 	t.Parallel()
 	pool := NewTokenPool()
