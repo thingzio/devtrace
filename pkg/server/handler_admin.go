@@ -154,6 +154,14 @@ func loadStoreMetrics(ctx context.Context, store *postgres.Store, data map[strin
 		data["StaleCount"] = stale
 	}
 
+	if tc, err := store.ContributorCount(ctx); err == nil {
+		data["ContributorCount"] = tc
+	}
+
+	if sc, err := store.ScoredCount(ctx); err == nil {
+		data["ScoredCount"] = sc
+	}
+
 	if ps, err := store.PipelineStats(ctx); err == nil {
 		data["PipelineStats"] = ps
 		data["IngestAge"] = timeSince(ps.LastIngest)

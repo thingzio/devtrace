@@ -59,10 +59,12 @@
       </div>
     </div>
     {{end}}
-    <dl>
-      <dt>Queue depth</dt><dd>{{.QueueDepth}}</dd>
-      <dt>Stale contributors</dt><dd>{{.StaleCount}}</dd>
-    </dl>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem 2rem;">
+      <dl><dt>Queue depth</dt><dd>{{.QueueDepth}}</dd></dl>
+      <dl><dt>Total contributors</dt><dd>{{.ContributorCount}}</dd></dl>
+      <dl><dt>Stale contributors</dt><dd>{{.StaleCount}}</dd></dl>
+      <dl><dt>Total scored</dt><dd>{{.ScoredCount}}</dd></dl>
+    </div>
   </section>
 
   <section class="settings-section">

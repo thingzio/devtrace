@@ -90,6 +90,28 @@ func (s *Store) QueueDepth(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// ContributorCount returns the total number of known contributors.
+func (s *Store) ContributorCount(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM devtrace_contributor`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("contributor count: %w", err)
+	}
+	return count, nil
+}
+
+// ScoredCount returns the number of contributors with a reputation score.
+func (s *Store) ScoredCount(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM devtrace_reputation`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("scored count: %w", err)
+	}
+	return count, nil
+}
+
 // GetTenantRepos returns the set of org/user logins with active GitHub App installations.
 // The ingest job uses this to determine if a repo owner is a tenant.
 func (s *Store) GetTenantRepos(ctx context.Context) (map[string]bool, error) {
