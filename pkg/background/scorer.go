@@ -312,14 +312,16 @@ func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client
 	username, provider, version string) error {
 	var behavior *model.Behavior
 	var hints *ghclient.ArchiveHints
-	const minActiveDaysForHints = 7
 	if beh, err := store.GetBehavioralSignals(ctx, username, provider); err == nil && beh != nil {
 		behavior = beh
+		// Background scorer always trusts archive hints to avoid burning
+		// the scarce Search API quota (30 req/min). The interactive path
+		// in service/score.go uses the ActiveDays threshold instead.
 		hints = &ghclient.ArchiveHints{
 			PRsMerged:         int64(beh.TotalPRsMerged),
 			PRsClosed:         int64(beh.TotalPRsClosed),
 			RecentPRRepoCount: int64(beh.DistinctRepos90d),
-			Trusted:           beh.ActiveDays >= minActiveDaysForHints,
+			Trusted:           true,
 		}
 	}
 
