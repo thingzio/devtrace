@@ -167,6 +167,7 @@ Data flow: GitHub App webhook → tenant repos → background ingest worker → 
 - `DEVTRACE_ADMIN_USERS` — comma-separated GitHub usernames for admin access
 - `SCORER_BATCH_SIZE` — scoring queue batch size (default 100)
 - `SCORER_MIN_QUOTA_PCT` — minimum aggregate token quota % before pausing scorer (default 30)
+- `GHARCHIVE_BACKFILL_DAYS` — historical GH Archive backfill depth in days (default 0 = disabled, set to 180 for full coverage)
 - `ANTHROPIC_API_KEY` — optional, enables AI risk sensing
 
 ## CI/CD
