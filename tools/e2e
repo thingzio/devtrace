@@ -33,10 +33,10 @@ go build -mod=vendor -o "$SITE" ./cmd/devtrace-site
 # ==========================================================================
 # Smoke tests (no DB)
 # ==========================================================================
-if output=$(DATABASE_URL="" "$SITE" 2>&1); then
-  err "site-missing-database-url (expected non-zero exit)"
+if output=$(DATABASE_URL="postgres://bad:bad@localhost:1/bad?sslmode=disable&connect_timeout=1" "$SITE" 2>&1); then
+  err "site-unreachable-database (expected non-zero exit)"
 else
-  pass "site-missing-database-url (exits on missing DB)"
+  pass "site-unreachable-database (exits on bad DB)"
 fi
 
 # ==========================================================================
