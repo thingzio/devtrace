@@ -2710,6 +2710,13 @@ section h2 {
 .interp-red   { color: #f85149; background: rgba(248, 81, 73, 0.1); }
 .interp-muted { color: var(--text-secondary, #8b949e); background: transparent; }
 
+.metric-desc {
+  font-size: 0.7rem;
+  color: var(--text-secondary, #8b949e);
+  opacity: 0.7;
+  margin-top: 0.25rem;
+}
+
 .metric-na {
   color: var(--text-secondary, #8b949e);
   opacity: 0.6;
@@ -2728,7 +2735,6 @@ section h2 {
   font-weight: 600;
   padding: 0.25rem 0.75rem;
   border-radius: 9999px;
-  cursor: pointer;
 }
 
 .badge-green  { color: #3fb950; background: rgba(63, 185, 80, 0.15); }

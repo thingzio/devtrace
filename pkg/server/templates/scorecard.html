@@ -67,18 +67,23 @@
   {{if .AISensing}}{{if .AISensing.Behavioral}}
   <section class="ai-sensing">
     <h2>AI Sensing <span class="plan-badge">Pro</span></h2>
+    {{if and (eq .AISensing.Behavioral.VelocityAnomalyRatio 0.0) (eq .AISensing.Behavioral.ActiveHourSpread 0) (eq .AISensing.Behavioral.BurstVanishScore 0.0)}}
+    <p class="metric-desc" style="margin-bottom:0.75rem;">Behavioral metrics require contributor activity data (PRs, reviews, commits) ingested over time. Metrics will populate as data becomes available.</p>
+    {{end}}
     <div class="metric-cards">
       <div class="metric-card">
         {{if eq .AISensing.Behavioral.VelocityAnomalyRatio 0.0}}
         <div class="metric-value metric-na">&mdash;</div>
         <div class="metric-label">Velocity Anomaly</div>
         <div class="metric-interp interp-muted">insufficient data</div>
+        <div class="metric-desc">Requires PR activity over multiple months</div>
         {{else}}
         <div class="metric-value">{{printf "%.2f" .AISensing.Behavioral.VelocityAnomalyRatio}}&times;</div>
         <div class="metric-label">Velocity Anomaly</div>
         <div class="metric-interp {{velocityClass .AISensing.Behavioral.VelocityAnomalyRatio}}">
           {{velocityLabel .AISensing.Behavioral.VelocityAnomalyRatio}}
         </div>
+        <div class="metric-desc">Recent PR rate vs. historical baseline</div>
         {{end}}
       </div>
       <div class="metric-card">
@@ -87,29 +92,32 @@
         <div class="metric-interp {{hourClass .AISensing.Behavioral.ActiveHourSpread}}">
           {{hourLabel .AISensing.Behavioral.ActiveHourSpread}}
         </div>
+        <div class="metric-desc">Distinct hours of activity in last 90 days</div>
       </div>
       <div class="metric-card">
         {{if eq .AISensing.Behavioral.BurstVanishScore 0.0}}
         <div class="metric-value metric-na">&mdash;</div>
         <div class="metric-label">Burst-Vanish</div>
         <div class="metric-interp interp-muted">insufficient data</div>
+        <div class="metric-desc">Requires activity across 2+ weeks</div>
         {{else}}
         <div class="metric-value">{{printf "%.2f" .AISensing.Behavioral.BurstVanishScore}}</div>
         <div class="metric-label">Burst-Vanish</div>
         <div class="metric-interp {{burstClass .AISensing.Behavioral.BurstVanishScore}}">
           {{burstLabel .AISensing.Behavioral.BurstVanishScore}}
         </div>
+        <div class="metric-desc">Peak-to-median weekly activity ratio</div>
         {{end}}
       </div>
     </div>
     <div class="synthetic-risk">
-      <span class="synthetic-badge {{syntheticClass .AISensing.Behavioral.SyntheticRiskFlags}}"
-            onclick="this.parentElement.querySelector('.synthetic-details').classList.toggle('open')">
+      <span class="synthetic-badge {{syntheticClass .AISensing.Behavioral.SyntheticRiskFlags}}">
         {{.AISensing.Behavioral.SyntheticRiskFlags}} flag{{if ne .AISensing.Behavioral.SyntheticRiskFlags 1}}s{{end}}
       </span>
       <span style="margin-left:0.5rem;color:var(--text-secondary);">Synthetic Risk</span>
+      <span class="metric-desc" style="margin-left:0.25rem;">&mdash; composite signal from profile, reviews, and commit patterns</span>
       {{if .AISensing.Behavioral.SyntheticRiskDetails}}
-      <div class="synthetic-details">
+      <div class="synthetic-details open">
         <ul>
           {{range .AISensing.Behavioral.SyntheticRiskDetails}}
           <li>{{prettify .}}</li>
