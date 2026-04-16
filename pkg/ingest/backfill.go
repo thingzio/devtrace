@@ -27,6 +27,13 @@ func Backfill(ctx context.Context, store *postgres.Store, days int) error {
 
 	totalStart := time.Now()
 
+	// Purge queued entries for non-tenant contributors (legacy priority 2).
+	if purged, err := store.PurgeNonTenantQueue(ctx); err != nil {
+		slog.Error("purge non-tenant queue", "error", err)
+	} else if purged > 0 {
+		slog.Info("purged non-tenant queue entries", "count", purged)
+	}
+
 	cursor, _ := store.GetSyncState(ctx, backfillCursorKey)
 	now := time.Now().UTC().Truncate(time.Hour)
 	hours := backfillHours(now, days, cursor)

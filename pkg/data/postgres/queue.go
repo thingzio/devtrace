@@ -79,6 +79,17 @@ func (s *Store) ContributorExists(ctx context.Context, username, provider string
 	return exists, nil
 }
 
+// PurgeNonTenantQueue removes queued entries that were enqueued with priority 2
+// (non-tenant contributors). Returns the number of rows deleted.
+func (s *Store) PurgeNonTenantQueue(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM devtrace_scoring_queue WHERE priority = 2`)
+	if err != nil {
+		return 0, fmt.Errorf("purge non-tenant queue: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // QueueDepth returns the number of entries in the scoring queue.
 func (s *Store) QueueDepth(ctx context.Context) (int, error) {
 	var count int

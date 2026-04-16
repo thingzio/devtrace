@@ -65,6 +65,10 @@ func (m *mockIngestStore) ContributorExists(_ context.Context, username, _ strin
 	return m.existing[username], nil
 }
 
+func (m *mockIngestStore) PurgeNonTenantQueue(_ context.Context) (int64, error) {
+	return 0, nil
+}
+
 func (m *mockIngestStore) CompactActivity(_ context.Context, olderThan time.Duration) (int64, error) {
 	m.compacted = true
 	m.compactAge = olderThan
@@ -114,8 +118,8 @@ func TestQueueContributorsPriority(t *testing.T) {
 	store.existing["existing-other"] = true
 
 	count := queueContributors(context.Background(), store, summaries, store.tenantOrgs)
-	if count != 3 {
-		t.Fatalf("queued %d, want 3 (existing non-tenant skipped)", count)
+	if count != 2 {
+		t.Fatalf("queued %d, want 2 (only tenant-related contributors)", count)
 	}
 
 	// Verify priorities.
@@ -127,8 +131,8 @@ func TestQueueContributorsPriority(t *testing.T) {
 	if p := priorities["new-tenant"]; p != 1 {
 		t.Errorf("new-tenant priority: got %d, want 1", p)
 	}
-	if p := priorities["new-other"]; p != 2 {
-		t.Errorf("new-other priority: got %d, want 2", p)
+	if _, ok := priorities["new-other"]; ok {
+		t.Error("new-other (non-tenant) should not be enqueued")
 	}
 	if p := priorities["existing-user"]; p != 3 {
 		t.Errorf("existing-user priority: got %d, want 3", p)
@@ -195,13 +199,8 @@ func TestProcessHourIntegration(t *testing.T) {
 		t.Errorf("upserted %d summaries, want 2", len(store.upserted))
 	}
 
-	// All new, no tenant repos → all P2.
-	if len(store.enqueued) != 2 {
-		t.Errorf("enqueued %d, want 2", len(store.enqueued))
-	}
-	for _, e := range store.enqueued {
-		if e.priority != 2 {
-			t.Errorf("%s priority: got %d, want 2", e.username, e.priority)
-		}
+	// No tenant repos → nothing enqueued.
+	if len(store.enqueued) != 0 {
+		t.Errorf("enqueued %d, want 0 (no tenant repos)", len(store.enqueued))
 	}
 }

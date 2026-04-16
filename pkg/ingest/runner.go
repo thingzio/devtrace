@@ -25,6 +25,7 @@ type ingestStore interface {
 	BatchUpsertActivity(ctx context.Context, summaries []postgres.HourlySummary) (int, error)
 	EnqueueForScoring(ctx context.Context, username, provider string, priority int) error
 	ContributorExists(ctx context.Context, username, provider string) (bool, error)
+	PurgeNonTenantQueue(ctx context.Context) (int64, error)
 	CompactActivity(ctx context.Context, olderThan time.Duration) (int64, error)
 }
 
@@ -182,16 +183,16 @@ func queueContributors(ctx context.Context, store ingestStore,
 			}
 		}
 
+		if !touchesTenant {
+			continue // only queue contributors active in tenant repos
+		}
+
 		var priority int
 		switch {
-		case !exists && touchesTenant:
-			priority = 1
 		case !exists:
-			priority = 2
-		case touchesTenant:
-			priority = 3
+			priority = 1
 		default:
-			continue
+			priority = 3
 		}
 
 		if err := store.EnqueueForScoring(ctx, s.Username, "github", priority); err != nil {
