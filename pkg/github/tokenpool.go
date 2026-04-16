@@ -182,6 +182,32 @@ func (p *TokenPool) UsageCounts() []int {
 	return out
 }
 
+// NeedsRefresh returns true if any installation token is within the expiry buffer.
+func (p *TokenPool) NeedsRefresh() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	now := time.Now()
+	for _, e := range p.entries {
+		if !e.expiresAt.IsZero() && now.Add(tokenExpiryBuffer).After(e.expiresAt) {
+			return true
+		}
+	}
+	return false
+}
+
+// Labels returns the label for each entry in pool order.
+func (p *TokenPool) Labels() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	labels := make([]string, len(p.entries))
+	for i, e := range p.entries {
+		labels[i] = e.label
+	}
+	return labels
+}
+
 // TokenQuota holds rate limit info for a single GitHub API token.
 type TokenQuota struct {
 	Index     int

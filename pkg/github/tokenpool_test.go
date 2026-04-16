@@ -377,6 +377,60 @@ func TestPoolReplaceConcurrent(t *testing.T) {
 	wg.Wait()
 }
 
+func TestPoolNeedsRefreshExpiringSoon(t *testing.T) {
+	t.Parallel()
+	entries := []PoolEntry{
+		{Label: "ok", Token: "a", ExpiresAt: time.Now().Add(time.Hour)},
+		{Label: "expiring", Token: "b", ExpiresAt: time.Now().Add(3 * time.Minute)},
+	}
+	pool := NewTokenPoolFromEntries(entries)
+	if !pool.NeedsRefresh() {
+		t.Error("should need refresh when token is near expiry")
+	}
+}
+
+func TestPoolNeedsRefreshAllFresh(t *testing.T) {
+	t.Parallel()
+	entries := []PoolEntry{
+		{Label: "a", Token: "a", ExpiresAt: time.Now().Add(time.Hour)},
+		{Label: "b", Token: "b", ExpiresAt: time.Now().Add(time.Hour)},
+	}
+	pool := NewTokenPoolFromEntries(entries)
+	if pool.NeedsRefresh() {
+		t.Error("should not need refresh when all tokens are fresh")
+	}
+}
+
+func TestPoolNeedsRefreshPATOnly(t *testing.T) {
+	t.Parallel()
+	pool := NewTokenPool("pat-token")
+	if pool.NeedsRefresh() {
+		t.Error("PAT-only pool should never need refresh")
+	}
+}
+
+func TestPoolNeedsRefreshEmpty(t *testing.T) {
+	t.Parallel()
+	pool := NewTokenPool()
+	if pool.NeedsRefresh() {
+		t.Error("empty pool should not need refresh")
+	}
+}
+
+func TestPoolLabels(t *testing.T) {
+	t.Parallel()
+	entries := []PoolEntry{
+		{Label: "org-a", Token: "a"},
+		{Label: "PAT", Token: "b"},
+		{Label: "org-c", Token: "c"},
+	}
+	pool := NewTokenPoolFromEntries(entries)
+	labels := pool.Labels()
+	if len(labels) != 3 || labels[0] != "org-a" || labels[1] != "PAT" || labels[2] != "org-c" {
+		t.Errorf("labels: got %v", labels)
+	}
+}
+
 func TestCheckQuotasEmptyPool(t *testing.T) {
 	t.Parallel()
 	pool := NewTokenPool()
