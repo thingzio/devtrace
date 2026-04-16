@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 const (
 	defaultBatchSize   = 100
 	defaultMinQuotaPct = 30
+	defaultConcurrency = 3
 	defaultLowDays     = 7
 	defaultHighDays    = 30
 	emptyQueueSleep    = 30 * time.Second
@@ -76,10 +78,12 @@ type quotaChecker interface {
 func StartBackgroundScorer(ctx context.Context, store *postgres.Store, gh ghclient.Client, version string) func() {
 	batchSize := config.GetEnvAsInt("SCORER_BATCH_SIZE", defaultBatchSize)
 	minQuotaPct := config.GetEnvAsInt("SCORER_MIN_QUOTA_PCT", defaultMinQuotaPct)
+	concurrency := config.GetEnvAsInt("SCORER_CONCURRENCY", defaultConcurrency)
 
 	slog.Info("starting continuous scorer",
 		"batch_size", batchSize,
 		"min_quota_pct", minQuotaPct,
+		"concurrency", concurrency,
 	)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -89,17 +93,32 @@ func StartBackgroundScorer(ctx context.Context, store *postgres.Store, gh ghclie
 		qc = pc.Pool()
 	}
 
-	go runContinuousScorer(ctx, store, gh, qc, version, batchSize, minQuotaPct)
+	go runContinuousScorer(ctx, store, gh, qc, version, batchSize, minQuotaPct, concurrency)
 
 	return cancel
 }
 
 func runContinuousScorer(ctx context.Context, store scorerStore, gh ghclient.Client,
-	qc quotaChecker, version string, batchSize, minQuotaPct int) {
+	qc quotaChecker, version string, batchSize, minQuotaPct, concurrency int) {
+
+	stats := &scorerStats{}
+	statsTicker := time.NewTicker(5 * time.Minute)
+	defer statsTicker.Stop()
+
 	for {
 		if ctx.Err() != nil {
-			slog.Info("continuous scorer stopped")
+			slog.Info("continuous scorer stopped",
+				"total_scored", stats.totalScored.Load(),
+				"total_errors", stats.totalErrors.Load(),
+			)
 			return
+		}
+
+		// Emit periodic stats (non-blocking check).
+		select {
+		case <-statsTicker.C:
+			logScorerStats(ctx, store, stats)
+		default:
 		}
 
 		// Check quota before each batch.
@@ -107,6 +126,7 @@ func runContinuousScorer(ctx context.Context, store scorerStore, gh ghclient.Cli
 			quotas := qc.CheckQuotas(ctx)
 			pct, earliestReset := ghclient.AggregateQuota(quotas)
 			if pct < minQuotaPct {
+				logScorerStats(ctx, store, stats)
 				wait := max(time.Until(earliestReset)+jitter(), time.Minute)
 				slog.Warn("scorer pausing: quota below threshold",
 					"aggregate_pct", pct,
@@ -119,11 +139,11 @@ func runContinuousScorer(ctx context.Context, store scorerStore, gh ghclient.Cli
 		}
 
 		// Phase 1: Drain scoring queue.
-		scored := drainQueue(ctx, store, gh, version, batchSize)
+		scored := drainQueue(ctx, store, gh, stats, version, batchSize, concurrency)
 
 		// Phase 2: Rescore stale contributors if queue was empty.
 		if scored == 0 {
-			staleScored := rescoreStale(ctx, store, gh, version, batchSize)
+			staleScored := rescoreStale(ctx, store, gh, stats, version, batchSize, concurrency)
 			if staleScored == 0 {
 				sleepCtx(ctx, emptyQueueSleep)
 			}
@@ -131,7 +151,26 @@ func runContinuousScorer(ctx context.Context, store scorerStore, gh ghclient.Cli
 	}
 }
 
-func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client, version string, batchSize int) int {
+func logScorerStats(ctx context.Context, store scorerStore, stats *scorerStats) {
+	windowScored, windowErrors, windowHints := stats.window()
+	stats.resetWindow()
+
+	depth := -1
+	if d, err := store.QueueDepth(ctx); err == nil {
+		depth = d
+	}
+
+	slog.Info("scorer stats",
+		"total_scored", stats.totalScored.Load(),
+		"window_scored", windowScored,
+		"window_errors", windowErrors,
+		"window_with_hints", windowHints,
+		"queue_depth", depth,
+	)
+}
+
+func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client,
+	stats *scorerStats, version string, batchSize, concurrency int) int {
 	queued, err := store.DequeueForScoring(ctx, batchSize)
 	if err != nil {
 		slog.Error("dequeue for scoring", "error", err)
@@ -141,25 +180,58 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client, vers
 		return 0
 	}
 
-	var scored int
+	start := time.Now()
+	var scored, errCount, hints atomic.Int32
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+
 	for _, q := range queued {
 		if ctx.Err() != nil {
-			return scored
+			break
 		}
-		if err := scoreContributor(ctx, store, gh, q.Username, q.Provider, version); err != nil {
-			slog.Warn("score queued", "username", q.Username, "priority", q.Priority, "error", err)
-			continue
-		}
-		_ = store.RemoveFromQueue(ctx, q.Username, q.Provider)
-		scored++
+		sem <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			hasHints := false
+			if beh, berr := store.GetBehavioralSignals(ctx, q.Username, q.Provider); berr == nil && beh != nil {
+				hasHints = true
+			}
+
+			if serr := scoreContributor(ctx, store, gh, q.Username, q.Provider, version); serr != nil {
+				slog.Warn("score queued", "username", q.Username, "priority", q.Priority, "error", serr)
+				errCount.Add(1)
+				return
+			}
+			_ = store.RemoveFromQueue(ctx, q.Username, q.Provider)
+			scored.Add(1)
+			if hasHints {
+				hints.Add(1)
+			}
+		}()
 	}
-	if scored > 0 {
-		slog.Info("queue scoring complete", "scored", scored, "total", len(queued))
+	wg.Wait()
+
+	s, e, h := int(scored.Load()), int(errCount.Load()), int(hints.Load())
+	if stats != nil {
+		stats.record(s, e, h)
 	}
-	return scored
+	if s > 0 {
+		slog.Info("queue scoring complete",
+			"scored", s,
+			"errors", e,
+			"with_hints", h,
+			"total", len(queued),
+			"elapsed", time.Since(start).Round(time.Millisecond),
+		)
+	}
+	return s
 }
 
-func rescoreStale(ctx context.Context, store scorerStore, gh ghclient.Client, version string, batchSize int) int {
+func rescoreStale(ctx context.Context, store scorerStore, gh ghclient.Client,
+	stats *scorerStats, version string, batchSize, concurrency int) int {
 	lowDays := config.GetEnvAsInt("SCORER_LOW_STALE_DAYS", defaultLowDays)
 	highDays := config.GetEnvAsInt("SCORER_HIGH_STALE_DAYS", defaultHighDays)
 
@@ -172,19 +244,42 @@ func rescoreStale(ctx context.Context, store scorerStore, gh ghclient.Client, ve
 		return 0
 	}
 
-	var scored int
+	start := time.Now()
+	var scored, errCount atomic.Int32
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+
 	for _, c := range stale {
 		if ctx.Err() != nil {
-			return scored
+			break
 		}
-		if err := scoreContributor(ctx, store, gh, c.Username, c.Provider, version); err != nil {
-			slog.Warn("score stale", "username", c.Username, "error", err)
-			continue
-		}
-		scored++
+		sem <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			if serr := scoreContributor(ctx, store, gh, c.Username, c.Provider, version); serr != nil {
+				slog.Warn("score stale", "username", c.Username, "error", serr)
+				errCount.Add(1)
+				return
+			}
+			scored.Add(1)
+		}()
 	}
-	slog.Info("stale rescoring complete", "scored", scored, "total", len(stale))
-	return scored
+	wg.Wait()
+
+	s, e := int(scored.Load()), int(errCount.Load())
+	if stats != nil {
+		stats.record(s, e, 0)
+	}
+	slog.Info("stale rescoring complete",
+		"scored", s,
+		"errors", e,
+		"total", len(stale),
+		"elapsed", time.Since(start).Round(time.Millisecond),
+	)
+	return s
 }
 
 // scoreContributor fetches signals, computes a score, and persists the result.

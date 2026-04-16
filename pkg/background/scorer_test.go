@@ -3,6 +3,7 @@ package background
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 // --- mock store ---
 
 type mockScorerStore struct {
+	mu             sync.Mutex
 	queue          []postgres.QueueEntry
 	stale          []postgres.StaleContributor
 	dequeueErr     error
@@ -40,7 +42,9 @@ func (m *mockScorerStore) DequeueForScoring(_ context.Context, limit int) ([]pos
 }
 
 func (m *mockScorerStore) RemoveFromQueue(_ context.Context, username, _ string) error {
+	m.mu.Lock()
 	m.removed = append(m.removed, username)
+	m.mu.Unlock()
 	return nil
 }
 
@@ -59,17 +63,23 @@ func (m *mockScorerStore) GetStaleContributors(_ context.Context, _, _, limit in
 }
 
 func (m *mockScorerStore) UpsertContributor(_ context.Context, username, _ string) error {
+	m.mu.Lock()
 	m.upserted = append(m.upserted, username)
+	m.mu.Unlock()
 	return m.upsertErr
 }
 
 func (m *mockScorerStore) SaveScoreHistory(_ context.Context, username, _ string, _ float64, _ string, _ bool) error {
+	m.mu.Lock()
 	m.scored = append(m.scored, username)
+	m.mu.Unlock()
 	return m.saveHistoryErr
 }
 
 func (m *mockScorerStore) UpdateReputation(_ context.Context, username, _ string, _ float64, _, _ string, _ *score.InputSignals) error {
+	m.mu.Lock()
 	m.reputations = append(m.reputations, username)
+	m.mu.Unlock()
 	return m.updateRepErr
 }
 
@@ -200,7 +210,7 @@ func TestDrainQueueScoresAndRemoves(t *testing.T) {
 	}
 	gh := &mockGHClient{signals: &score.InputSignals{AgeDays: 365, PRsMerged: 5}}
 
-	scored := drainQueue(context.Background(), store, gh, testVersion, 100)
+	scored := drainQueue(context.Background(), store, gh, nil, testVersion, 100, 1)
 	if scored != 2 {
 		t.Errorf("scored = %d, want 2", scored)
 	}
@@ -213,7 +223,7 @@ func TestDrainQueueEmptyQueue(t *testing.T) {
 	t.Parallel()
 	store := &mockScorerStore{queue: nil}
 	gh := &mockGHClient{}
-	scored := drainQueue(context.Background(), store, gh, testVersion, 100)
+	scored := drainQueue(context.Background(), store, gh, nil, testVersion, 100, 1)
 	if scored != 0 {
 		t.Error("expected 0 scored from empty queue")
 	}
@@ -223,7 +233,7 @@ func TestDrainQueueDequeueError(t *testing.T) {
 	t.Parallel()
 	store := &mockScorerStore{dequeueErr: errors.New("db down")}
 	gh := &mockGHClient{}
-	scored := drainQueue(context.Background(), store, gh, testVersion, 100)
+	scored := drainQueue(context.Background(), store, gh, nil, testVersion, 100, 1)
 	if scored != 0 {
 		t.Error("expected 0 scored on error")
 	}
@@ -238,7 +248,7 @@ func TestDrainQueuePartialFailure(t *testing.T) {
 		},
 	}
 	gh := &mockGHClient{err: errors.New("api error")}
-	scored := drainQueue(context.Background(), store, gh, testVersion, 100)
+	scored := drainQueue(context.Background(), store, gh, nil, testVersion, 100, 1)
 	if scored != 0 {
 		t.Error("expected 0 scored on fetch error")
 	}
@@ -255,7 +265,7 @@ func TestRescoreStale(t *testing.T) {
 		},
 	}
 	gh := &mockGHClient{signals: &score.InputSignals{AgeDays: 100}}
-	scored := rescoreStale(context.Background(), store, gh, testVersion, 100)
+	scored := rescoreStale(context.Background(), store, gh, nil, testVersion, 100, 1)
 	if scored != 1 {
 		t.Errorf("scored = %d, want 1", scored)
 	}
@@ -273,11 +283,11 @@ func TestDrainThenStale(t *testing.T) {
 	}
 	gh := &mockGHClient{signals: &score.InputSignals{AgeDays: 100}}
 
-	scored := drainQueue(context.Background(), store, gh, testVersion, 100)
+	scored := drainQueue(context.Background(), store, gh, nil, testVersion, 100, 1)
 	if scored != 1 {
 		t.Errorf("queue scored = %d, want 1", scored)
 	}
-	staleScored := rescoreStale(context.Background(), store, gh, testVersion, 100)
+	staleScored := rescoreStale(context.Background(), store, gh, nil, testVersion, 100, 1)
 	if staleScored != 1 {
 		t.Errorf("stale scored = %d, want 1", staleScored)
 	}
@@ -294,7 +304,7 @@ func TestDrainQueueContextCanceled(t *testing.T) {
 		},
 	}
 	gh := &mockGHClient{signals: &score.InputSignals{AgeDays: 100}}
-	scored := drainQueue(ctx, store, gh, testVersion, 100)
+	scored := drainQueue(ctx, store, gh, nil, testVersion, 100, 1)
 	if scored != 0 {
 		t.Errorf("should not score when canceled, scored %d", scored)
 	}
@@ -308,5 +318,70 @@ func TestSleepCtxCanceled(t *testing.T) {
 	sleepCtx(ctx, 10*time.Second)
 	if time.Since(start) > time.Second {
 		t.Error("sleepCtx should return immediately on canceled context")
+	}
+}
+
+func TestDrainQueueConcurrent(t *testing.T) {
+	t.Parallel()
+	store := &mockScorerStore{
+		queue: []postgres.QueueEntry{
+			{Username: "alice", Provider: "github", Priority: 1},
+			{Username: "bob", Provider: "github", Priority: 2},
+			{Username: "carol", Provider: "github", Priority: 3},
+			{Username: "dave", Provider: "github", Priority: 4},
+		},
+	}
+	gh := &mockGHClient{signals: &score.InputSignals{AgeDays: 365, PRsMerged: 5}}
+	stats := &scorerStats{}
+
+	scored := drainQueue(context.Background(), store, gh, stats, testVersion, 100, 3)
+	if scored != 4 {
+		t.Errorf("scored = %d, want 4", scored)
+	}
+	if len(store.removed) != 4 {
+		t.Errorf("removed %d, want 4", len(store.removed))
+	}
+	if stats.totalScored.Load() != 4 {
+		t.Errorf("stats.totalScored = %d, want 4", stats.totalScored.Load())
+	}
+}
+
+func TestDrainQueueConcurrentPartialFailure(t *testing.T) {
+	t.Parallel()
+	store := &mockScorerStore{
+		queue: []postgres.QueueEntry{
+			{Username: "alice", Provider: "github", Priority: 1},
+			{Username: "bob", Provider: "github", Priority: 2},
+		},
+	}
+	gh := &mockGHClient{err: errors.New("api error")}
+	stats := &scorerStats{}
+
+	scored := drainQueue(context.Background(), store, gh, stats, testVersion, 100, 3)
+	if scored != 0 {
+		t.Error("expected 0 scored on fetch error")
+	}
+	if stats.totalErrors.Load() != 2 {
+		t.Errorf("stats.totalErrors = %d, want 2", stats.totalErrors.Load())
+	}
+}
+
+func TestRescoreStaleConcurrent(t *testing.T) {
+	t.Parallel()
+	store := &mockScorerStore{
+		stale: []postgres.StaleContributor{
+			{Username: "stale1", Provider: "github"},
+			{Username: "stale2", Provider: "github"},
+		},
+	}
+	gh := &mockGHClient{signals: &score.InputSignals{AgeDays: 100}}
+	stats := &scorerStats{}
+
+	scored := rescoreStale(context.Background(), store, gh, stats, testVersion, 100, 3)
+	if scored != 2 {
+		t.Errorf("scored = %d, want 2", scored)
+	}
+	if stats.totalScored.Load() != 2 {
+		t.Errorf("stats.totalScored = %d, want 2", stats.totalScored.Load())
 	}
 }
