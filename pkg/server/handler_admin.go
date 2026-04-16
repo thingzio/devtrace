@@ -23,6 +23,7 @@ const (
 
 type tokenQuotaRow struct {
 	Index     int
+	Label     string
 	Limit     int
 	Used      int
 	Remaining int
@@ -167,6 +168,7 @@ func loadPoolQuotas(ctx context.Context, pool *ghclient.TokenPool, data map[stri
 	for i, q := range quotas {
 		rows[i] = tokenQuotaRow{
 			Index:     q.Index,
+			Label:     q.Label,
 			Limit:     q.Limit,
 			Used:      q.Limit - q.Remaining,
 			Remaining: q.Remaining,

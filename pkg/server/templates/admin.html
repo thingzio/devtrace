@@ -74,15 +74,15 @@
     </dl>
     <table class="data-table">
       <thead>
-        <tr><th>#</th><th>Limit</th><th>Used</th><th>Remaining</th><th>%</th><th>Reset</th></tr>
+        <tr><th>Source</th><th>Limit</th><th>Used</th><th>Remaining</th><th>%</th><th>Reset</th></tr>
       </thead>
       <tbody>
         {{range .PoolQuotas}}
         <tr>
           {{if .Error}}
-          <td>{{.Index}}</td><td colspan="5">{{.Error}}</td>
+          <td>{{if .Label}}{{.Label}}{{else}}#{{.Index}}{{end}}</td><td colspan="5">{{.Error}}</td>
           {{else}}
-          <td>{{.Index}}</td><td>{{.Limit}}</td><td>{{.Used}}</td><td>{{.Remaining}}</td><td>{{.Percent}}%</td><td>{{.Reset}}</td>
+          <td>{{if .Label}}{{.Label}}{{else}}#{{.Index}}{{end}}</td><td>{{.Limit}}</td><td>{{.Used}}</td><td>{{.Remaining}}</td><td>{{.Percent}}%</td><td>{{.Reset}}</td>
           {{end}}
         </tr>
         {{end}}
