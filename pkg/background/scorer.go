@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -180,7 +181,7 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client,
 	}
 
 	start := time.Now()
-	var scored, errCount, hints atomic.Int32
+	var scored, errCount, skipped, hints atomic.Int32
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 
@@ -200,8 +201,14 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client,
 			}
 
 			if serr := scoreContributor(ctx, store, gh, q.Username, q.Provider, version); serr != nil {
-				slog.Warn("score queued", "username", q.Username, "priority", q.Priority, "error", serr)
-				errCount.Add(1)
+				if isTerminalError(serr) {
+					_ = store.RemoveFromQueue(ctx, q.Username, q.Provider)
+					slog.Debug("skipped terminal error", "username", q.Username, "error", serr)
+					skipped.Add(1)
+				} else {
+					slog.Warn("score queued", "username", q.Username, "priority", q.Priority, "error", serr)
+					errCount.Add(1)
+				}
 				return
 			}
 			_ = store.RemoveFromQueue(ctx, q.Username, q.Provider)
@@ -213,14 +220,15 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client,
 	}
 	wg.Wait()
 
-	s, e, h := int(scored.Load()), int(errCount.Load()), int(hints.Load())
+	s, e, sk, h := int(scored.Load()), int(errCount.Load()), int(skipped.Load()), int(hints.Load())
 	if stats != nil {
 		stats.record(s, e, h)
 	}
-	if s > 0 {
+	if s > 0 || sk > 0 {
 		slog.Info("queue scoring complete",
 			"scored", s,
 			"errors", e,
+			"skipped", sk,
 			"with_hints", h,
 			"total", len(queued),
 			"elapsed", time.Since(start).Round(time.Millisecond),
@@ -279,6 +287,24 @@ func rescoreStale(ctx context.Context, store scorerStore, gh ghclient.Client,
 		"elapsed", time.Since(start).Round(time.Millisecond),
 	)
 	return s
+}
+
+// isTerminalError returns true for errors that will never succeed on retry.
+// These users should be removed from the scoring queue.
+func isTerminalError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	// GitHub 404: user deleted or renamed.
+	if strings.Contains(msg, "404 Not Found") {
+		return true
+	}
+	// GitHub 451: legal/DMCA block.
+	if strings.Contains(msg, "451") {
+		return true
+	}
+	return false
 }
 
 // scoreContributor fetches signals, computes a score, and persists the result.

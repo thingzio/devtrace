@@ -3,6 +3,7 @@ package background
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -383,5 +384,70 @@ func TestRescoreStaleConcurrent(t *testing.T) {
 	}
 	if stats.totalScored.Load() != 2 {
 		t.Errorf("stats.totalScored = %d, want 2", stats.totalScored.Load())
+	}
+}
+
+func TestIsTerminalError404(t *testing.T) {
+	t.Parallel()
+	err := fmt.Errorf("fetch signals: fetch user foo: GET https://api.github.com/users/foo: 404 Not Found []")
+	if !isTerminalError(err) {
+		t.Error("404 should be terminal")
+	}
+}
+
+func TestIsTerminalError451(t *testing.T) {
+	t.Parallel()
+	err := fmt.Errorf("fetch signals: 451 Unavailable For Legal Reasons")
+	if !isTerminalError(err) {
+		t.Error("451 should be terminal")
+	}
+}
+
+func TestIsTerminalErrorRateLimit(t *testing.T) {
+	t.Parallel()
+	err := fmt.Errorf("all tokens exhausted: rate limit exceeded")
+	if isTerminalError(err) {
+		t.Error("rate limit should not be terminal")
+	}
+}
+
+func TestIsTerminalErrorGeneric(t *testing.T) {
+	t.Parallel()
+	err := fmt.Errorf("connection timeout")
+	if isTerminalError(err) {
+		t.Error("generic error should not be terminal")
+	}
+}
+
+func TestIsTerminalErrorNil(t *testing.T) {
+	t.Parallel()
+	if isTerminalError(nil) {
+		t.Error("nil should not be terminal")
+	}
+}
+
+func TestDrainQueueTerminalErrorRemoves(t *testing.T) {
+	t.Parallel()
+	store := &mockScorerStore{
+		queue: []postgres.QueueEntry{
+			{Username: "deleted-user", Provider: "github", Priority: 2},
+			{Username: "good-user", Provider: "github", Priority: 2},
+		},
+	}
+	// Client returns 404 for all users — simulates deleted accounts.
+	gh := &mockGHClient{err: fmt.Errorf("fetch user deleted-user: GET https://api.github.com/users/deleted-user: 404 Not Found []")}
+	stats := &scorerStats{}
+
+	scored := drainQueue(context.Background(), store, gh, stats, testVersion, 100, 1)
+	if scored != 0 {
+		t.Errorf("scored = %d, want 0 (all 404)", scored)
+	}
+	// Both should be removed from queue (terminal error).
+	if len(store.removed) != 2 {
+		t.Errorf("removed = %d, want 2 (terminal errors should be removed)", len(store.removed))
+	}
+	// Errors stat should be 0 (terminal errors are skipped, not counted as retryable errors).
+	if stats.totalErrors.Load() != 0 {
+		t.Errorf("totalErrors = %d, want 0", stats.totalErrors.Load())
 	}
 }
