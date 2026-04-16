@@ -134,6 +134,7 @@ func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider str
 		reviewsGiven30d  int
 		issueComments30d int
 		activeWeeks      int
+		activeDays       int
 		activeHourSpread int
 		minHour          sql.NullTime
 		monthsInWindow   sql.NullFloat64
@@ -148,6 +149,7 @@ func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider str
 			COALESCE(SUM(CASE WHEN hour > NOW() - INTERVAL '30 days' THEN reviews_given ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN hour > NOW() - INTERVAL '30 days' THEN issue_comments ELSE 0 END), 0),
 			COUNT(DISTINCT date_trunc('week', hour)),
+			COUNT(DISTINCT DATE(hour)),
 			MIN(hour),
 			EXTRACT(EPOCH FROM NOW() - MIN(hour)) / 2592000.0,
 			COALESCE(COUNT(DISTINCT EXTRACT(hour FROM hour)) FILTER (WHERE hour > NOW() - INTERVAL '90 days'), 0)
@@ -156,7 +158,7 @@ func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider str
 		username, provider,
 	).Scan(&prVelocity30d, &totalPRs, &totalPRsMerged, &totalPRsClosed,
 		&reviewsGiven30d, &issueComments30d,
-		&activeWeeks, &minHour, &monthsInWindow, &activeHourSpread)
+		&activeWeeks, &activeDays, &minHour, &monthsInWindow, &activeHourSpread)
 	if err != nil {
 		return nil, fmt.Errorf("get behavioral signals: %w", err)
 	}
@@ -224,6 +226,7 @@ func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider str
 		ActiveSince:               minHour.Time,
 		TotalPRsMerged:            totalPRsMerged,
 		TotalPRsClosed:            totalPRsClosed,
+		ActiveDays:                activeDays,
 		ActiveHourSpread:          activeHourSpread,
 		BurstVanishPeakRatio:      0,
 		BurstVanishDaysSince:      0,

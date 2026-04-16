@@ -312,12 +312,15 @@ func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client
 	username, provider, version string) error {
 	var behavior *model.Behavior
 	var hints *ghclient.ArchiveHints
+	const minActiveDaysForHints = 7
 	if beh, err := store.GetBehavioralSignals(ctx, username, provider); err == nil && beh != nil {
 		behavior = beh
-		hints = &ghclient.ArchiveHints{
-			PRsMerged:         int64(beh.TotalPRsMerged),
-			PRsClosed:         int64(beh.TotalPRsClosed),
-			RecentPRRepoCount: int64(beh.DistinctRepos90d),
+		if beh.ActiveDays >= minActiveDaysForHints {
+			hints = &ghclient.ArchiveHints{
+				PRsMerged:         int64(beh.TotalPRsMerged),
+				PRsClosed:         int64(beh.TotalPRsClosed),
+				RecentPRRepoCount: int64(beh.DistinctRepos90d),
+			}
 		}
 	}
 

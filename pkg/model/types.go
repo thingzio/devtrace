@@ -102,6 +102,7 @@ type Behavior struct {
 	// Cumulative counts from GH Archive (used by hybrid scoring to skip GitHub Search API).
 	TotalPRsMerged            int     `json:"total_prs_merged"`
 	TotalPRsClosed            int     `json:"total_prs_closed"`
+	ActiveDays                int     `json:"active_days"`
 	ActiveHourSpread          int     `json:"active_hour_spread"`
 	BurstVanishPeakRatio      float64 `json:"-"`
 	BurstVanishDaysSince      int     `json:"-"`

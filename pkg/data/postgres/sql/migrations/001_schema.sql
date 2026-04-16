@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS devtrace_tenant (
     location TEXT,
     bio TEXT,
     plan TEXT NOT NULL DEFAULT 'free',
+    status TEXT NOT NULL DEFAULT 'active',
     max_contributors INTEGER NOT NULL DEFAULT 50,
     tos_accepted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
