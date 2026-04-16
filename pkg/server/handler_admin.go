@@ -21,6 +21,23 @@ const (
 	durationNever = "never"
 )
 
+type tenantRow struct {
+	*tenant.Tenant
+	HasInstall bool
+}
+
+func buildTenantRows(ctx context.Context, db *sql.DB, tenants []*tenant.Tenant) []tenantRow {
+	rows := make([]tenantRow, len(tenants))
+	for i, tn := range tenants {
+		rows[i] = tenantRow{Tenant: tn}
+		installs, err := tenant.GetActiveInstallations(ctx, db, tn.ID)
+		if err == nil && len(installs) > 0 {
+			rows[i].HasInstall = true
+		}
+	}
+	return rows
+}
+
 type tokenQuotaRow struct {
 	Index     int
 	Label     string
@@ -122,7 +139,7 @@ func loadStoreMetrics(ctx context.Context, store *postgres.Store, data map[strin
 	if err != nil {
 		slog.Error("admin: list tenants", "error", err)
 	} else {
-		data["Tenants"] = tenants
+		data["Tenants"] = buildTenantRows(ctx, store.DB(), tenants)
 	}
 
 	if sc, err := store.DailyScoringCounts(ctx, 7); err == nil {

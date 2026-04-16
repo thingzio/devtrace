@@ -99,6 +99,7 @@
         <tr>
           <th>Username</th>
           <th>Plan</th>
+          <th>App</th>
           <th>Status</th>
           <th>Limit</th>
           <th>Created</th>
@@ -120,6 +121,7 @@
               <button type="submit" class="btn btn-sm">Save</button>
             </form>
           </td>
+          <td>{{if .HasInstall}}yes{{else if eq .Plan "free"}}-{{else}}<strong>no</strong>{{end}}</td>
           <td>
             <span class="view-{{.Username}}">{{.Status}}</span>
             <form class="edit-{{.Username}}" method="POST" action="/admin/tenant/{{.Username}}/status" style="display:none">
