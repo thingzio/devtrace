@@ -30,3 +30,6 @@ func (s *Store) dailyCounts(ctx context.Context, query string, days int, label s
 	}
 	return result, rows.Err()
 }
+
+// HourlyCount is an alias for DailyCount used for hourly chart rendering.
+type HourlyCount = DailyCount

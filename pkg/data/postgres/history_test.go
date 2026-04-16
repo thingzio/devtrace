@@ -19,6 +19,20 @@ func TestDailyScoringCounts(t *testing.T) {
 	_ = counts
 }
 
+func TestHourlyScoringCounts(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	if err := store.Migrate(ctx); err != nil {
+		t.Skipf("migrate: %v", err)
+	}
+
+	counts, err := store.HourlyScoringCounts(ctx, 12)
+	if err != nil {
+		t.Fatalf("HourlyScoringCounts: %v", err)
+	}
+	_ = counts
+}
+
 func TestSaveAndGetHistory(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()

@@ -19,6 +19,16 @@ func (s *Store) DailyScoringCounts(ctx context.Context, days int) ([]DailyCount,
 		 ORDER BY day ASC`, days, "daily scoring counts")
 }
 
+// HourlyScoringCounts returns per-hour scoring counts for the last N hours.
+func (s *Store) HourlyScoringCounts(ctx context.Context, hours int) ([]HourlyCount, error) {
+	return s.dailyCounts(ctx,
+		`SELECT DATE_TRUNC('hour', scored_at) AS day, COUNT(*) AS count
+		 FROM devtrace_reputation_history
+		 WHERE scored_at > NOW() - MAKE_INTERVAL(hours => $1)
+		 GROUP BY DATE_TRUNC('hour', scored_at)
+		 ORDER BY day ASC`, hours, "hourly scoring counts")
+}
+
 // ScoreHistoryEntry represents a single point on a score trend chart.
 type ScoreHistoryEntry struct {
 	Score    float64   `json:"score"`

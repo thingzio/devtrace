@@ -55,8 +55,8 @@ type activityBar struct {
 	Percent int
 }
 
-func buildBars(days []time.Time, counts []int) []activityBar {
-	if len(days) == 0 {
+func buildBars(times []time.Time, counts []int, format string) []activityBar {
+	if len(times) == 0 {
 		return nil
 	}
 	maxCount := 0
@@ -65,8 +65,8 @@ func buildBars(days []time.Time, counts []int) []activityBar {
 			maxCount = c
 		}
 	}
-	bars := make([]activityBar, len(days))
-	for i := range days {
+	bars := make([]activityBar, len(times))
+	for i := range times {
 		pct := 0
 		if maxCount > 0 {
 			pct = (counts[i] * 100) / maxCount
@@ -75,7 +75,7 @@ func buildBars(days []time.Time, counts []int) []activityBar {
 			pct = 2
 		}
 		bars[i] = activityBar{
-			Label:   days[i].Format("01/02"),
+			Label:   times[i].Format(format),
 			Count:   counts[i],
 			Percent: pct,
 		}
@@ -142,8 +142,8 @@ func loadStoreMetrics(ctx context.Context, store *postgres.Store, data map[strin
 		data["Tenants"] = buildTenantRows(ctx, store.DB(), tenants)
 	}
 
-	if sc, err := store.DailyScoringCounts(ctx, 7); err == nil {
-		data["ScoringBars"] = dailyCountBars(sc)
+	if sc, err := store.HourlyScoringCounts(ctx, 12); err == nil {
+		data["ScoringBars"] = hourlyCountBars(sc)
 	}
 
 	if depth, err := store.QueueDepth(ctx); err == nil {
@@ -175,7 +175,20 @@ func dailyCountBars(dc []postgres.DailyCount) []activityBar {
 		days[i] = d.Day
 		counts[i] = d.Count
 	}
-	return buildBars(days, counts)
+	return buildBars(days, counts, "01/02")
+}
+
+func hourlyCountBars(hc []postgres.HourlyCount) []activityBar {
+	if len(hc) == 0 {
+		return nil
+	}
+	hours := make([]time.Time, len(hc))
+	counts := make([]int, len(hc))
+	for i, h := range hc {
+		hours[i] = h.Day
+		counts[i] = h.Count
+	}
+	return buildBars(hours, counts, "3pm")
 }
 
 func loadPoolQuotas(ctx context.Context, pool *ghclient.TokenPool, data map[string]any) {
