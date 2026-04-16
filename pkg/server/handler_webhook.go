@@ -16,7 +16,7 @@ import (
 	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
-func webhookHandler(db *sql.DB, secret string) http.HandlerFunc {
+func webhookHandler(db *sql.DB, secret string, installNotify chan<- struct{}) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const maxWebhookBytes = 1 << 20 // 1MB
 		body, err := io.ReadAll(io.LimitReader(r.Body, maxWebhookBytes))
@@ -38,6 +38,7 @@ func webhookHandler(db *sql.DB, secret string) http.HandlerFunc {
 				http.Error(w, "processing failed", http.StatusInternalServerError)
 				return
 			}
+			notifyInstallationChange(installNotify)
 		default:
 			slog.Debug("ignoring webhook event", "event", event)
 		}
@@ -95,4 +96,14 @@ func handleInstallationEvent(ctx context.Context, db *sql.DB, body []byte) error
 	}
 
 	return nil
+}
+
+func notifyInstallationChange(ch chan<- struct{}) {
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
 }

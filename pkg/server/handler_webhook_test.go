@@ -49,7 +49,7 @@ func TestVerifySignature(t *testing.T) {
 }
 
 func TestWebhookHandlerInvalidSignature(t *testing.T) {
-	handler := webhookHandler(nil, "secret")
+	handler := webhookHandler(nil, "secret", nil)
 
 	body := []byte(`{}`)
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/webhook/github", bytes.NewReader(body))
@@ -64,7 +64,7 @@ func TestWebhookHandlerInvalidSignature(t *testing.T) {
 }
 
 func TestWebhookHandlerUnknownEvent(t *testing.T) {
-	handler := webhookHandler(nil, "secret")
+	handler := webhookHandler(nil, "secret", nil)
 
 	body := []byte(`{}`)
 	sig := computeHMAC(body, "secret")

@@ -210,7 +210,8 @@ func Run(ctx context.Context, opts Options) error {
 		pool = pc.Pool()
 	}
 
-	mux, routerCleanup := makeRouter(store, scoreSvc, pool, oauthCfg, opts)
+	installNotify := make(chan struct{}, 1)
+	mux, routerCleanup := makeRouter(store, scoreSvc, pool, oauthCfg, opts, installNotify)
 	defer routerCleanup()
 
 	port := config.GetEnv("PORT", "8080")
@@ -302,7 +303,7 @@ func buildGitHubClient(ctx context.Context, store *postgres.Store) (ghclient.Cli
 	return ghclient.NewPATClient(ctx, token), nil
 }
 
-func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghclient.TokenPool, oauthCfg *oauth.Config, opts Options) (*http.ServeMux, func()) {
+func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghclient.TokenPool, oauthCfg *oauth.Config, opts Options, installNotify chan<- struct{}) (*http.ServeMux, func()) {
 	var db *sql.DB
 	if store != nil {
 		db = store.DB()
@@ -362,7 +363,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	// GitHub App webhook
 	webhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
 	if webhookSecret != "" {
-		mux.HandleFunc("POST /webhook/github", webhookHandler(db, webhookSecret))
+		mux.HandleFunc("POST /webhook/github", webhookHandler(db, webhookSecret, installNotify))
 	}
 
 	// Admin — session auth + admin user list, returns 404 for non-admins
