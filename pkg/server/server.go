@@ -368,6 +368,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	// Admin — session auth + admin user list, returns 404 for non-admins
 	requireAdmin := middleware.RequireAdmin(db)
 	mux.Handle("GET /admin", requireAdmin(adminDashboardHandler(store, pool, opts)))
+	mux.Handle("GET /admin/", requireAdmin(adminDashboardHandler(store, pool, opts)))
 	mux.Handle("POST /admin/tenant/{username}/plan", requireAdmin(adminUpdatePlanFormHandler(db)))
 	mux.Handle("POST /admin/tenant/{username}/status", requireAdmin(adminUpdateStatusFormHandler(db)))
 
