@@ -160,8 +160,8 @@ func TestQueueDepth(t *testing.T) {
 	const provider = "github"
 	_ = store.RemoveFromQueue(ctx, user, provider)
 
-	if err := store.EnqueueForScoring(ctx, user, provider, 3); err != nil {
-		t.Fatalf("enqueue: %v", err)
+	if enqErr := store.EnqueueForScoring(ctx, user, provider, 3); enqErr != nil {
+		t.Fatalf("enqueue: %v", enqErr)
 	}
 
 	after, err := store.QueueDepth(ctx)

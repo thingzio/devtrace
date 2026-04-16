@@ -15,8 +15,13 @@ import (
 	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
+const (
+	anonymousUser = "<anonymous>"
+	durationNever = "never"
+)
+
 func auditLog(action string, tn *tenant.Tenant, path, remoteAddr, detail string) {
-	username := "<anonymous>"
+	username := anonymousUser
 	if tn != nil {
 		username = tn.Username
 	}
@@ -109,7 +114,7 @@ func adminDashboardHandler(store *postgres.Store, pool *ghclient.TokenPool, opts
 
 func timeSince(t time.Time) string {
 	if t.IsZero() {
-		return "never"
+		return durationNever
 	}
 	d := time.Since(t)
 	switch {
@@ -126,6 +131,7 @@ func timeSince(t time.Time) string {
 
 func adminUpdatePlanFormHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 4096)
 		tn := middleware.TenantFromContext(r.Context())
 
 		username := r.PathValue("username")
@@ -162,6 +168,7 @@ func adminUpdatePlanFormHandler(db *sql.DB) http.HandlerFunc {
 
 func adminUpdateStatusFormHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 4096)
 		tn := middleware.TenantFromContext(r.Context())
 
 		username := r.PathValue("username")

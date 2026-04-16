@@ -50,9 +50,11 @@ func RequireAdmin(db *sql.DB) func(http.Handler) http.Handler {
 	}
 }
 
+const anonymousUser = "<anonymous>"
+
 func tenantUsername(tn *tenant.Tenant) string {
 	if tn == nil {
-		return "<anonymous>"
+		return anonymousUser
 	}
 	return tn.Username
 }
