@@ -16,6 +16,11 @@ type contextKey string
 
 const tenantContextKey contextKey = "tenant"
 
+const (
+	cookieSecure = "__Host-session"
+	cookiePlain  = "session"
+)
+
 var (
 	secure     bool
 	cookieName string
@@ -28,9 +33,9 @@ func init() {
 
 func cookieNameFor(isSecure bool) string {
 	if isSecure {
-		return "__Host-session"
+		return cookieSecure
 	}
-	return "session"
+	return cookiePlain
 }
 
 func SessionCookieName() string {
