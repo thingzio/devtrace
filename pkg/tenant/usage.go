@@ -9,10 +9,11 @@ import (
 
 // RecordUsage logs a scoring event for quota tracking.
 // source indicates how the score was triggered ("ui" or "api").
-func RecordUsage(ctx context.Context, db *sql.DB, tenantID, username, provider, source string, deep bool) error {
+// repo is the optional owner/repo context (empty string for global scoring).
+func RecordUsage(ctx context.Context, db *sql.DB, tenantID, username, provider, source string, deep bool, repo string) error {
 	_, err := db.ExecContext(ctx,
-		`INSERT INTO devtrace_usage_record (tenant_id, username_scored, provider, source, deep) VALUES ($1, $2, $3, $4, $5)`,
-		tenantID, username, provider, source, deep)
+		`INSERT INTO devtrace_usage_record (tenant_id, username_scored, provider, source, deep, repo) VALUES ($1, $2, $3, $4, $5, $6)`,
+		tenantID, username, provider, source, deep, repo)
 	if err != nil {
 		return fmt.Errorf("recording usage: %w", err)
 	}
@@ -44,13 +45,14 @@ type RecentScored struct {
 	Provider string
 	Source   string
 	Deep     bool
+	Repo     string
 	ScoredAt time.Time
 }
 
 // GetRecentScored returns the most recently scored contributors for a tenant.
 func GetRecentScored(ctx context.Context, db *sql.DB, tenantID string, limit int) ([]RecentScored, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT DISTINCT ON (username_scored) username_scored, provider, source, deep, scored_at
+		`SELECT DISTINCT ON (username_scored) username_scored, provider, source, deep, repo, scored_at
 		 FROM devtrace_usage_record WHERE tenant_id = $1
 		 ORDER BY username_scored, scored_at DESC`,
 		tenantID)
@@ -62,7 +64,7 @@ func GetRecentScored(ctx context.Context, db *sql.DB, tenantID string, limit int
 	var all []RecentScored
 	for rows.Next() {
 		var r RecentScored
-		if err := rows.Scan(&r.Username, &r.Provider, &r.Source, &r.Deep, &r.ScoredAt); err != nil {
+		if err := rows.Scan(&r.Username, &r.Provider, &r.Source, &r.Deep, &r.Repo, &r.ScoredAt); err != nil {
 			return nil, fmt.Errorf("scan recent: %w", err)
 		}
 		all = append(all, r)

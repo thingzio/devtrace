@@ -46,8 +46,9 @@
     <table class="data-table">
       <thead>
         <tr>
+          <th></th>
           <th>Contributor</th>
-          <th>Provider</th>
+          <th>Repo</th>
           <th>Source</th>
           <th>Deep</th>
           <th>Scored</th>
@@ -56,11 +57,12 @@
       <tbody>
         {{range .recent}}
         <tr>
-          <td><a href="/score/{{.Username}}">{{.Username}}</a></td>
-          <td>{{.Provider}}</td>
+          <td><a href="/score/{{.Username}}{{if .Repo}}?repo={{.Repo}}{{end}}" title="View scorecard">&#x1F517;</a></td>
+          <td>{{.Username}}</td>
+          <td>{{if .Repo}}{{.Repo}}{{else}}&mdash;{{end}}</td>
           <td>{{.Source}}</td>
           <td>{{if .Deep}}&#10003;{{else}}&#10007;{{end}}</td>
-          <td>{{.ScoredAt.Format "2006-01-02 15:04"}}</td>
+          <td><time datetime="{{.ScoredAt.Format "2006-01-02T15:04:05Z"}}">{{.ScoredAt.Format "2006-01-02 15:04"}}</time></td>
         </tr>
         {{end}}
       </tbody>
@@ -71,6 +73,15 @@
   </section>
 </div>
 
-<script>window.addEventListener('pageshow',function(e){if(e.persisted)location.reload()})</script>
+<script>
+document.querySelectorAll('time[datetime]').forEach(function(el){
+  var d=new Date(el.getAttribute('datetime'));
+  if(!isNaN(d)){
+    var pad=function(n){return n<10?'0'+n:n};
+    el.textContent=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+  }
+});
+window.addEventListener('pageshow',function(e){if(e.persisted)location.reload()});
+</script>
 {{template "footer" .}}
 {{end}}

@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS devtrace_usage_record (
     provider TEXT NOT NULL DEFAULT 'github',
     source TEXT NOT NULL DEFAULT 'api',
     deep BOOLEAN NOT NULL DEFAULT FALSE,
+    repo TEXT NOT NULL DEFAULT '',
     scored_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

@@ -81,7 +81,7 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 
 		// Record usage for authenticated users
 		if tn != nil {
-			if uerr := tenant.RecordUsage(r.Context(), store.DB(), tn.ID, username, "github", "ui", false); uerr != nil {
+			if uerr := tenant.RecordUsage(r.Context(), store.DB(), tn.ID, username, "github", "ui", false, repo); uerr != nil {
 				slog.Error("scorecard: record usage", "tenant", tn.ID, "error", uerr)
 			}
 		}

@@ -61,7 +61,7 @@ func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) 
 		// Record usage after successful scoring.
 		if tn != nil && db != nil {
 			provider := "github"
-			if err := tenant.RecordUsage(r.Context(), db, tn.ID, username, provider, "api", false); err != nil {
+			if err := tenant.RecordUsage(r.Context(), db, tn.ID, username, provider, "api", false, repo); err != nil {
 				slog.Error("record usage failed", "tenant", tn.ID, "error", err)
 			}
 		}
