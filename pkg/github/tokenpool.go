@@ -39,6 +39,7 @@ type TokenPool struct {
 	exhausted   []bool
 	exhaustedAt []time.Time
 	current     int
+	refreshCh   chan<- struct{} // optional; signaled when a near-expiry token is selected
 }
 
 // NewTokenPool creates a pool from one or more tokens. Tokens can be passed
@@ -102,6 +103,14 @@ func (p *TokenPool) Replace(entries []PoolEntry) {
 	p.current = 0
 }
 
+// SetRefreshCh sets a channel that Token() will signal (non-blocking) when it
+// selects a near-expiry token, allowing the refresh goroutine to re-mint early.
+func (p *TokenPool) SetRefreshCh(ch chan<- struct{}) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.refreshCh = ch
+}
+
 // Token returns the next non-exhausted token in the round-robin rotation.
 // Returns "" when all tokens are exhausted or the pool is empty.
 // Entries with a non-zero ExpiresAt that falls within tokenExpiryBuffer are skipped.
@@ -115,6 +124,7 @@ func (p *TokenPool) Token() string {
 	}
 
 	now := time.Now()
+	needsRefresh := false
 	for range n {
 		idx := p.current
 		p.current = (idx + 1) % n
@@ -125,12 +135,18 @@ func (p *TokenPool) Token() string {
 		if p.exhausted[idx] {
 			continue
 		}
-		// Skip entries that are near expiry.
 		entry := p.entries[idx]
+		// Use near-expiry tokens but flag that a refresh is needed.
 		if !entry.expiresAt.IsZero() && now.Add(tokenExpiryBuffer).After(entry.expiresAt) {
-			continue
+			needsRefresh = true
 		}
 		p.counts[idx]++
+		if needsRefresh && p.refreshCh != nil {
+			select {
+			case p.refreshCh <- struct{}{}:
+			default:
+			}
+		}
 		return entry.token
 	}
 
@@ -151,15 +167,17 @@ func (p *TokenPool) Exhaust(token string) {
 	}
 }
 
-// ActiveCount returns the number of non-exhausted tokens.
+// ActiveCount returns the number of tokens that are usable (not exhausted and not expired).
 func (p *TokenPool) ActiveCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	now := time.Now()
 	count := 0
-	for i := range p.entries {
-		if !p.exhausted[i] || now.Sub(p.exhaustedAt[i]) > tokenResetWindow {
+	for i, e := range p.entries {
+		exhausted := p.exhausted[i] && now.Sub(p.exhaustedAt[i]) <= tokenResetWindow
+		expired := !e.expiresAt.IsZero() && now.After(e.expiresAt)
+		if !exhausted && !expired {
 			count++
 		}
 	}

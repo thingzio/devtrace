@@ -179,6 +179,7 @@ func Run(ctx context.Context, opts Options) error {
 	var pool *ghclient.TokenPool
 	if pc, ok := ghClient.(*ghclient.PoolClient); ok {
 		pool = pc.Pool()
+		pool.SetRefreshCh(installNotify)
 
 		// Start background token refresh.
 		appCfg, _ := tenant.LoadGitHubAppConfig()

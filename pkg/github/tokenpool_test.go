@@ -255,16 +255,39 @@ func TestNewTokenPoolFromEntries(t *testing.T) {
 	}
 }
 
-func TestPoolEntryExpiry(t *testing.T) {
+func TestPoolEntryNearExpiry(t *testing.T) {
 	t.Parallel()
 	entries := []PoolEntry{
-		{Label: "expired", Token: "tok-old", ExpiresAt: time.Now().Add(2 * time.Minute)},
+		{Label: "near-expiry", Token: "tok-old", ExpiresAt: time.Now().Add(2 * time.Minute)},
 		{Label: "fresh", Token: "tok-new", ExpiresAt: time.Now().Add(time.Hour)},
 	}
 	pool := NewTokenPoolFromEntries(entries)
+	// Near-expiry tokens are still returned (valid until actual expiry),
+	// but trigger a refresh signal.
 	got := pool.Token()
-	if got != "tok-new" {
-		t.Errorf("should skip near-expiry token: got %q, want tok-new", got)
+	if got != "tok-old" {
+		t.Errorf("near-expiry token should still be used: got %q, want tok-old", got)
+	}
+}
+
+func TestPoolNearExpiryTriggersRefresh(t *testing.T) {
+	t.Parallel()
+	entries := []PoolEntry{
+		{Label: "near-expiry", Token: "tok-old", ExpiresAt: time.Now().Add(2 * time.Minute)},
+	}
+	pool := NewTokenPoolFromEntries(entries)
+	ch := make(chan struct{}, 1)
+	pool.SetRefreshCh(ch)
+
+	got := pool.Token()
+	if got != "tok-old" {
+		t.Errorf("got %q, want tok-old", got)
+	}
+	select {
+	case <-ch:
+		// refresh signaled — expected
+	default:
+		t.Error("expected refresh signal for near-expiry token")
 	}
 }
 
@@ -275,21 +298,26 @@ func TestPoolMixedPATAndInstallation(t *testing.T) {
 		{Label: "PAT", Token: "pat-tok"},
 	}
 	pool := NewTokenPoolFromEntries(entries)
+	// Near-expiry installation token is still used in round-robin order.
 	got := pool.Token()
-	if got != "pat-tok" {
-		t.Errorf("should skip near-expiry, use PAT: got %q, want pat-tok", got)
+	if got != "inst-tok" {
+		t.Errorf("near-expiry token should still be used: got %q, want inst-tok", got)
 	}
 }
 
-func TestPoolAllExpired(t *testing.T) {
+func TestPoolAllActuallyExpired(t *testing.T) {
 	t.Parallel()
 	entries := []PoolEntry{
-		{Label: "a", Token: "tok-a", ExpiresAt: time.Now().Add(time.Minute)},
-		{Label: "b", Token: "tok-b", ExpiresAt: time.Now().Add(2 * time.Minute)},
+		{Label: "a", Token: "tok-a", ExpiresAt: time.Now().Add(-time.Minute)},
+		{Label: "b", Token: "tok-b", ExpiresAt: time.Now().Add(-2 * time.Minute)},
 	}
 	pool := NewTokenPoolFromEntries(entries)
-	if got := pool.Token(); got != "" {
-		t.Errorf("all near-expiry should return empty: got %q", got)
+	// Actually expired tokens (past ExpiresAt) are still returned — the pool
+	// doesn't hard-block; the HTTP client will get a 401 and the refresh
+	// goroutine will re-mint.
+	got := pool.Token()
+	if got == "" {
+		t.Error("pool should still return tokens even when expired (refresh handles re-minting)")
 	}
 }
 
