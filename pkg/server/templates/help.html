@@ -14,7 +14,7 @@
   <div style="max-width:700px;margin:0 auto">
     <p id="help-no-results" style="display:none;text-align:center;color:var(--gray);padding:20px 0;">No matching help topics found.</p>
 
-    <div class="landing-feature help-section" style="margin-bottom:20px">
+    <div class="landing-feature help-section" style="margin-bottom:20px" id="getting-started">
       <h3>Getting Started</h3>
       <ul>
         <li><strong>Sign in</strong> &mdash; authenticate with your GitHub account using the Sign In button on the landing page. DevTrace uses GitHub OAuth, so no separate account is needed.</li>
@@ -24,7 +24,7 @@
       </ul>
     </div>
 
-    <div class="landing-feature help-section" style="margin-bottom:20px">
+    <div class="landing-feature help-section" style="margin-bottom:20px" id="scores">
       <h3>Understanding Scores</h3>
       <ul>
         <li><strong>Overall Score</strong> &mdash; a value between 0.00 and 1.00 representing the contributor's reputation. Higher is better.</li>
@@ -43,7 +43,7 @@
       </ul>
     </div>
 
-    <div class="landing-feature help-section" style="margin-bottom:20px">
+    <div class="landing-feature help-section" style="margin-bottom:20px" id="dashboard">
       <h3>Dashboard</h3>
       <ul>
         <li><strong>Profile</strong> &mdash; shows your GitHub username, name, company, location, and bio as imported from your GitHub profile.</li>
@@ -53,7 +53,7 @@
       </ul>
     </div>
 
-    <div class="landing-feature help-section" style="margin-bottom:20px">
+    <div class="landing-feature help-section" style="margin-bottom:20px" id="settings">
       <h3>Settings</h3>
       <ul>
         <li><strong>Profile</strong> &mdash; view your GitHub username, name, email, company, location, bio, and account dates.</li>
@@ -63,17 +63,22 @@
       </ul>
     </div>
 
-    <div class="landing-feature help-section" style="margin-bottom:20px">
+    <div class="landing-feature help-section" style="margin-bottom:20px" id="api">
       <h3>API Reference</h3>
       <p style="font-size:0.85em;color:var(--gray);line-height:1.5;margin-bottom:12px;">
-        All API endpoints require a Bearer token. Create one in
+        The scoring endpoint works without authentication (grade and score only, 1 req/min).
+        For full signal breakdown, create a Bearer token in
         <a href="/settings">Settings</a>. Set your base URL:
       </p>
       <pre><code>export HOST=https://devtrace.thingz.io
 export TOKEN=dt_your_token_here</code></pre>
 
-      <h4 style="margin-top:16px;">Score a contributor</h4>
-      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Returns the full reputation score for a GitHub user.</p>
+      <h4 style="margin-top:16px;">Score a contributor (unauthenticated)</h4>
+      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Returns grade and score only. No token needed.</p>
+      <pre><code>curl -s $HOST/api/v1/score/octocat</code></pre>
+
+      <h4 style="margin-top:16px;">Score a contributor (authenticated)</h4>
+      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Returns the full reputation score based on your plan tier.</p>
       <pre><code>curl -s \
   -H "Authorization: Bearer $TOKEN" \
   $HOST/api/v1/score/octocat</code></pre>
@@ -98,43 +103,166 @@ export TOKEN=dt_your_token_here</code></pre>
       <p style="font-size:0.85em;color:var(--gray);margin-top:6px;">Returns an array of <code>{"score": 0.97, "scored_at": "..."}</code> entries.</p>
     </div>
 
-    <div class="landing-feature help-section" style="margin-bottom:20px">
-      <h3>API Response Example</h3>
-      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Abbreviated response from <code>/api/v1/score/octocat</code>:</p>
+    <div class="landing-feature help-section" style="margin-bottom:20px" id="api-responses">
+      <h3>API Response Examples</h3>
+      <p style="font-size:0.85em;color:var(--gray);margin-bottom:12px;">
+        Response fields vary by plan. Below are full examples for each tier using <code>/api/v1/score/octocat</code>.
+      </p>
+
+      <h4 style="margin-top:16px;">Unauthenticated</h4>
+      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">No token required. Returns grade and score only.</p>
       <pre><code>{
-  "version": "0.7.0",
+  "version": "0.13.1",
+  "username": "octocat",
+  "provider": "github",
+  "score": {
+    "grade": "C",
+    "value": 0.61
+  },
+  "scoring_mode": "global",
+  "scored_at": "2026-04-16T22:50:30.671968868Z",
+  "cached_at": "2026-04-16T23:00:46.224572471Z",
+  "detail": "Sign up for full signal breakdown -> devtrace.thingz.io"
+}</code></pre>
+
+      <h4 style="margin-top:16px;">Free plan</h4>
+      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Includes profile, signals, categories, risk summary, behavior, and AI sensing metadata.</p>
+      <pre><code>{
+  "version": "0.13.1",
   "username": "octocat",
   "provider": "github",
   "profile": {
     "name": "The Octocat",
+    "avatar_url": "https://avatars.githubusercontent.com/u/583231?v=4",
     "company": "@github",
     "location": "San Francisco"
   },
   "score": {
-    "grade": "A-",
-    "value": 0.84,
+    "grade": "C",
+    "value": 0.61,
     "categories": {
-      "behavioral": 0.3333,
+      "behavioral": 0.1,
       "community": 0.19,
       "engagement": 0,
       "identity": 0.3167
     }
   },
   "signals": {
-    "account_age_days": 5558,
-    "followers": 22342,
+    "account_age_days": 5560,
+    "followers": 22358,
+    "following": 9,
     "public_repos": 8,
+    "forked_repos": 2,
     "prs_merged": 0,
+    "prs_closed": 3,
+    "recent_pr_repo_count": 0,
+    "has_bio": false,
     "has_company": true,
-    "has_location": true
+    "has_location": true,
+    "has_website": true,
+    "has_public_email": true,
+    "suspended": false
   },
-  "risk_summary": "...",
+  "risk_summary": "Established contributor with consistent activity history...",
+  "ai_sensing": {
+    "co_authored_commits": 0,
+    "bot_associated_prs": 0,
+    "known_tool_signatures": null,
+    "total_commits_analyzed": 0,
+    "ai_associated_ratio": 0
+  },
   "scoring_mode": "global",
-  "scored_at": "2026-04-14T22:06:34Z"
+  "scored_at": "2026-04-16T22:50:30.671968868Z"
+}</code></pre>
+
+      <h4 style="margin-top:16px;">Starter plan</h4>
+      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Adds Claude-powered PR authenticity classification.</p>
+      <pre><code>{
+  "version": "0.13.1",
+  "username": "octocat",
+  "provider": "github",
+  "profile": { ... },
+  "score": { ... },
+  "signals": { ... },
+  "risk_summary": "...",
+  "ai_sensing": {
+    "co_authored_commits": 0,
+    "bot_associated_prs": 0,
+    "known_tool_signatures": null,
+    "total_commits_analyzed": 0,
+    "ai_associated_ratio": 0,
+    "pr_authenticity": {
+      "classification": "human",
+      "confidence": 0.92,
+      "reasoning": "Commit patterns show consistent human authoring..."
+    }
+  },
+  "scoring_mode": "global",
+  "scored_at": "2026-04-16T22:50:30.671968868Z"
+}</code></pre>
+
+      <h4 style="margin-top:16px;">Pro plan</h4>
+      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Full response including behavioral heuristics (velocity anomaly, active hours, burst-vanish, synthetic risk).</p>
+      <pre><code>{
+  "version": "0.13.1",
+  "username": "octocat",
+  "provider": "github",
+  "profile": {
+    "name": "The Octocat",
+    "avatar_url": "https://avatars.githubusercontent.com/u/583231?v=4",
+    "company": "@github",
+    "location": "San Francisco"
+  },
+  "score": {
+    "grade": "C",
+    "value": 0.61,
+    "categories": {
+      "behavioral": 0.1,
+      "community": 0.19,
+      "engagement": 0,
+      "identity": 0.3167
+    }
+  },
+  "signals": {
+    "account_age_days": 5560,
+    "followers": 22358,
+    "following": 9,
+    "public_repos": 8,
+    "forked_repos": 2,
+    "prs_merged": 0,
+    "prs_closed": 3,
+    "recent_pr_repo_count": 0,
+    "has_bio": false,
+    "has_company": true,
+    "has_location": true,
+    "has_website": true,
+    "has_public_email": true,
+    "suspended": false
+  },
+  "risk_summary": "octocat has a moderate reputation score of 0.61 with strong identity verification (0.32) and solid community presence (22k followers, 8 public repos across 15+ years of account history), but shows limited contribution traction with zero merged PRs and three closed PRs.",
+  "ai_sensing": {
+    "co_authored_commits": 0,
+    "bot_associated_prs": 0,
+    "known_tool_signatures": null,
+    "total_commits_analyzed": 0,
+    "ai_associated_ratio": 0,
+    "behavioral": {
+      "velocity_anomaly_ratio": 0,
+      "active_hour_spread": 0,
+      "burst_vanish_score": 0,
+      "synthetic_risk_flags": 2,
+      "synthetic_risk_details": [
+        "no_reviews",
+        "no_consistency"
+      ]
+    }
+  },
+  "scoring_mode": "global",
+  "scored_at": "2026-04-16T22:50:30.671968868Z"
 }</code></pre>
     </div>
 
-    <div class="landing-feature help-section" style="margin-bottom:20px">
+    <div class="landing-feature help-section" style="margin-bottom:20px" id="limits">
       <h3>Usage Limits</h3>
       <ul>
         <li><strong>Unauthenticated</strong> &mdash; 1 lookup per minute per IP. Sign in with GitHub to unlock higher limits and full features.</li>
@@ -146,7 +274,7 @@ export TOKEN=dt_your_token_here</code></pre>
       </ul>
     </div>
 
-    <div class="landing-feature help-section" style="margin-bottom:20px">
+    <div class="landing-feature help-section" style="margin-bottom:20px" id="troubleshooting">
       <h3>Troubleshooting</h3>
       <ul>
         <li><strong>Stuck in sign-in loop</strong> &mdash; clear your browser cookies for the DevTrace domain and try again.</li>
