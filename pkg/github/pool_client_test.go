@@ -8,6 +8,15 @@ func TestPoolClientImplementsInterface(t *testing.T) {
 	var _ Client = NewPoolClient(pool)
 }
 
+func TestPoolClientPool(t *testing.T) {
+	t.Parallel()
+	pool := NewTokenPool("tok1", "tok2")
+	client := NewPoolClient(pool)
+	if got := client.Pool(); got != pool {
+		t.Error("Pool() should return the same pool instance")
+	}
+}
+
 func TestPoolClientEmptyPool(t *testing.T) {
 	t.Parallel()
 	pool := NewTokenPool("")

@@ -22,6 +22,11 @@ func NewPoolClient(pool *TokenPool) *PoolClient {
 	return &PoolClient{pool: pool}
 }
 
+// Pool returns the underlying token pool for operational visibility.
+func (c *PoolClient) Pool() *TokenPool {
+	return c.pool
+}
+
 func (c *PoolClient) ghClient(ctx context.Context) (*gh.Client, string, error) {
 	token := c.pool.Token()
 	if token == "" {
