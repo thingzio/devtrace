@@ -13,3 +13,6 @@ var GitHubClient = &http.Client{
 		return http.ErrUseLastResponse
 	},
 }
+
+// QuotaCheckClient is a lightweight HTTP client for GitHub rate limit checks.
+var QuotaCheckClient = &http.Client{Timeout: 5 * time.Second}

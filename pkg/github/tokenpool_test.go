@@ -1,8 +1,10 @@
 package github
 
 import (
+	"context"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestNewTokenPoolSingle(t *testing.T) {
@@ -178,5 +180,70 @@ func TestTokenPoolNeverReturnsComma(t *testing.T) {
 				t.Fatalf("Token() returned comma-separated: %q", tok)
 			}
 		}
+	}
+}
+
+func TestAggregateQuota(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		quotas  []TokenQuota
+		wantPct int
+	}{
+		{"empty", nil, 100},
+		{"full_quota", []TokenQuota{
+			{Limit: 5000, Remaining: 5000, Reset: time.Now().Add(time.Hour)},
+		}, 100},
+		{"half_used", []TokenQuota{
+			{Limit: 5000, Remaining: 2500, Reset: time.Now().Add(time.Hour)},
+			{Limit: 5000, Remaining: 2500, Reset: time.Now().Add(time.Hour)},
+		}, 50},
+		{"all_exhausted", []TokenQuota{
+			{Limit: 5000, Remaining: 0, Reset: time.Now().Add(time.Hour)},
+		}, 0},
+		{"mixed", []TokenQuota{
+			{Limit: 5000, Remaining: 1000, Reset: time.Now().Add(time.Hour)},
+			{Limit: 10000, Remaining: 8000, Reset: time.Now().Add(2 * time.Hour)},
+		}, 60},
+		{"all_errored", []TokenQuota{
+			{Error: "failed"},
+			{Error: "failed"},
+		}, 100},
+		{"skip_errors", []TokenQuota{
+			{Limit: 5000, Remaining: 2500, Reset: time.Now().Add(time.Hour)},
+			{Error: "failed"},
+		}, 50},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			pct, _ := AggregateQuota(tt.quotas)
+			if pct != tt.wantPct {
+				t.Errorf("pct = %d, want %d", pct, tt.wantPct)
+			}
+		})
+	}
+}
+
+func TestAggregateQuotaEarliestReset(t *testing.T) {
+	t.Parallel()
+	early := time.Now().Add(30 * time.Minute)
+	late := time.Now().Add(2 * time.Hour)
+	quotas := []TokenQuota{
+		{Limit: 5000, Remaining: 2500, Reset: late},
+		{Limit: 5000, Remaining: 2500, Reset: early},
+	}
+	_, reset := AggregateQuota(quotas)
+	if !reset.Equal(early) {
+		t.Errorf("reset = %v, want %v", reset, early)
+	}
+}
+
+func TestCheckQuotasEmptyPool(t *testing.T) {
+	t.Parallel()
+	pool := NewTokenPool()
+	quotas := pool.CheckQuotas(context.Background())
+	if len(quotas) != 0 {
+		t.Errorf("expected 0 quotas, got %d", len(quotas))
 	}
 }

@@ -1,6 +1,9 @@
 package github
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -26,7 +29,7 @@ type TokenPool struct {
 func NewTokenPool(tokens ...string) *TokenPool {
 	var list []string
 	for _, t := range tokens {
-		for _, part := range strings.Split(t, ",") {
+		for part := range strings.SplitSeq(t, ",") {
 			part = strings.TrimSpace(part)
 			if part != "" {
 				list = append(list, part)
@@ -112,4 +115,86 @@ func (p *TokenPool) UsageCounts() []int {
 	out := make([]int, len(p.counts))
 	copy(out, p.counts)
 	return out
+}
+
+// TokenQuota holds rate limit info for a single GitHub API token.
+type TokenQuota struct {
+	Index     int
+	Limit     int
+	Remaining int
+	Reset     time.Time
+	Error     string
+}
+
+// CheckQuotas calls the GitHub rate_limit API for each token in the pool.
+// This endpoint is free (does not count against quota).
+func (p *TokenPool) CheckQuotas(ctx context.Context) []TokenQuota {
+	p.mu.Lock()
+	tokens := make([]string, len(p.tokens))
+	copy(tokens, p.tokens)
+	p.mu.Unlock()
+
+	quotas := make([]TokenQuota, len(tokens))
+	for i, token := range tokens {
+		quotas[i] = checkTokenRateLimit(ctx, token)
+		quotas[i].Index = i
+	}
+	return quotas
+}
+
+// AggregateQuota returns the aggregate remaining percentage and earliest reset
+// time across all tokens. Returns 100 if quotas is empty or all errored.
+func AggregateQuota(quotas []TokenQuota) (pctRemaining int, earliestReset time.Time) {
+	var totalLimit, totalRemaining int
+	for _, q := range quotas {
+		if q.Error != "" {
+			continue
+		}
+		totalLimit += q.Limit
+		totalRemaining += q.Remaining
+		if !q.Reset.IsZero() && (earliestReset.IsZero() || q.Reset.Before(earliestReset)) {
+			earliestReset = q.Reset
+		}
+	}
+	if totalLimit == 0 {
+		return 100, earliestReset
+	}
+	return (totalRemaining * 100) / totalLimit, earliestReset
+}
+
+var quotaClient = &http.Client{Timeout: 5 * time.Second}
+
+func checkTokenRateLimit(ctx context.Context, token string) TokenQuota {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/rate_limit", nil)
+	if err != nil {
+		return TokenQuota{Error: "request error"}
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := quotaClient.Do(req)
+	if err != nil {
+		return TokenQuota{Error: "rate limit check failed"}
+	}
+	defer resp.Body.Close()
+
+	var rl struct {
+		Resources struct {
+			Core struct {
+				Limit     int   `json:"limit"`
+				Remaining int   `json:"remaining"`
+				Reset     int64 `json:"reset"`
+			} `json:"core"`
+		} `json:"resources"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rl); err != nil {
+		return TokenQuota{Error: "decode error"}
+	}
+
+	core := rl.Resources.Core
+	return TokenQuota{
+		Limit:     core.Limit,
+		Remaining: core.Remaining,
+		Reset:     time.Unix(core.Reset, 0).UTC(),
+	}
 }
