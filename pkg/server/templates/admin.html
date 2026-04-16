@@ -100,41 +100,52 @@
           <th>Username</th>
           <th>Plan</th>
           <th>Status</th>
-          <th>Max Contributors</th>
+          <th>Limit</th>
           <th>Created</th>
-          <th>Actions</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {{range .Tenants}}
-        <tr>
+        <tr id="row-{{.Username}}">
           <td><a href="/score/{{.Username}}">{{.Username}}</a></td>
           <td>
-            <form method="POST" action="/admin/tenant/{{.Username}}/plan" style="display:inline">
+            <span class="view-{{.Username}}">{{.Plan}}</span>
+            <form class="edit-{{.Username}}" method="POST" action="/admin/tenant/{{.Username}}/plan" style="display:none">
               <select name="plan">
                 <option value="free" {{if eq .Plan "free"}}selected{{end}}>free</option>
                 <option value="starter" {{if eq .Plan "starter"}}selected{{end}}>starter</option>
                 <option value="pro" {{if eq .Plan "pro"}}selected{{end}}>pro</option>
               </select>
-              <button type="submit" class="btn btn-sm">Update</button>
+              <button type="submit" class="btn btn-sm">Save</button>
             </form>
           </td>
           <td>
-            <form method="POST" action="/admin/tenant/{{.Username}}/status" style="display:inline">
+            <span class="view-{{.Username}}">{{.Status}}</span>
+            <form class="edit-{{.Username}}" method="POST" action="/admin/tenant/{{.Username}}/status" style="display:none">
               <select name="status">
                 <option value="active" {{if eq .Status "active"}}selected{{end}}>active</option>
                 <option value="suspended" {{if eq .Status "suspended"}}selected{{end}}>suspended</option>
               </select>
-              <button type="submit" class="btn btn-sm">Update</button>
+              <button type="submit" class="btn btn-sm">Save</button>
             </form>
           </td>
           <td>{{.MaxContributors}}</td>
           <td>{{.CreatedAt.Format "2006-01-02"}}</td>
-          <td><a href="/score/{{.Username}}">Score</a></td>
+          <td>
+            <button class="btn btn-sm view-{{.Username}}" onclick="toggleEdit('{{.Username}}')">Edit</button>
+            <button class="btn btn-sm edit-{{.Username}}" style="display:none" onclick="toggleEdit('{{.Username}}')">Cancel</button>
+          </td>
         </tr>
         {{end}}
       </tbody>
     </table>
+    <script>
+    function toggleEdit(u){
+      document.querySelectorAll('.view-'+u).forEach(function(e){e.style.display=e.style.display==='none'?'':'none'});
+      document.querySelectorAll('.edit-'+u).forEach(function(e){e.style.display=e.style.display==='none'?'':'none'});
+    }
+    </script>
     {{else}}<p>No tenants found.</p>{{end}}
   </section>
 </div>
