@@ -16,7 +16,7 @@ const tokenExpiryBuffer = 5 * time.Minute
 // PoolEntry describes a token source for the pool.
 type PoolEntry struct {
 	InstallationID int64
-	Label          string    // target login (org/user) or "PAT"
+	Label          string // target login (org/user) or "PAT"
 	Token          string
 	ExpiresAt      time.Time // zero means never expires (PAT)
 }
