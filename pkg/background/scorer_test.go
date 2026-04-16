@@ -4,29 +4,13 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/model"
 	"github.com/thingzio/devtrace/pkg/score"
 )
-
-func TestScorerConstants(t *testing.T) {
-	t.Parallel()
-
-	if defaultScorerSec != 3600 {
-		t.Errorf("defaultScorerSec: got %d, want 3600", defaultScorerSec)
-	}
-	if scorerBatchSize != 100 {
-		t.Errorf("scorerBatchSize: got %d, want 100", scorerBatchSize)
-	}
-	if defaultLowDays != 7 {
-		t.Errorf("defaultLowDays: got %d, want 7", defaultLowDays)
-	}
-	if defaultHighDays != 30 {
-		t.Errorf("defaultHighDays: got %d, want 30", defaultHighDays)
-	}
-}
 
 // --- mock store ---
 
@@ -35,7 +19,7 @@ type mockScorerStore struct {
 	stale          []postgres.StaleContributor
 	dequeueErr     error
 	staleErr       error
-	removed        []string // track removed usernames
+	removed        []string
 	upserted       []string
 	scored         []string
 	reputations    []string
@@ -109,22 +93,33 @@ func (m *mockGHClient) IsOrgMember(_ context.Context, _, _ string) (bool, error)
 
 const testVersion = "v0.0.1-test"
 
+func TestConstants(t *testing.T) {
+	t.Parallel()
+	if defaultBatchSize != 100 {
+		t.Errorf("defaultBatchSize: got %d, want 100", defaultBatchSize)
+	}
+	if defaultMinQuotaPct != 30 {
+		t.Errorf("defaultMinQuotaPct: got %d, want 30", defaultMinQuotaPct)
+	}
+	if defaultLowDays != 7 {
+		t.Errorf("defaultLowDays: got %d, want 7", defaultLowDays)
+	}
+	if defaultHighDays != 30 {
+		t.Errorf("defaultHighDays: got %d, want 30", defaultHighDays)
+	}
+}
+
 func TestScoreContributorSuccess(t *testing.T) {
 	t.Parallel()
-
 	store := &mockScorerStore{}
 	gh := &mockGHClient{signals: &score.InputSignals{
-		AgeDays:     500,
-		PRsMerged:   10,
-		Followers:   20,
-		PublicRepos: 5,
+		AgeDays: 500, PRsMerged: 10, Followers: 20, PublicRepos: 5,
 	}}
 
 	err := scoreContributor(context.Background(), store, gh, "alice", "github", testVersion)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
 	if len(store.upserted) != 1 || store.upserted[0] != "alice" {
 		t.Errorf("upserted: %v, want [alice]", store.upserted)
 	}
@@ -138,7 +133,6 @@ func TestScoreContributorSuccess(t *testing.T) {
 
 func TestScoreContributorFetchError(t *testing.T) {
 	t.Parallel()
-
 	store := &mockScorerStore{}
 	gh := &mockGHClient{err: errors.New("rate limited")}
 
@@ -153,7 +147,6 @@ func TestScoreContributorFetchError(t *testing.T) {
 
 func TestDrainQueueScoresAndRemoves(t *testing.T) {
 	t.Parallel()
-
 	store := &mockScorerStore{
 		queue: []postgres.QueueEntry{
 			{Username: "alice", Provider: "github", Priority: 1},
@@ -162,62 +155,69 @@ func TestDrainQueueScoresAndRemoves(t *testing.T) {
 	}
 	gh := &mockGHClient{signals: &score.InputSignals{AgeDays: 365, PRsMerged: 5}}
 
-	drainQueue(context.Background(), store, gh, testVersion)
-
+	scored := drainQueue(context.Background(), store, gh, testVersion, 100)
+	if scored != 2 {
+		t.Errorf("scored = %d, want 2", scored)
+	}
 	if len(store.removed) != 2 {
 		t.Errorf("removed %d, want 2", len(store.removed))
-	}
-	if len(store.reputations) != 2 {
-		t.Errorf("reputations %d, want 2", len(store.reputations))
 	}
 }
 
 func TestDrainQueueEmptyQueue(t *testing.T) {
 	t.Parallel()
-
 	store := &mockScorerStore{queue: nil}
 	gh := &mockGHClient{}
-
-	// Should be a no-op, no panic.
-	drainQueue(context.Background(), store, gh, testVersion)
-
-	if len(store.removed) != 0 {
-		t.Error("should not remove anything from empty queue")
+	scored := drainQueue(context.Background(), store, gh, testVersion, 100)
+	if scored != 0 {
+		t.Error("expected 0 scored from empty queue")
 	}
 }
 
 func TestDrainQueueDequeueError(t *testing.T) {
 	t.Parallel()
-
 	store := &mockScorerStore{dequeueErr: errors.New("db down")}
 	gh := &mockGHClient{}
-
-	// Should not panic on dequeue error.
-	drainQueue(context.Background(), store, gh, testVersion)
+	scored := drainQueue(context.Background(), store, gh, testVersion, 100)
+	if scored != 0 {
+		t.Error("expected 0 scored on error")
+	}
 }
 
 func TestDrainQueuePartialFailure(t *testing.T) {
 	t.Parallel()
-
 	store := &mockScorerStore{
 		queue: []postgres.QueueEntry{
 			{Username: "alice", Provider: "github", Priority: 1},
 			{Username: "bob", Provider: "github", Priority: 2},
 		},
 	}
-	// FetchSignals returns error — both will fail.
 	gh := &mockGHClient{err: errors.New("api error")}
-
-	drainQueue(context.Background(), store, gh, testVersion)
-
+	scored := drainQueue(context.Background(), store, gh, testVersion, 100)
+	if scored != 0 {
+		t.Error("expected 0 scored on fetch error")
+	}
 	if len(store.removed) != 0 {
 		t.Error("failed scores should not be removed from queue")
 	}
 }
 
-func TestRunScorerDrainsQueueThenStale(t *testing.T) {
+func TestRescoreStale(t *testing.T) {
 	t.Parallel()
+	store := &mockScorerStore{
+		stale: []postgres.StaleContributor{
+			{Username: "stale-user", Provider: "github"},
+		},
+	}
+	gh := &mockGHClient{signals: &score.InputSignals{AgeDays: 100}}
+	scored := rescoreStale(context.Background(), store, gh, testVersion, 100)
+	if scored != 1 {
+		t.Errorf("scored = %d, want 1", scored)
+	}
+}
 
+func TestDrainThenStale(t *testing.T) {
+	t.Parallel()
 	store := &mockScorerStore{
 		queue: []postgres.QueueEntry{
 			{Username: "queued-user", Provider: "github", Priority: 1},
@@ -228,36 +228,40 @@ func TestRunScorerDrainsQueueThenStale(t *testing.T) {
 	}
 	gh := &mockGHClient{signals: &score.InputSignals{AgeDays: 100}}
 
-	runScorer(context.Background(), store, gh, testVersion)
-
-	// Both queued and stale should be scored.
-	if len(store.reputations) != 2 {
-		t.Errorf("reputations: got %d, want 2", len(store.reputations))
+	scored := drainQueue(context.Background(), store, gh, testVersion, 100)
+	if scored != 1 {
+		t.Errorf("queue scored = %d, want 1", scored)
 	}
-	// Queued user should be removed from queue.
-	if len(store.removed) != 1 || store.removed[0] != "queued-user" {
-		t.Errorf("removed: %v, want [queued-user]", store.removed)
+	staleScored := rescoreStale(context.Background(), store, gh, testVersion, 100)
+	if staleScored != 1 {
+		t.Errorf("stale scored = %d, want 1", staleScored)
 	}
 }
 
-func TestRunScorerContextCanceled(t *testing.T) {
+func TestDrainQueueContextCanceled(t *testing.T) {
 	t.Parallel()
-
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel() // already canceled
+	cancel()
 
 	store := &mockScorerStore{
-		stale: []postgres.StaleContributor{
-			{Username: "user1", Provider: "github"},
-			{Username: "user2", Provider: "github"},
+		queue: []postgres.QueueEntry{
+			{Username: "user1", Provider: "github", Priority: 1},
 		},
 	}
 	gh := &mockGHClient{signals: &score.InputSignals{AgeDays: 100}}
+	scored := drainQueue(ctx, store, gh, testVersion, 100)
+	if scored != 0 {
+		t.Errorf("should not score when canceled, scored %d", scored)
+	}
+}
 
-	runScorer(ctx, store, gh, testVersion)
-
-	// Should bail early, not score stale contributors.
-	if len(store.reputations) > 0 {
-		t.Errorf("should not score when context is canceled, scored %d", len(store.reputations))
+func TestSleepCtxCanceled(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	start := time.Now()
+	sleepCtx(ctx, 10*time.Second)
+	if time.Since(start) > time.Second {
+		t.Error("sleepCtx should return immediately on canceled context")
 	}
 }
