@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/thingzio/devtrace/pkg/config"
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	"github.com/thingzio/devtrace/pkg/middleware"
 	"github.com/thingzio/devtrace/pkg/plan"
@@ -207,10 +206,7 @@ func settingsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			hasInstall = true
 		}
 
-		appInstallURL := ""
-		if slug := config.GetEnv("GITHUB_APP_SLUG", ""); slug != "" {
-			appInstallURL = "https://github.com/apps/" + slug + "/installations/new"
-		}
+		appInstallURL := "https://github.com/apps/DevTraceThingz/installations/new"
 
 		renderTemplate(w, "settings.html", map[string]any{
 			"Title":            "Settings",
