@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/thingzio/devtrace/pkg/config"
@@ -12,7 +13,8 @@ import (
 
 const (
 	backfillCursorKey = "gharchive_backfill_cursor"
-	backfillBatchSize = 6
+	backfillBatchSize = 24
+	backfillWorkers   = 4
 )
 
 // Backfill processes historical GH Archive hours in reverse-chronological order
@@ -105,61 +107,88 @@ func backfillHours(now time.Time, days int, cursor time.Time) []time.Time {
 	return hours
 }
 
-// processBackfillBatch processes a slice of hours through the archive pipeline.
-// Individual hour failures are logged and skipped.
+// processBackfillBatch processes a slice of hours through the archive pipeline
+// using bounded concurrency. Individual hour failures are logged and skipped.
 func processBackfillBatch(ctx context.Context, store ingestStore, reader *ArchiveReader,
 	hours []time.Time, tenantRepos map[string]bool) error {
+	if ctx.Err() != nil {
+		return fmt.Errorf("batch canceled: %w", ctx.Err())
+	}
+
+	sem := make(chan struct{}, backfillWorkers)
+	var wg sync.WaitGroup
+
 	for _, hour := range hours {
 		if ctx.Err() != nil {
-			return fmt.Errorf("batch canceled: %w", ctx.Err())
+			break
 		}
 
-		agg := NewAggregator(hour)
-		var eventCount int
+		sem <- struct{}{} // acquire
+		wg.Add(1)
 
-		err := reader.Stream(ctx, hour, func(ev Event) {
-			agg.Add(ev)
-			eventCount++
-		})
-		if err != nil {
-			slog.Warn("backfill hour skipped", "hour", hour.Format("2006-01-02-15"), "error", err)
-			continue
-		}
+		go func(h time.Time) {
+			defer wg.Done()
+			defer func() { <-sem }() // release
 
-		results := agg.Results()
-		pgSummaries := make([]postgres.HourlySummary, 0, len(results))
-		for _, s := range results {
-			repos := make([]string, 0, len(s.Repos))
-			for r := range s.Repos {
-				repos = append(repos, r)
-			}
-			pgSummaries = append(pgSummaries, postgres.HourlySummary{
-				Username:      s.Username,
-				Provider:      "github",
-				Hour:          agg.Hour(),
-				PRsOpened:     s.PRsOpened,
-				PRsMerged:     s.PRsMerged,
-				PRsClosed:     s.PRsClosed,
-				ReviewsGiven:  s.ReviewsGiven,
-				IssueComments: s.IssueComments,
-				DistinctRepos: len(repos),
-				Repos:         repos,
-			})
-		}
+			processBackfillHour(ctx, store, reader, h, tenantRepos)
+		}(hour)
+	}
 
-		stored, err := store.BatchUpsertActivity(ctx, pgSummaries)
-		if err != nil {
-			slog.Warn("backfill upsert failed", "hour", hour.Format("2006-01-02-15"), "error", err)
-			continue
-		}
+	wg.Wait()
 
-		queued := queueContributors(ctx, store, results, tenantRepos)
-		slog.Debug("backfill hour done",
-			"hour", hour.Format("2006-01-02-15"),
-			"events", eventCount,
-			"stored", stored,
-			"queued", queued,
-		)
+	if ctx.Err() != nil {
+		return fmt.Errorf("batch canceled: %w", ctx.Err())
 	}
 	return nil
+}
+
+// processBackfillHour downloads, parses, and upserts a single archive hour.
+func processBackfillHour(ctx context.Context, store ingestStore, reader *ArchiveReader,
+	hour time.Time, tenantRepos map[string]bool) {
+	agg := NewAggregator(hour)
+	var eventCount int
+
+	err := reader.Stream(ctx, hour, func(ev Event) {
+		agg.Add(ev)
+		eventCount++
+	})
+	if err != nil {
+		slog.Warn("backfill hour skipped", "hour", hour.Format("2006-01-02-15"), "error", err)
+		return
+	}
+
+	results := agg.Results()
+	pgSummaries := make([]postgres.HourlySummary, 0, len(results))
+	for _, s := range results {
+		repos := make([]string, 0, len(s.Repos))
+		for r := range s.Repos {
+			repos = append(repos, r)
+		}
+		pgSummaries = append(pgSummaries, postgres.HourlySummary{
+			Username:      s.Username,
+			Provider:      "github",
+			Hour:          agg.Hour(),
+			PRsOpened:     s.PRsOpened,
+			PRsMerged:     s.PRsMerged,
+			PRsClosed:     s.PRsClosed,
+			ReviewsGiven:  s.ReviewsGiven,
+			IssueComments: s.IssueComments,
+			DistinctRepos: len(repos),
+			Repos:         repos,
+		})
+	}
+
+	stored, err := store.BatchUpsertActivity(ctx, pgSummaries)
+	if err != nil {
+		slog.Warn("backfill upsert failed", "hour", hour.Format("2006-01-02-15"), "error", err)
+		return
+	}
+
+	queued := queueContributors(ctx, store, results, tenantRepos)
+	slog.Debug("backfill hour done",
+		"hour", hour.Format("2006-01-02-15"),
+		"events", eventCount,
+		"stored", stored,
+		"queued", queued,
+	)
 }
