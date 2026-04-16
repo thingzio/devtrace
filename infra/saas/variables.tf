@@ -46,6 +46,12 @@ variable "admin_invoker_emails" {
   default     = ["mark@chmarny.com"]
 }
 
+variable "admin_users" {
+  description = "Comma-separated GitHub usernames for admin dashboard access"
+  type        = string
+  default     = "mchmarny"
+}
+
 variable "image_tag" {
   description = "Container image tag to deploy"
   type        = string

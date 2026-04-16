@@ -92,6 +92,11 @@ resource "google_cloud_run_v2_service" "serve" {
         value = "/secrets/github-app-key/key.pem"
       }
 
+      env {
+        name  = "DEVTRACE_ADMIN_USERS"
+        value = var.admin_users
+      }
+
       dynamic "env" {
         for_each = var.github_token != "" ? [1] : []
         content {
