@@ -390,6 +390,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	mux.Handle("GET /admin/", requireAdmin(adminDashboardHandler(store, pool, opts)))
 	mux.Handle("POST /admin/tenant/{username}/plan", requireAdmin(adminUpdatePlanFormHandler(db)))
 	mux.Handle("POST /admin/tenant/{username}/status", requireAdmin(adminUpdateStatusFormHandler(db)))
+	mux.Handle("POST /admin/tenant/{username}/delete", requireAdmin(adminDeleteTenantHandler(db)))
 
 	cleanup := func() {
 		unauthRL.close()

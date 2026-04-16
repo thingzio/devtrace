@@ -305,3 +305,30 @@ func adminUpdateStatusFormHandler(db *sql.DB) http.HandlerFunc {
 		http.Redirect(w, r, "/admin?msg=status_updated&user="+url.QueryEscape(username), http.StatusFound)
 	}
 }
+
+func adminDeleteTenantHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tn := middleware.TenantFromContext(r.Context())
+
+		username := r.PathValue("username")
+		if username == "" {
+			http.Redirect(w, r, "/admin?msg=error", http.StatusFound)
+			return
+		}
+
+		target, err := tenant.GetTenantByUsername(r.Context(), db, username)
+		if err != nil {
+			http.Redirect(w, r, "/admin?msg=not_found&user="+url.QueryEscape(username), http.StatusFound)
+			return
+		}
+
+		if err := tenant.DeleteTenant(r.Context(), db, target.ID); err != nil {
+			slog.Error("admin: delete tenant", "username", username, "error", err)
+			http.Redirect(w, r, "/admin?msg=error&user="+url.QueryEscape(username), http.StatusFound)
+			return
+		}
+
+		auditLog("delete_tenant", tn, r.URL.Path, r.RemoteAddr, fmt.Sprintf("user=%s id=%s", username, target.ID))
+		http.Redirect(w, r, "/admin?msg=tenant_deleted&user="+url.QueryEscape(username), http.StatusFound)
+	}
+}

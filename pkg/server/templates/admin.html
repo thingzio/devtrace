@@ -96,16 +96,16 @@
     {{if .Tenants}}
     <input type="text" id="tenant-search" placeholder="Search by username or name..."
       style="width:100%;padding:0.4rem 0.6rem;margin-bottom:0.5rem;background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:4px;font-size:0.85rem;">
+    <style>.data-table select{background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:3px;padding:0.15rem 0.3rem;font-size:0.8rem;}</style>
     <table class="data-table" id="tenant-table">
       <thead>
         <tr>
-          <th class="sortable" data-col="0" data-type="str">Username <span class="sort-arrow"></span></th>
-          <th class="sortable" data-col="1" data-type="str">Name <span class="sort-arrow"></span></th>
-          <th class="sortable" data-col="2" data-type="str">Plan <span class="sort-arrow"></span></th>
+          <th class="sortable" data-col="0">Username <span class="sort-arrow"></span></th>
+          <th class="sortable" data-col="1">Name <span class="sort-arrow"></span></th>
+          <th class="sortable" data-col="2">Plan <span class="sort-arrow"></span></th>
           <th>App</th>
-          <th class="sortable" data-col="4" data-type="str">Status <span class="sort-arrow"></span></th>
-          <th class="sortable" data-col="5" data-type="num">Limit <span class="sort-arrow"></span></th>
-          <th class="sortable" data-col="6" data-type="str">Created <span class="sort-arrow"></span></th>
+          <th class="sortable" data-col="4">Status <span class="sort-arrow"></span></th>
+          <th class="sortable" data-col="5">Created <span class="sort-arrow"></span></th>
           <th></th>
         </tr>
       </thead>
@@ -136,11 +136,17 @@
               <button type="submit" class="btn btn-sm">Save</button>
             </form>
           </td>
-          <td>{{.MaxContributors}}</td>
           <td>{{.CreatedAt.Format "2006-01-02"}}</td>
           <td>
-            <button class="btn btn-sm view-{{.Username}}" onclick="toggleEdit('{{.Username}}')">Edit</button>
-            <button class="btn btn-sm edit-{{.Username}}" style="display:none" onclick="toggleEdit('{{.Username}}')">Cancel</button>
+            <span class="view-{{.Username}}">
+              <button class="btn btn-sm" onclick="toggleEdit('{{.Username}}')">Edit</button>
+            </span>
+            <span class="edit-{{.Username}}" style="display:none">
+              <button class="btn btn-sm" onclick="toggleEdit('{{.Username}}')">Cancel</button>
+              <form method="POST" action="/admin/tenant/{{.Username}}/delete" style="display:inline" onsubmit="return confirm('Delete tenant {{.Username}}? This cannot be undone.')">
+                <button type="submit" class="btn btn-sm" style="color:#f85149;">Delete</button>
+              </form>
+            </span>
           </td>
         </tr>
         {{end}}
@@ -153,7 +159,7 @@
     </div>
     <script>
     (function(){
-      var PAGE_SIZE=25,curPage=1,sortCol=6,sortAsc=true;
+      var PAGE_SIZE=25,curPage=1,sortCol=5,sortAsc=true;
       var table=document.getElementById('tenant-table');
       var tbody=table.querySelector('tbody');
       var allRows=Array.from(tbody.querySelectorAll('tr'));

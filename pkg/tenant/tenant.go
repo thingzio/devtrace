@@ -130,6 +130,20 @@ func UpdateTenantStatus(ctx context.Context, db *sql.DB, tenantID, status string
 	return scanTenant(db.QueryRowContext(ctx, q, tenantID, status))
 }
 
+// DeleteTenant removes a tenant by ID. Related rows (installations, tokens,
+// usage records) are removed automatically via ON DELETE CASCADE.
+func DeleteTenant(ctx context.Context, db *sql.DB, tenantID string) error {
+	res, err := db.ExecContext(ctx, `DELETE FROM devtrace_tenant WHERE id = $1`, tenantID)
+	if err != nil {
+		return fmt.Errorf("delete tenant: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("delete tenant: not found")
+	}
+	return nil
+}
+
 // scanner is satisfied by both *sql.Row and *sql.Rows.
 type scanner interface {
 	Scan(dest ...any) error
