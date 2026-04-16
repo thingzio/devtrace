@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"sync/atomic"
 	"time"
 
 	"github.com/thingzio/devtrace/pkg/config"
@@ -22,6 +23,35 @@ const (
 	emptyQueueSleep    = 30 * time.Second
 	resetJitter        = 30 * time.Second
 )
+
+// scorerStats tracks scoring throughput for periodic logging.
+type scorerStats struct {
+	totalScored    atomic.Int64
+	totalErrors    atomic.Int64
+	totalWithHints atomic.Int64
+	windowScored   atomic.Int64
+	windowErrors   atomic.Int64
+	windowHints    atomic.Int64
+}
+
+func (s *scorerStats) record(scored, errors, withHints int) {
+	s.totalScored.Add(int64(scored))
+	s.totalErrors.Add(int64(errors))
+	s.totalWithHints.Add(int64(withHints))
+	s.windowScored.Add(int64(scored))
+	s.windowErrors.Add(int64(errors))
+	s.windowHints.Add(int64(withHints))
+}
+
+func (s *scorerStats) window() (scored, errors, hints int64) {
+	return s.windowScored.Load(), s.windowErrors.Load(), s.windowHints.Load()
+}
+
+func (s *scorerStats) resetWindow() {
+	s.windowScored.Store(0)
+	s.windowErrors.Store(0)
+	s.windowHints.Store(0)
+}
 
 // scorerStore defines the store operations needed by the background scorer.
 type scorerStore interface {

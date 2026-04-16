@@ -98,6 +98,46 @@ func (m *mockGHClient) IsOrgMember(_ context.Context, _, _ string) (bool, error)
 
 const testVersion = "v0.0.1-test"
 
+func TestScorerStatsRecord(t *testing.T) {
+	t.Parallel()
+	s := &scorerStats{}
+	s.record(3, 1, 2)
+	if s.totalScored.Load() != 3 {
+		t.Errorf("totalScored: got %d, want 3", s.totalScored.Load())
+	}
+	if s.totalErrors.Load() != 1 {
+		t.Errorf("totalErrors: got %d, want 1", s.totalErrors.Load())
+	}
+	if s.totalWithHints.Load() != 2 {
+		t.Errorf("totalWithHints: got %d, want 2", s.totalWithHints.Load())
+	}
+}
+
+func TestScorerStatsWindow(t *testing.T) {
+	t.Parallel()
+	s := &scorerStats{}
+	s.record(10, 2, 5)
+	s.record(5, 1, 3)
+
+	scored, errs, hints := s.window()
+	if scored != 15 {
+		t.Errorf("window scored: got %d, want 15", scored)
+	}
+	if errs != 3 {
+		t.Errorf("window errors: got %d, want 3", errs)
+	}
+	if hints != 8 {
+		t.Errorf("window hints: got %d, want 8", hints)
+	}
+
+	s.resetWindow()
+	s.record(2, 0, 1)
+	scored, _, _ = s.window()
+	if scored != 2 {
+		t.Errorf("window after reset: got %d, want 2", scored)
+	}
+}
+
 func TestConstants(t *testing.T) {
 	t.Parallel()
 	if defaultBatchSize != 100 {
