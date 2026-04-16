@@ -46,9 +46,11 @@ Behavioral heuristics computed from GH Archive data: velocity anomaly ratio, act
 
 Session-based admin dashboard at `/admin`, behind GitHub OAuth + `DEVTRACE_ADMIN_USERS` env var. Returns 404 for non-admins. All admin actions audit-logged via `slog.Warn`.
 
-**Sections:** Tenant management (plan/status), token pool health, scoring metrics (1h/24h/72h/week counts + queue depth + stale count), pipeline health (last ingest/scorer timestamps + activity count).
+**Sections:** Tenant management (plan/status), token pool health (live per-token quota via `/rate_limit` API), scoring metrics (7-day chart + queue depth + stale count), pipeline health (timestamps + 7-day activity chart).
 
 **Replaced:** `DEVTRACE_ADMIN_API_KEY`-protected API endpoints and `tools/tenant-{list,plan,status}` CLI scripts — reduced attack surface.
+
+**Continuous scorer:** Background scorer runs continuously instead of on a 1-hour timer. Checks aggregate GitHub API token quota before each batch; pauses when remaining drops below `SCORER_MIN_QUOTA_PCT` (default 30%), resumes at earliest token reset. Configurable batch size via `SCORER_BATCH_SIZE` (default 100).
 
 ### Phase 9 — Enterprise & Compliance
 
