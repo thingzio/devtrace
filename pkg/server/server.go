@@ -190,9 +190,6 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Start background operations (disabled by default for local dev).
 	if config.GetEnvBool("ENABLE_BACKGROUND_OPS") {
-		syncStop := background.StartDevPulseSync(ctx, store)
-		defer syncStop()
-
 		scorerStop := background.StartBackgroundScorer(ctx, store, ghClient, opts.Version)
 		defer scorerStop()
 
