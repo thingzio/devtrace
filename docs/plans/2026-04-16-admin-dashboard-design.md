@@ -14,7 +14,7 @@ Replace API-key-protected admin endpoints and CLI tools with a server-rendered a
 - New middleware: `RequireAdmin` wraps `RequireAuth`
 - After session validation, checks `tenant.Username` against `DEVTRACE_ADMIN_USERS` env var (comma-separated)
 - Empty env var = admin disabled (no one can access `/admin`)
-- Non-admins get 403 redirect to `/dashboard`
+- Non-admins get 404 (hides route existence)
 
 ## Routes
 

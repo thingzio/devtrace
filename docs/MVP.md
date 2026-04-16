@@ -42,11 +42,13 @@ Behavioral heuristics computed from GH Archive data: velocity anomaly ratio, act
 
 **Elevated from deferred** based on competitive analysis ([COMP.md — AI-Generated Code](COMP.md#ai-generated-code)): AI-generated code has 2.7x higher vulnerability density, and AI lowers the cost of manufacturing fake contributor histories. No competitor provides behavioral AI sensing at the contributor level. Data already exists in `contributor_activity`.
 
-### Phase 8 — Admin Service (started)
+### Phase 8 — Admin Dashboard ✅
 
-Operator visibility. Basic admin API shipped: plan and status management via `DEVTRACE_ADMIN_API_KEY`-protected endpoints (`PUT /api/v1/admin/tenant/{username}/plan`, `PUT /api/v1/admin/tenant/{username}/status`, `GET /api/v1/admin/tenants`). Bash CLI tools in `tools/tenant-*`. Tenant suspension enforced in auth middleware.
+Session-based admin dashboard at `/admin`, behind GitHub OAuth + `DEVTRACE_ADMIN_USERS` env var. Returns 404 for non-admins. All admin actions audit-logged via `slog.Warn`.
 
-**Remaining:** Pipeline health dashboard, token pool monitoring, scoring metrics UI.
+**Sections:** Tenant management (plan/status), token pool health, scoring metrics (1h/24h/72h/week counts + queue depth + stale count), pipeline health (last ingest/scorer timestamps + activity count).
+
+**Replaced:** `DEVTRACE_ADMIN_API_KEY`-protected API endpoints and `tools/tenant-{list,plan,status}` CLI scripts — reduced attack surface.
 
 ### Phase 9 — Enterprise & Compliance
 

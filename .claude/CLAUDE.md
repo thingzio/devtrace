@@ -137,7 +137,7 @@ pkg/data/              Store interface, shared types
 pkg/data/postgres/     PostgreSQL Store (migrations, history, activity, queue, sync)
 pkg/github/            GitHub API: client pool, token management, installations, fetching
 pkg/tenant/            Tenant CRUD, sessions, API tokens, GitHub App, installations, usage
-pkg/middleware/        Auth middleware (session cookie)
+pkg/middleware/        Auth middleware (session cookie, admin gate)
 pkg/oauth/             GitHub OAuth web flow
 pkg/model/             Shared domain types (ScoreResponse, Profile, Signals, etc.)
 pkg/plan/              Tenant plan definitions and limits
@@ -146,10 +146,10 @@ pkg/logging/           Logger setup
 pkg/net/               HTTP client utilities, email validation
 pkg/health/            Health check endpoint
 infra/saas/            Terraform for GCP infrastructure
-tools/                 Dev scripts (version bump, e2e, seed, tenant management)
+tools/                 Dev scripts (version bump, e2e, seed, setup)
 ```
 
-Single binary (`devtrace-site`) with embedded background workers. The server handles HTTP requests (dashboard, OAuth, webhooks, scoring API) while background goroutines run ingestion and scoring pipelines.
+Single binary (`devtrace-site`) with embedded background workers. The server handles HTTP requests (dashboard, OAuth, webhooks, scoring API, admin dashboard) while background goroutines run ingestion and scoring pipelines. Admin dashboard at `/admin` is gated by `DEVTRACE_ADMIN_USERS` env var — returns 404 for non-admins.
 
 Data flow: GitHub App webhook → tenant repos → background ingest worker → GitHub Archive/API → PostgreSQL → scoring engine → dashboard/API
 
@@ -164,6 +164,7 @@ Data flow: GitHub App webhook → tenant repos → background ingest worker → 
 - `BASE_URL` — public base URL (e.g. https://devtrace.thingz.io)
 - `DEVTRACE_API_URL` — API URL (defaults to production: devtrace.thingz.io)
 - `DEVTRACE_DEBUG` — set to `true` for debug-level logging
+- `DEVTRACE_ADMIN_USERS` — comma-separated GitHub usernames for admin access
 - `ANTHROPIC_API_KEY` — optional, enables AI risk sensing
 
 ## CI/CD
