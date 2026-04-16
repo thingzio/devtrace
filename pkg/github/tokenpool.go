@@ -80,6 +80,28 @@ func NewTokenPoolFromEntries(entries []PoolEntry) *TokenPool {
 	}
 }
 
+// Replace atomically swaps the pool entries. Resets cursor, counts, and exhaustion state.
+func (p *TokenPool) Replace(entries []PoolEntry) {
+	pe := make([]poolEntry, len(entries))
+	for i, e := range entries {
+		pe[i] = poolEntry{
+			installationID: e.InstallationID,
+			label:          e.Label,
+			token:          e.Token,
+			expiresAt:      e.ExpiresAt,
+		}
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.entries = pe
+	p.counts = make([]int, len(pe))
+	p.exhausted = make([]bool, len(pe))
+	p.exhaustedAt = make([]time.Time, len(pe))
+	p.current = 0
+}
+
 // Token returns the next non-exhausted token in the round-robin rotation.
 // Returns "" when all tokens are exhausted or the pool is empty.
 // Entries with a non-zero ExpiresAt that falls within tokenExpiryBuffer are skipped.

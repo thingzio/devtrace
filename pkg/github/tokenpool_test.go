@@ -293,6 +293,90 @@ func TestPoolAllExpired(t *testing.T) {
 	}
 }
 
+func TestPoolReplace(t *testing.T) {
+	t.Parallel()
+	pool := NewTokenPool("old-a", "old-b")
+
+	pool.Token()
+	pool.Token()
+
+	newEntries := []PoolEntry{
+		{Label: "org-x", Token: "new-x", ExpiresAt: time.Now().Add(time.Hour)},
+		{Label: "org-y", Token: "new-y", ExpiresAt: time.Now().Add(time.Hour)},
+		{Label: "org-z", Token: "new-z", ExpiresAt: time.Now().Add(time.Hour)},
+	}
+	pool.Replace(newEntries)
+
+	if pool.Size() != 3 {
+		t.Fatalf("size after replace: got %d, want 3", pool.Size())
+	}
+
+	if got := pool.Token(); got != "new-x" {
+		t.Errorf("first after replace: got %q, want new-x", got)
+	}
+
+	counts := pool.UsageCounts()
+	if counts[0] != 1 {
+		t.Errorf("counts should reset: got %v", counts)
+	}
+}
+
+func TestPoolReplaceEmpty(t *testing.T) {
+	t.Parallel()
+	pool := NewTokenPool("a", "b")
+	pool.Replace(nil)
+	if pool.Size() != 0 {
+		t.Fatalf("size after empty replace: got %d, want 0", pool.Size())
+	}
+	if got := pool.Token(); got != "" {
+		t.Errorf("empty pool should return empty: got %q", got)
+	}
+}
+
+func TestPoolReplaceClearsExhaustion(t *testing.T) {
+	t.Parallel()
+	pool := NewTokenPool("a", "b")
+	pool.Exhaust("a")
+	pool.Exhaust("b")
+	if pool.ActiveCount() != 0 {
+		t.Fatal("expected 0 active before replace")
+	}
+
+	pool.Replace([]PoolEntry{
+		{Label: "new", Token: "fresh", ExpiresAt: time.Now().Add(time.Hour)},
+	})
+	if pool.ActiveCount() != 1 {
+		t.Error("replace should clear exhaustion state")
+	}
+	if got := pool.Token(); got != "fresh" {
+		t.Errorf("got %q, want fresh", got)
+	}
+}
+
+func TestPoolReplaceConcurrent(t *testing.T) {
+	t.Parallel()
+	pool := NewTokenPool("a", "b")
+	var wg sync.WaitGroup
+
+	for range 50 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			pool.Token()
+		}()
+	}
+	for range 10 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			pool.Replace([]PoolEntry{
+				{Label: "x", Token: "tok-x", ExpiresAt: time.Now().Add(time.Hour)},
+			})
+		}()
+	}
+	wg.Wait()
+}
+
 func TestCheckQuotasEmptyPool(t *testing.T) {
 	t.Parallel()
 	pool := NewTokenPool()
