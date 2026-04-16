@@ -71,17 +71,16 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 	}
 
 	// Build archive hints from GH Archive data when available.
-	// This lets fetchSignals skip 3 GitHub Search API calls.
-	// Only trust hints when archive coverage is sufficient (>= 7 distinct active days).
-	// Below that threshold the archive has too little data to represent lifetime PR counts
-	// accurately, so we fall through to the GitHub Search API.
+	// Trusted hints (>= 7 active days) replace Search API calls entirely.
+	// Untrusted hints are passed as a fallback floor when API calls fail.
 	var hints *ghclient.ArchiveHints
 	const minActiveDaysForHints = 7
-	if behavior != nil && behavior.ActiveDays >= minActiveDaysForHints {
+	if behavior != nil {
 		hints = &ghclient.ArchiveHints{
 			PRsMerged:         int64(behavior.TotalPRsMerged),
 			PRsClosed:         int64(behavior.TotalPRsClosed),
 			RecentPRRepoCount: int64(behavior.DistinctRepos90d),
+			Trusted:           behavior.ActiveDays >= minActiveDaysForHints,
 		}
 	}
 

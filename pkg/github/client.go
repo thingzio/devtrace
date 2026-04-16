@@ -10,10 +10,13 @@ import (
 // ArchiveHints provides pre-computed signals from GH Archive data,
 // allowing fetchSignals to skip redundant GitHub Search API calls.
 // When nil, all signals are fetched from the GitHub API.
+// When Trusted is true, hints replace API calls. Otherwise the Search API
+// is attempted first and hints serve as a fallback when API calls fail.
 type ArchiveHints struct {
 	PRsMerged         int64
 	PRsClosed         int64
 	RecentPRRepoCount int64
+	Trusted           bool
 }
 
 // Client abstracts GitHub API access.

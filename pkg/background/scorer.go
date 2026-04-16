@@ -315,12 +315,11 @@ func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client
 	const minActiveDaysForHints = 7
 	if beh, err := store.GetBehavioralSignals(ctx, username, provider); err == nil && beh != nil {
 		behavior = beh
-		if beh.ActiveDays >= minActiveDaysForHints {
-			hints = &ghclient.ArchiveHints{
-				PRsMerged:         int64(beh.TotalPRsMerged),
-				PRsClosed:         int64(beh.TotalPRsClosed),
-				RecentPRRepoCount: int64(beh.DistinctRepos90d),
-			}
+		hints = &ghclient.ArchiveHints{
+			PRsMerged:         int64(beh.TotalPRsMerged),
+			PRsClosed:         int64(beh.TotalPRsClosed),
+			RecentPRRepoCount: int64(beh.DistinctRepos90d),
+			Trusted:           beh.ActiveDays >= minActiveDaysForHints,
 		}
 	}
 

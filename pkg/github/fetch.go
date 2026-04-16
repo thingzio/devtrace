@@ -74,10 +74,9 @@ func fetchSignals(ctx context.Context, api *gh.Client, username, repo string, hi
 	var wg sync.WaitGroup
 	results := make(chan result, 6)
 
-	// When archive hints contain meaningful data, use them instead of calling the GitHub Search API.
-	// A non-nil hints struct with all-zero values means the archive has activity but no PR data —
-	// fall through to the Search API to get real counts.
-	if hints != nil && (hints.PRsMerged > 0 || hints.PRsClosed > 0 || hints.RecentPRRepoCount > 0) {
+	// When archive hints are marked as trusted, use them directly to skip 3 Search API calls.
+	// Otherwise call the Search API, falling back to hints when API calls fail.
+	if hints != nil && hints.Trusted {
 		mergedPRs = hints.PRsMerged
 		closedPRs = hints.PRsClosed
 		recentRepos = hints.RecentPRRepoCount
@@ -255,12 +254,28 @@ func fetchSignals(ctx context.Context, api *gh.Client, username, repo string, hi
 		close(results)
 	}()
 
+	var searchFailed bool
 	for r := range results {
 		slog.Warn("partial signal fetch failure",
 			"field", r.field,
 			"username", username,
 			"error", r.err,
 		)
+		searchFailed = true
+	}
+
+	// When the Search API failed and archive hints are available, use them as a floor.
+	// Partial archive data is better than zero when the API is unreachable.
+	if searchFailed && hints != nil && !hints.Trusted {
+		if mergedPRs == 0 && hints.PRsMerged > 0 {
+			mergedPRs = hints.PRsMerged
+		}
+		if closedPRs == 0 && hints.PRsClosed > 0 {
+			closedPRs = hints.PRsClosed
+		}
+		if recentRepos == 0 && hints.RecentPRRepoCount > 0 {
+			recentRepos = hints.RecentPRRepoCount
+		}
 	}
 
 	signals.PRsMerged = mergedPRs
