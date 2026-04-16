@@ -76,11 +76,29 @@ func adminDashboardHandler(store *postgres.Store, pool *ghclient.TokenPool, opts
 				data["Tenants"] = tenants
 			}
 
-			metrics, err := store.ScoringMetrics(ctx)
-			if err != nil {
-				slog.Error("admin: scoring metrics", "error", err)
-			} else {
-				data["ScoringMetrics"] = metrics
+			if days, dErr := store.DailyScoringCounts(r.Context(), 7); dErr == nil && len(days) > 0 {
+				maxCount := 0
+				for _, d := range days {
+					if d.Count > maxCount {
+						maxCount = d.Count
+					}
+				}
+				bars := make([]activityBar, len(days))
+				for i, d := range days {
+					pct := 0
+					if maxCount > 0 {
+						pct = (d.Count * 100) / maxCount
+					}
+					if pct < 2 {
+						pct = 2
+					}
+					bars[i] = activityBar{
+						Label:   d.Day.Format("01/02"),
+						Count:   d.Count,
+						Percent: pct,
+					}
+				}
+				data["ScoringBars"] = bars
 			}
 
 			depth, err := store.QueueDepth(ctx)

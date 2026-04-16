@@ -6,29 +6,34 @@ import (
 	"time"
 )
 
-// ScoringMetrics holds time-bucketed scoring counts for the admin dashboard.
-type ScoringMetrics struct {
-	Last1h   int
-	Last24h  int
-	Last72h  int
-	ThisWeek int
+// DailyScoringCount holds one day's scoring count.
+type DailyScoringCount struct {
+	Day   time.Time
+	Count int
 }
 
-// ScoringMetrics returns time-bucketed counts of scores recorded.
-func (s *Store) ScoringMetrics(ctx context.Context) (*ScoringMetrics, error) {
-	var m ScoringMetrics
-	err := s.db.QueryRowContext(ctx,
-		`SELECT
-			COUNT(*) FILTER (WHERE scored_at > NOW() - INTERVAL '1 hour'),
-			COUNT(*) FILTER (WHERE scored_at > NOW() - INTERVAL '24 hours'),
-			COUNT(*) FILTER (WHERE scored_at > NOW() - INTERVAL '72 hours'),
-			COUNT(*) FILTER (WHERE scored_at > DATE_TRUNC('week', NOW()))
-		 FROM devtrace_reputation_history`).Scan(
-		&m.Last1h, &m.Last24h, &m.Last72h, &m.ThisWeek)
+// DailyScoringCounts returns per-day scoring counts for the last N days.
+func (s *Store) DailyScoringCounts(ctx context.Context, days int) ([]DailyScoringCount, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT DATE(scored_at) AS day, COUNT(*) AS count
+		 FROM devtrace_reputation_history
+		 WHERE scored_at > NOW() - MAKE_INTERVAL(days => $1)
+		 GROUP BY DATE(scored_at)
+		 ORDER BY day ASC`, days)
 	if err != nil {
-		return nil, fmt.Errorf("scoring metrics: %w", err)
+		return nil, fmt.Errorf("daily scoring counts: %w", err)
 	}
-	return &m, nil
+	defer rows.Close()
+
+	var result []DailyScoringCount
+	for rows.Next() {
+		var d DailyScoringCount
+		if err := rows.Scan(&d.Day, &d.Count); err != nil {
+			return nil, fmt.Errorf("scan daily scoring count: %w", err)
+		}
+		result = append(result, d)
+	}
+	return result, rows.Err()
 }
 
 // ScoreHistoryEntry represents a single point on a score trend chart.
