@@ -70,7 +70,7 @@ func (r *ArchiveReader) Stream(ctx context.Context, hour time.Time, fn func(Even
 	defer gz.Close()
 
 	scanner := bufio.NewScanner(gz)
-	scanner.Buffer(make([]byte, 0, 1<<20), 1<<20) // 1MB line buffer
+	scanner.Buffer(make([]byte, 0, 1<<20), 8<<20) // 8MB max line buffer
 	for scanner.Scan() {
 		if ctx.Err() != nil {
 			return ctx.Err()
