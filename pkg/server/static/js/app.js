@@ -4,7 +4,7 @@
   var THEME_KEY = 'devtrace-theme';
 
   function getTheme() {
-    return localStorage.getItem(THEME_KEY) || 'system';
+    return localStorage.getItem(THEME_KEY) || 'dark';
   }
 
   function setTheme(theme) {
@@ -14,7 +14,7 @@
 
   function applyTheme(theme) {
     var root = document.documentElement;
-    if (theme === 'system') {
+    if (theme === 'dark') {
       root.removeAttribute('data-theme');
     } else {
       root.setAttribute('data-theme', theme);
@@ -191,7 +191,7 @@
             datasets: [{
               label: 'Score',
               data: data.map(function(d) { return d.score; }),
-              borderColor: '#0366d6',
+              borderColor: '#4a9eff',
               tension: 0.3,
               fill: false,
             }]
