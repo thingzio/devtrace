@@ -84,6 +84,9 @@ func Backfill(ctx context.Context, store *postgres.Store, days int) error {
 			"batch_elapsed", time.Since(batchStart).Round(time.Millisecond),
 			"total_elapsed", time.Since(totalStart).Round(time.Millisecond),
 		)
+
+		// Run maintenance (compaction + pruning) during long backfills.
+		maybeCompact(ctx, store)
 	}
 
 	return nil
