@@ -11,10 +11,11 @@ import (
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 )
 
-const (
-	backfillCursorKey = "gharchive_backfill_cursor"
-	backfillBatchSize = 18
-	backfillWorkers   = 3
+const backfillCursorKey = "gharchive_backfill_cursor"
+
+var (
+	backfillBatchSize = config.GetEnvAsInt("GHARCHIVE_BACKFILL_BATCH_SIZE", 18)
+	backfillWorkers   = config.GetEnvAsInt("GHARCHIVE_BACKFILL_WORKERS", 3)
 )
 
 // Backfill processes historical GH Archive hours in reverse-chronological order
