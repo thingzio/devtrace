@@ -300,3 +300,16 @@ func (s *Store) CompactActivity(ctx context.Context, olderThan time.Duration) (i
 
 	return deleted, nil
 }
+
+// PruneActivity deletes all activity rows older than the given retention
+// window. Returns rows deleted. Run after CompactActivity to remove both
+// hourly and compacted rows beyond the retention limit.
+func (s *Store) PruneActivity(ctx context.Context, retention time.Duration) (int64, error) {
+	cutoff := time.Now().UTC().Add(-retention)
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM devtrace_contributor_activity WHERE hour < $1`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("prune activity: %w", err)
+	}
+	return res.RowsAffected()
+}

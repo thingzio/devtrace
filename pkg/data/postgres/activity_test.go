@@ -265,3 +265,77 @@ func TestCompactActivity(t *testing.T) {
 		t.Errorf("total prs_opened after compact: got %d, want %d", totalPRs, inserted)
 	}
 }
+
+func TestPruneActivity(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	const user = "prune-test-user"
+
+	// Clean up from prior runs.
+	_, _ = store.DB().ExecContext(ctx,
+		`DELETE FROM devtrace_contributor_activity WHERE username = $1`, user)
+
+	t.Cleanup(func() {
+		_, _ = store.DB().ExecContext(ctx,
+			`DELETE FROM devtrace_contributor_activity WHERE username = $1`, user)
+	})
+
+	now := time.Now().UTC().Truncate(time.Hour)
+
+	// Insert one row 150 days old and one row 10 days old.
+	old := []postgres.HourlySummary{{
+		Username:  user,
+		Provider:  "github",
+		Hour:      now.Add(-150 * 24 * time.Hour),
+		PRsOpened: 1,
+		Repos:     []string{"org/old-repo"},
+	}}
+	recent := []postgres.HourlySummary{{
+		Username:  user,
+		Provider:  "github",
+		Hour:      now.Add(-10 * 24 * time.Hour),
+		PRsOpened: 1,
+		Repos:     []string{"org/new-repo"},
+	}}
+
+	n, err := store.BatchUpsertActivity(ctx, old)
+	if err != nil {
+		t.Fatalf("insert old row: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 old row upserted, got %d", n)
+	}
+
+	n, err = store.BatchUpsertActivity(ctx, recent)
+	if err != nil {
+		t.Fatalf("insert recent row: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 recent row upserted, got %d", n)
+	}
+
+	// Prune with 120-day retention — should delete the 150-day-old row.
+	deleted, err := store.PruneActivity(ctx, 120*24*time.Hour)
+	if err != nil {
+		t.Fatalf("prune activity: %v", err)
+	}
+	if deleted < 1 {
+		t.Errorf("expected at least 1 row pruned, got %d", deleted)
+	}
+
+	// Only the recent row should remain.
+	var count int
+	err = store.DB().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM devtrace_contributor_activity WHERE username = $1`, user).Scan(&count)
+	if err != nil {
+		t.Fatalf("count remaining: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 row remaining, got %d", count)
+	}
+}
