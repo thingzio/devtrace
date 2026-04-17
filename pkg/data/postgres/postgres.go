@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -15,6 +16,7 @@ type Store struct {
 }
 
 type PoolConfig struct {
+	AppName         string
 	MaxOpenConns    int
 	MaxIdleConns    int
 	ConnMaxLifetime time.Duration
@@ -23,6 +25,7 @@ type PoolConfig struct {
 
 func DefaultPoolConfig() PoolConfig {
 	return PoolConfig{
+		AppName:         "devtrace-site",
 		MaxOpenConns:    config.GetEnvAsInt("DB_MAX_OPEN_CONNS", 10),
 		MaxIdleConns:    config.GetEnvAsInt("DB_MAX_IDLE_CONNS", 5),
 		ConnMaxLifetime: 30 * time.Minute,
@@ -30,8 +33,22 @@ func DefaultPoolConfig() PoolConfig {
 	}
 }
 
+// applyAppName appends application_name to a DSN if not already present.
+func applyAppName(dsn, appName string) string {
+	if appName == "" || strings.Contains(dsn, "application_name") {
+		return dsn
+	}
+	if strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://") {
+		if strings.Contains(dsn, "?") {
+			return dsn + "&application_name=" + appName
+		}
+		return dsn + "?application_name=" + appName
+	}
+	return dsn + " application_name=" + appName
+}
+
 func New(ctx context.Context, dsn string, cfg PoolConfig) (*Store, error) {
-	db, err := sql.Open("postgres", dsn)
+	db, err := sql.Open("postgres", applyAppName(dsn, cfg.AppName))
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
