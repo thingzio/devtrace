@@ -395,9 +395,9 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	requireAdmin := middleware.RequireAdmin(db)
 	mux.Handle("GET /admin", requireAdmin(adminDashboardHandler(store, pool, opts)))
 	mux.Handle("GET /admin/", requireAdmin(adminDashboardHandler(store, pool, opts)))
-	mux.Handle("POST /admin/tenant/{username}/plan", requireAdmin(adminUpdatePlanFormHandler(db)))
-	mux.Handle("POST /admin/tenant/{username}/status", requireAdmin(adminUpdateStatusFormHandler(db)))
-	mux.Handle("POST /admin/tenant/{username}/delete", requireAdmin(adminDeleteTenantHandler(db)))
+	mux.Handle("POST /admin/tenant/{username}/plan", requireAdmin(middleware.ValidateCSRF(adminUpdatePlanFormHandler(db))))
+	mux.Handle("POST /admin/tenant/{username}/status", requireAdmin(middleware.ValidateCSRF(adminUpdateStatusFormHandler(db))))
+	mux.Handle("POST /admin/tenant/{username}/delete", requireAdmin(middleware.ValidateCSRF(adminDeleteTenantHandler(db))))
 
 	cleanup := func() {
 		unauthRL.close()

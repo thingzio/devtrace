@@ -107,6 +107,14 @@ func adminDashboardHandler(store *postgres.Store, pool *ghclient.TokenPool, opts
 
 		auditLog("view_dashboard", tn, r.URL.Path, r.RemoteAddr, "")
 
+		csrfToken, err := middleware.GenerateCSRFToken()
+		if err != nil {
+			slog.Error("admin: generate csrf token", "error", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		middleware.SetCSRFCookie(w, csrfToken)
+
 		data := map[string]any{
 			"Title":     "Admin",
 			"Version":   opts.Version,
@@ -114,6 +122,7 @@ func adminDashboardHandler(store *postgres.Store, pool *ghclient.TokenPool, opts
 			"Date":      opts.Date,
 			"NavUser":   tn.Username,
 			"NavAvatar": tn.AvatarURL,
+			"CSRFToken": csrfToken,
 		}
 
 		if msg := r.URL.Query().Get("msg"); msg != "" {
@@ -316,6 +325,7 @@ func adminUpdateStatusFormHandler(db *sql.DB) http.HandlerFunc {
 
 func adminDeleteTenantHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 4096)
 		tn := middleware.TenantFromContext(r.Context())
 
 		username := r.PathValue("username")

@@ -119,6 +119,7 @@
           <td>
             <span class="view-{{.Username}}">{{.Plan}}</span>
             <form class="edit-{{.Username}}" method="POST" action="/admin/tenant/{{.Username}}/plan" style="display:none">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
               <select name="plan">
                 <option value="free" {{if eq .Plan "free"}}selected{{end}}>free</option>
                 <option value="starter" {{if eq .Plan "starter"}}selected{{end}}>starter</option>
@@ -131,6 +132,7 @@
           <td>
             <span class="view-{{.Username}}">{{.Status}}</span>
             <form class="edit-{{.Username}}" method="POST" action="/admin/tenant/{{.Username}}/status" style="display:none">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
               <select name="status">
                 <option value="active" {{if eq .Status "active"}}selected{{end}}>active</option>
                 <option value="suspended" {{if eq .Status "suspended"}}selected{{end}}>suspended</option>
@@ -146,6 +148,7 @@
             <span class="edit-{{.Username}}" style="display:none">
               <button class="btn btn-sm" onclick="toggleEdit('{{.Username}}')">Cancel</button>
               <form method="POST" action="/admin/tenant/{{.Username}}/delete" style="display:inline" onsubmit="return confirm('Delete tenant {{.Username}}? This cannot be undone.')">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button type="submit" class="btn btn-sm" style="color:#f85149;">Delete</button>
               </form>
             </span>
