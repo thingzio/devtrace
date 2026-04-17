@@ -9,12 +9,12 @@ Inspect the provenance of any open source contributor at a glance. Trace contrib
 DevTrace occupies uncontested space: no existing product provides per-contributor trust scoring with multi-category behavioral decomposition, AI narratives, and self-serve pricing. The market is fragmented across project-level tools (OpenSSF Scorecard), package-level SCA (Socket, Snyk, Endor Labs), internal developer analytics (Arnica, Apiiro), and enterprise SBOM-centric contributor mapping (NetRise Provenance).
 
 **Key differentiators:**
-1. Public, portable per-contributor trust score (the "credit score for OSS contributors")
+1. Public, portable per-contributor trust score — the "credit score for OSS contributors"
 2. Self-serve tiered pricing in a market where all contributor-aware tools are enterprise-only ($10K+/yr)
-3. AI-powered risk narratives — no competitor offers this at the contributor level
-4. 5-category behavioral decomposition — transparent, auditable scoring vs opaque single numbers
-5. GH Archive behavioral signals at the contributor level (not project or org level)
-6. GitHub Action for PR-time scoring — only `contributor-report` (narrow, no persistent scoring) competes
+3. AI-powered risk narratives that explain *why* a contributor is risky, not just a number
+4. Transparent 5-category scoring breakdown — auditable and explainable, not a black box
+5. Open source community behavior signals — contribution patterns, review activity, and consistency across the ecosystem
+6. PR-time trust checks via GitHub Action — surface risk where developers already work
 
 ### Market Context
 
