@@ -123,7 +123,7 @@ func (s *Store) BatchUpsertActivity(ctx context.Context, summaries []HourlySumma
 	return count, nil
 }
 
-// GetBehavioralSignals computes behavioral metrics from the last 180 days of devtrace_contributor_activity.
+// GetBehavioralSignals computes behavioral metrics from the last 90 days of devtrace_contributor_activity.
 // Returns nil when no data exists for the contributor.
 func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider string) (*BehavioralSignals, error) {
 	var (
@@ -154,7 +154,7 @@ func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider str
 			EXTRACT(EPOCH FROM NOW() - MIN(hour)) / 2592000.0,
 			COALESCE(COUNT(DISTINCT EXTRACT(hour FROM hour)) FILTER (WHERE hour > NOW() - INTERVAL '90 days'), 0)
 		FROM devtrace_contributor_activity
-		WHERE username = $1 AND provider = $2 AND hour > NOW() - INTERVAL '180 days'`,
+		WHERE username = $1 AND provider = $2 AND hour > NOW() - INTERVAL '90 days'`,
 		username, provider,
 	).Scan(&prVelocity30d, &totalPRs, &totalPRsMerged, &totalPRsClosed,
 		&reviewsGiven30d, &issueComments30d,
@@ -180,8 +180,8 @@ func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider str
 		return nil, fmt.Errorf("get distinct repos: %w", err)
 	}
 
-	// Total weeks in the 180-day window.
-	totalWeeks := 180.0 / 7.0
+	// Total weeks in the 90-day window.
+	totalWeeks := 90.0 / 7.0
 	consistency := float64(activeWeeks) / totalWeeks
 	consistency = math.Min(consistency, 1.0)
 
@@ -199,7 +199,7 @@ func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider str
 				SUM(prs_opened + reviews_given + issue_comments) AS activity
 			FROM devtrace_contributor_activity
 			WHERE username = $1 AND provider = $2
-				AND hour > NOW() - INTERVAL '180 days'
+				AND hour > NOW() - INTERVAL '90 days'
 			GROUP BY 1
 			HAVING SUM(prs_opened + reviews_given + issue_comments) > 0
 		)
