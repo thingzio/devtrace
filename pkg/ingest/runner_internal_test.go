@@ -21,8 +21,12 @@ type mockIngestStore struct {
 	existing   map[string]bool // username -> exists
 	enqueued   []enqueuedEntry
 	upserted   []postgres.HourlySummary
-	compacted  bool
-	compactAge time.Duration
+	compacted        bool
+	compactAge       time.Duration
+	prunedActivity   bool
+	pruneActivityAge time.Duration
+	prunedHistory    bool
+	pruneHistoryAge  time.Duration
 }
 
 type enqueuedEntry struct {
@@ -73,6 +77,18 @@ func (m *mockIngestStore) CompactActivity(_ context.Context, olderThan time.Dura
 	m.compacted = true
 	m.compactAge = olderThan
 	return 42, nil
+}
+
+func (m *mockIngestStore) PruneActivity(_ context.Context, retention time.Duration) (int64, error) {
+	m.prunedActivity = true
+	m.pruneActivityAge = retention
+	return 10, nil
+}
+
+func (m *mockIngestStore) PruneScoreHistory(_ context.Context, retention time.Duration) (int64, error) {
+	m.prunedHistory = true
+	m.pruneHistoryAge = retention
+	return 5, nil
 }
 
 // newTestArchiveServer returns an httptest server that serves gzipped NDJSON
@@ -158,6 +174,18 @@ func TestMaybeCompactRunsWhenDue(t *testing.T) {
 	}
 	if store.syncStates[compactStateKey].IsZero() {
 		t.Error("compaction state should be saved")
+	}
+	if !store.prunedActivity {
+		t.Error("activity pruning should have run")
+	}
+	if store.pruneActivityAge != pruneActivityRetention {
+		t.Errorf("prune activity age: got %v, want %v", store.pruneActivityAge, pruneActivityRetention)
+	}
+	if !store.prunedHistory {
+		t.Error("history pruning should have run")
+	}
+	if store.pruneHistoryAge != pruneHistoryRetention {
+		t.Errorf("prune history age: got %v, want %v", store.pruneHistoryAge, pruneHistoryRetention)
 	}
 }
 

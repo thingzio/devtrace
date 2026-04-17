@@ -15,6 +15,9 @@ const (
 	compactStateKey  = "activity_compacted"
 	compactInterval  = 24 * time.Hour
 	compactOlderThan = 30 * 24 * time.Hour // aggregate rows older than 30 days
+
+	pruneActivityRetention = 120 * 24 * time.Hour // delete activity older than 120 days
+	pruneHistoryRetention  = 400 * 24 * time.Hour // delete score history older than 400 days
 )
 
 // ingestStore defines the store operations needed by the ingest runner.
@@ -27,6 +30,8 @@ type ingestStore interface {
 	ContributorExists(ctx context.Context, username, provider string) (bool, error)
 	PurgeNonTenantQueue(ctx context.Context) (int64, error)
 	CompactActivity(ctx context.Context, olderThan time.Duration) (int64, error)
+	PruneActivity(ctx context.Context, retention time.Duration) (int64, error)
+	PruneScoreHistory(ctx context.Context, retention time.Duration) (int64, error)
 }
 
 // Run processes one or more hourly GH Archive dumps.
@@ -82,6 +87,23 @@ func maybeCompact(ctx context.Context, store ingestStore) {
 	}
 
 	slog.Info("compaction complete", "rows_deleted", deleted)
+
+	// Prune old activity rows beyond retention window.
+	pruned, err := store.PruneActivity(ctx, pruneActivityRetention)
+	if err != nil {
+		slog.Error("prune activity failed", "error", err)
+	} else if pruned > 0 {
+		slog.Info("pruned old activity", "rows_deleted", pruned)
+	}
+
+	// Prune old score history beyond retention window.
+	histPruned, err := store.PruneScoreHistory(ctx, pruneHistoryRetention)
+	if err != nil {
+		slog.Error("prune score history failed", "error", err)
+	} else if histPruned > 0 {
+		slog.Info("pruned old score history", "rows_deleted", histPruned)
+	}
+
 	if err := store.SaveSyncState(ctx, compactStateKey, time.Now().UTC()); err != nil {
 		slog.Error("save compaction state", "error", err)
 	}
