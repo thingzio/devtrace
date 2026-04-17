@@ -13,8 +13,8 @@ import (
 
 const (
 	backfillCursorKey = "gharchive_backfill_cursor"
-	backfillBatchSize = 24
-	backfillWorkers   = 4
+	backfillBatchSize = 18
+	backfillWorkers   = 3
 )
 
 // Backfill processes historical GH Archive hours in reverse-chronological order

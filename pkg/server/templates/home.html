@@ -57,10 +57,10 @@
       <tbody>
         {{range .recent}}
         <tr>
-          <td><a href="/score/{{.Username}}{{if .Repo}}?repo={{.Repo}}{{end}}" title="View scorecard">&#x1F517;</a></td>
+          <td><a href="/score/{{.Username}}{{if .Repo}}?repo={{.Repo}}{{end}}" title="View scorecard" style="text-decoration:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;opacity:0.5;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></td>
           <td>{{.Username}}</td>
           <td>{{if .Repo}}{{.Repo}}{{else}}&mdash;{{end}}</td>
-          <td>{{.Source}}</td>
+          <td>{{if eq .Source "ui"}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;opacity:0.5;" title="Dashboard"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>{{else}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;opacity:0.5;" title="API"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>{{end}}</td>
           <td>{{if .Deep}}&#10003;{{else}}&#10007;{{end}}</td>
           <td><time datetime="{{.ScoredAt.Format "2006-01-02T15:04:05Z"}}">{{.ScoredAt.Format "2006-01-02 15:04"}}</time></td>
         </tr>
