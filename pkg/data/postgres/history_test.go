@@ -127,7 +127,8 @@ func TestPruneScoreHistory(t *testing.T) {
 	}
 
 	// Insert a recent row via the Store method.
-	if err := store.SaveScoreHistory(ctx, user, provider, 0.80, "B", false); err != nil {
+	err = store.SaveScoreHistory(ctx, user, provider, 0.80, "B", false)
+	if err != nil {
 		t.Fatalf("save recent history: %v", err)
 	}
 

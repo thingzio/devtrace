@@ -16,11 +16,11 @@ import (
 // --- mock store for runner tests ---
 
 type mockIngestStore struct {
-	syncStates map[string]time.Time
-	tenantOrgs map[string]bool
-	existing   map[string]bool // username -> exists
-	enqueued   []enqueuedEntry
-	upserted   []postgres.HourlySummary
+	syncStates       map[string]time.Time
+	tenantOrgs       map[string]bool
+	existing         map[string]bool // username -> exists
+	enqueued         []enqueuedEntry
+	upserted         []postgres.HourlySummary
 	compacted        bool
 	compactAge       time.Duration
 	prunedActivity   bool
