@@ -79,6 +79,18 @@ func (s *Store) SaveScoreHistory(ctx context.Context, username, provider string,
 	return nil
 }
 
+// PruneScoreHistory deletes reputation history rows older than the given
+// retention window. Returns rows deleted.
+func (s *Store) PruneScoreHistory(ctx context.Context, retention time.Duration) (int64, error) {
+	cutoff := time.Now().UTC().Add(-retention)
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM devtrace_reputation_history WHERE scored_at < $1`, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("prune score history: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // UpsertContributor ensures a contributor row exists for the given identity.
 // Uses ON CONFLICT DO NOTHING so it is idempotent.
 func (s *Store) UpsertContributor(ctx context.Context, username, provider string) error {

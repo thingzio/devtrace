@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestDailyScoringCounts(t *testing.T) {
@@ -91,5 +92,60 @@ func TestSaveAndGetHistory(t *testing.T) {
 	}
 	if len(empty) != 0 {
 		t.Errorf("expected 0 entries for unknown user, got %d", len(empty))
+	}
+}
+
+func TestPruneScoreHistory(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	const user = "prune-hist-user"
+	const provider = "github"
+
+	if err := store.UpsertContributor(ctx, user, provider); err != nil {
+		t.Fatalf("upsert contributor: %v", err)
+	}
+
+	t.Cleanup(func() {
+		db := store.DB()
+		_, _ = db.ExecContext(ctx, `DELETE FROM devtrace_reputation_history WHERE username = $1`, user)
+		_, _ = db.ExecContext(ctx, `DELETE FROM devtrace_contributor WHERE username = $1`, user)
+	})
+
+	// Insert an old row (500 days ago) via raw SQL.
+	db := store.DB()
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO devtrace_reputation_history (username, provider, score, grade, deep, scored_at)
+		 VALUES ($1, $2, 0.75, 'B', false, NOW() - INTERVAL '500 days')`,
+		user, provider)
+	if err != nil {
+		t.Fatalf("insert old history row: %v", err)
+	}
+
+	// Insert a recent row via the Store method.
+	if err := store.SaveScoreHistory(ctx, user, provider, 0.80, "B", false); err != nil {
+		t.Fatalf("save recent history: %v", err)
+	}
+
+	// Prune with 400-day retention — should delete the 500-day-old row.
+	deleted, err := store.PruneScoreHistory(ctx, 400*24*time.Hour)
+	if err != nil {
+		t.Fatalf("prune score history: %v", err)
+	}
+	if deleted < 1 {
+		t.Errorf("expected at least 1 row deleted, got %d", deleted)
+	}
+
+	// Only the recent row should remain.
+	entries, err := store.GetScoreHistory(ctx, user, provider, 10)
+	if err != nil {
+		t.Fatalf("get history after prune: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("expected 1 entry after prune, got %d", len(entries))
 	}
 }
