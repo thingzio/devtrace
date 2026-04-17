@@ -32,6 +32,7 @@ pkg/config/config.yaml
 
 # Worktrees
 .worktrees
+docs/plans
 
 
 # =============================================================================
