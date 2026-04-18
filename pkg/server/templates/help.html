@@ -286,14 +286,14 @@ export TOKEN=dt_your_token_here</code></pre>
       </ul>
     </div>
 
-    {{if .Email}}
+    {{if and .Email .ContactEnabled}}
     <div class="landing-feature help-section" style="margin-bottom:20px" id="help-contact">
       <h3>Contact Support</h3>
       {{if .Sent}}
       <div style="padding:12px;background:rgba(34,197,94,0.1);border:1px solid #22c55e;border-radius:6px;">
         Message sent. We'll get back to you at <strong>{{.Email}}</strong>.
       </div>
-      {{else if .ContactEnabled}}
+      {{else}}
       {{if .Error}}
       <div style="padding:12px;background:rgba(248,81,73,0.1);border:1px solid #f85149;border-radius:6px;margin-bottom:12px;color:#f85149;">
         {{.Error}}
@@ -305,8 +305,6 @@ export TOKEN=dt_your_token_here</code></pre>
           style="width:100%;padding:10px 12px;border:1px solid var(--border-color);border-radius:6px;font-family:inherit;font-size:0.95em;resize:vertical;background:var(--page-content-blockColor);color:var(--page-content-txtColor);box-sizing:border-box;"></textarea>
         <button type="submit" class="btn btn-primary" style="margin-top:10px;">Send Message</button>
       </form>
-      {{else}}
-      <p style="color:var(--gray);font-size:0.9em;">Contact form is not available yet. Please email us directly at <a href="mailto:devtrace@thingz.io">devtrace@thingz.io</a>.</p>
       {{end}}
     </div>
     {{end}}
