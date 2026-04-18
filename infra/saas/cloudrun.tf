@@ -28,8 +28,13 @@ resource "google_cloud_run_v2_service" "serve" {
       }
 
       env {
-        name  = "DATABASE_URL"
-        value = "host=/cloudsql/${local.db_connection} dbname=${var.db_name} user=${google_sql_user.app.name} password=${random_password.db_password.result} sslmode=disable"
+        name = "DATABASE_URL"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.database_url.secret_id
+            version = "latest"
+          }
+        }
       }
 
       env {
@@ -100,8 +105,13 @@ resource "google_cloud_run_v2_service" "serve" {
       dynamic "env" {
         for_each = var.github_token != "" ? [1] : []
         content {
-          name  = "GITHUB_TOKEN"
-          value = var.github_token
+          name = "GITHUB_TOKEN"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.github_token[0].secret_id
+              version = "latest"
+            }
+          }
         }
       }
 

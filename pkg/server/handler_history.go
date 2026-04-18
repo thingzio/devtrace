@@ -22,8 +22,8 @@ func historyDays(plan string) int {
 func historyHandler(store *postgres.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := r.PathValue("username")
-		if username == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username required"})
+		if username == "" || len(username) > 39 || !usernameRE.MatchString(username) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid username"})
 			return
 		}
 

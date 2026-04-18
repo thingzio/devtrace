@@ -74,14 +74,14 @@ Tool versions and quality thresholds are centralized in `.settings.yaml` (single
 
 **Imports:**
 - GitHub API via `github.com/google/go-github/v83/github`
-- Testing via `github.com/stretchr/testify` (assert + require)
+- Testing via standard `testing` package with `t.Fatalf`/`t.Errorf`
 - PostgreSQL via `github.com/lib/pq`
 - JWT via `github.com/golang-jwt/jwt/v5`
 
 **Testing:**
-- `setupTestDB(t)` helper creates temp Postgres container with all migrations
+- `testStore(t)` helper (in `pkg/data/postgres/`) and `testDB(t)` (in `pkg/tenant/`) connect to Postgres with all migrations
 - All test functions must create `ctx := context.Background()` and pass to Store methods
-- Table-driven tests where applicable
+- Table-driven tests where applicable; raw `testing` package (no testify)
 - Test both nil DB and empty DB cases for query functions
 
 ## Anti-Patterns (Do Not Do)

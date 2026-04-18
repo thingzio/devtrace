@@ -50,7 +50,7 @@ func TestScoreHandler(t *testing.T) {
 		},
 	}
 
-	svc := service.NewScoreService(mock, nil, "v0.0.1-test")
+	svc := service.NewScoreService(mock, "v0.0.1-test")
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/score/{username}", scoreHandler(nil, nil, svc))
@@ -93,7 +93,7 @@ func TestScoreHandlerSecurityHeaders(t *testing.T) {
 		signals: &score.InputSignals{AgeDays: 100},
 	}
 
-	svc := service.NewScoreService(mock, nil, "v0.0.1-test")
+	svc := service.NewScoreService(mock, "v0.0.1-test")
 	mux, cleanup := makeRouter(nil, svc, nil, nil, Options{}, nil)
 	defer cleanup()
 	handler := securityHeaders(mux)

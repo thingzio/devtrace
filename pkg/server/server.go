@@ -228,7 +228,7 @@ func Run(ctx context.Context, opts Options) error {
 		defer ingestStop()
 	}
 
-	scoreSvc := service.NewScoreService(ghClient, nil, opts.Version)
+	scoreSvc := service.NewScoreService(ghClient, opts.Version)
 	if store != nil {
 		scoreSvc.SetBehaviorStore(store)
 	}
@@ -388,7 +388,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	// Settings + ToS — requires session
 	mux.Handle("GET /settings", requireSession(settingsHandler(store, opts)))
 	mux.Handle("GET /tos", requireAny(tosPageHandler(db, opts)))
-	mux.Handle("POST /tos/accept", requireSession(tosAcceptHandler(store)))
+	mux.Handle("POST /tos/accept", requireSession(middleware.ValidateCSRF(tosAcceptHandler(store))))
 
 	// Score card page — accepts any auth, rate-limited (HTML 429)
 	mux.Handle("GET /score/{username}", requireAny(authAwareRateLimit(unauthRL, authRL, true, opts.Version)(scorecardHandler(store, scoreSvc, opts))))
@@ -396,8 +396,8 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	// Score API — accepts any auth, rate-limited (JSON 429)
 	mux.Handle("GET /api/v1/score/{username}", requireAny(authAwareRateLimit(unauthRL, authRL, false, opts.Version)(scoreHandler(db, store, scoreSvc))))
 
-	// Score history API (trend chart data) — no rate limit, UI-only read
-	mux.Handle("GET /api/v1/score/{username}/history", requireAny(historyHandler(store)))
+	// Score history API (trend chart data) — rate-limited
+	mux.Handle("GET /api/v1/score/{username}/history", requireAny(authAwareRateLimit(unauthRL, authRL, false, opts.Version)(historyHandler(store))))
 
 	// Token management — requires session auth (UI only)
 	mux.Handle("POST /api/v1/token", requireSession(createTokenHandler(db)))
@@ -405,7 +405,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	mux.Handle("DELETE /api/v1/token/{id}", requireSession(revokeTokenHandler(db)))
 
 	// Session
-	mux.Handle("POST /auth/signout", requireSession(signoutHandler(db)))
+	mux.Handle("POST /auth/signout", requireSession(middleware.ValidateCSRF(signoutHandler(db))))
 
 	// GitHub App webhook
 	webhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
@@ -424,6 +424,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	mux.Handle("POST /admin/tenant/{username}/delete", requireAdmin(middleware.ValidateCSRF(adminDeleteTenantHandler(db))))
 
 	cleanup := func() {
+		scoreSvc.Close()
 		unauthRL.close()
 		authRL.close()
 		oauthRL.close()
@@ -432,10 +433,19 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 }
 
 func securityHeaders(next http.Handler) http.Handler {
+	secure := strings.HasPrefix(os.Getenv("BASE_URL"), "https://")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Content-Security-Policy",
+			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
+				"img-src 'self' https://avatars.githubusercontent.com data:; "+
+				"connect-src 'self'; frame-ancestors 'none'")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		if secure {
+			w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

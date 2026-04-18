@@ -31,15 +31,20 @@ func (s *Store) EnqueueForScoring(ctx context.Context, username, provider string
 	return nil
 }
 
-// DequeueForScoring returns the highest-priority entries from the scoring queue.
-// Priority 1 is highest. Entries are not removed; call RemoveFromQueue after processing.
+// DequeueForScoring atomically removes and returns the highest-priority entries
+// from the scoring queue. Priority 1 is highest. Uses DELETE ... RETURNING to
+// ensure entries are exclusively claimed even under concurrent consumers.
 func (s *Store) DequeueForScoring(ctx context.Context, limit int) ([]QueueEntry, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT username, provider, priority, queued_at
-		 FROM devtrace_scoring_queue
-		 ORDER BY priority ASC, queued_at ASC
-		 LIMIT $1
-		 FOR UPDATE SKIP LOCKED`, limit)
+		`DELETE FROM devtrace_scoring_queue
+		 WHERE (username, provider) IN (
+			SELECT username, provider
+			FROM devtrace_scoring_queue
+			ORDER BY priority ASC, queued_at ASC
+			LIMIT $1
+			FOR UPDATE SKIP LOCKED
+		 )
+		 RETURNING username, provider, priority, queued_at`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("dequeue for scoring: %w", err)
 	}

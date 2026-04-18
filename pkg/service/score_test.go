@@ -64,7 +64,7 @@ func TestScoreContributor(t *testing.T) {
 	svc := NewScoreService(&mockClient{
 		signals: establishedSignals(),
 		profile: establishedProfile(),
-	}, nil, "v0.0.1-test")
+	}, "v0.0.1-test")
 
 	resp, err := svc.Score(context.Background(), "testuser", "", "free", nil)
 	if err != nil {
@@ -96,7 +96,7 @@ func TestScoreContributorPlanAware(t *testing.T) {
 		signals: establishedSignals(),
 		profile: establishedProfile(),
 	}
-	svc := NewScoreService(mc, nil, "v0.0.1-test")
+	svc := NewScoreService(mc, "v0.0.1-test")
 	ctx := context.Background()
 
 	t.Run("unauth", func(t *testing.T) {
@@ -158,7 +158,7 @@ func TestScoreContributorWithRepo(t *testing.T) {
 	svc := NewScoreService(&mockClient{
 		signals: sig,
 		profile: establishedProfile(),
-	}, nil, "v0.0.1-test")
+	}, "v0.0.1-test")
 
 	resp, err := svc.Score(context.Background(), "testuser", "org/repo", "free", nil)
 	if err != nil {
@@ -221,7 +221,7 @@ func TestScoreBotReturnsZero(t *testing.T) {
 	svc := NewScoreService(&mockClient{
 		signals: establishedSignals(),
 		profile: establishedProfile(),
-	}, nil, "v0.0.1-test")
+	}, "v0.0.1-test")
 
 	bots := []string{"dependabot[bot]", "renovate[bot]", "copilot", "github-copilot", "custom-app[bot]"}
 	for _, botName := range bots {
@@ -248,7 +248,7 @@ func TestScoreNonBotNotFiltered(t *testing.T) {
 	svc := NewScoreService(&mockClient{
 		signals: establishedSignals(),
 		profile: establishedProfile(),
-	}, nil, "v0.0.1-test")
+	}, "v0.0.1-test")
 
 	resp, err := svc.Score(context.Background(), "testuser", "", "free", nil)
 	if err != nil {
@@ -264,7 +264,7 @@ func TestScoreTrustedOrgsMatch(t *testing.T) {
 		signals:    establishedSignals(),
 		profile:    establishedProfile(),
 		trustedOrg: "trusted-org",
-	}, nil, "v0.0.1-test")
+	}, "v0.0.1-test")
 
 	resp, err := svc.Score(context.Background(), "testuser", "org/repo", "free", []string{"trusted-org"})
 	if err != nil {
@@ -282,7 +282,7 @@ func TestScoreTrustedOrgsNoMatch(t *testing.T) {
 	svc := NewScoreService(&mockClient{
 		signals: establishedSignals(),
 		profile: establishedProfile(),
-	}, nil, "v0.0.1-test")
+	}, "v0.0.1-test")
 
 	resp, err := svc.Score(context.Background(), "testuser", "org/repo", "free", []string{"other-org"})
 	if err != nil {
@@ -300,7 +300,7 @@ func TestScoreTrustedOrgsNilNoOp(t *testing.T) {
 	svc := NewScoreService(&mockClient{
 		signals: establishedSignals(),
 		profile: establishedProfile(),
-	}, nil, "v0.0.1-test")
+	}, "v0.0.1-test")
 
 	// nil trusted orgs — should work fine (no org checks).
 	resp, err := svc.Score(context.Background(), "testuser", "", "free", nil)

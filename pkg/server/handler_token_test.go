@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/thingzio/devtrace/pkg/middleware"
@@ -76,6 +77,46 @@ func TestRevokeTokenHandlerNoAuth(t *testing.T) {
 
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCreateTokenHandlerInvalidName(t *testing.T) {
+	tn := &tenant.Tenant{ID: "t-123", Username: "testuser", Plan: "free"}
+	ctx := middleware.WithTenantContext(context.Background(), tn)
+
+	handler := createTokenHandler(nil)
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"xss in name", `{"name":"<script>alert(1)</script>"}`},
+		{"semicolon", `{"name":"drop; table"}`},
+		{"too long", `{"name":"` + strings.Repeat("a", 65) + `"}`},
+		{"starts with space", `{"name":" leading"}`},
+		{"starts with dot", `{"name":".hidden"}`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/api/v1/token", bytes.NewBufferString(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+			}
+
+			var resp map[string]string
+			if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if resp["error"] == "" {
+				t.Error("expected non-empty error message")
+			}
+		})
 	}
 }
 

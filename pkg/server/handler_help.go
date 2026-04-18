@@ -3,6 +3,7 @@ package server
 import (
 	"database/sql"
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
 	"os"
@@ -84,13 +85,15 @@ func helpContactHandler(db *sql.DB, opts Options) http.HandlerFunc {
 		subject := fmt.Sprintf("DevTrace Support - %s (%s)", tn.Username, tn.Name)
 		text := fmt.Sprintf("From: %s (%s)\nEmail: %s\nPlan: %s\n\n%s",
 			tn.Username, tn.Name, tn.Email, tn.Plan, message)
-		html := fmt.Sprintf(
+		htmlBody := fmt.Sprintf(
 			`<p><strong>From:</strong> %s (%s)<br><strong>Email:</strong> %s<br>`+
 				`<strong>Plan:</strong> %s</p><hr><p style="white-space:pre-wrap;">%s</p>`,
-			tn.Username, tn.Name, tn.Email, tn.Plan, message,
+			html.EscapeString(tn.Username), html.EscapeString(tn.Name),
+			html.EscapeString(tn.Email), html.EscapeString(tn.Plan),
+			html.EscapeString(message),
 		)
 
-		if err := devnet.SendEmail(r.Context(), apiKey, supportEmail, supportEmail, subject, html, text, tn.Email); err != nil {
+		if err := devnet.SendEmail(r.Context(), apiKey, supportEmail, supportEmail, subject, htmlBody, text, tn.Email); err != nil {
 			slog.Error("sending support email", "username", tn.Username, "error", err)
 			renderHelpWithError(w, r, db, tn, opts, "Failed to send message. Please try again later.")
 			return

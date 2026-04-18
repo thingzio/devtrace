@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -58,12 +60,15 @@ func (s *Store) StaleCount(ctx context.Context, lowDays, highDays int) (int, err
 }
 
 // GetCachedSignals returns the previously stored signals for a contributor.
-// Returns nil when no reputation record exists.
+// Returns (nil, nil) when no reputation record exists.
 func (s *Store) GetCachedSignals(ctx context.Context, username, provider string) (*score.InputSignals, error) {
 	var raw []byte
 	err := s.db.QueryRowContext(ctx,
 		`SELECT signals FROM devtrace_reputation WHERE username = $1 AND provider = $2`,
 		username, provider).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("get cached signals: %w", err)
 	}

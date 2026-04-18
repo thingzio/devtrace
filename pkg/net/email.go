@@ -21,6 +21,12 @@ var emailClient = &http.Client{Timeout: emailSendTimeout}
 // from and to are email addresses; subject, html, and text are the message content.
 // replyTo is optional — if non-empty, sets the Reply-To header on the email.
 func SendEmail(ctx context.Context, apiKey, from, to, subject, html, text, replyTo string) error {
+	return sendEmailTo(ctx, resendAPIURL, apiKey, from, to, subject, html, text, replyTo)
+}
+
+// sendEmailTo is the inner implementation that accepts a target URL.
+// Extracted so tests can point at an httptest server.
+func sendEmailTo(ctx context.Context, apiURL, apiKey, from, to, subject, html, text, replyTo string) error {
 	payload := map[string]any{
 		"from":    from,
 		"to":      []string{to},
@@ -37,7 +43,7 @@ func SendEmail(ctx context.Context, apiKey, from, to, subject, html, text, reply
 		return fmt.Errorf("marshaling email payload: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, resendAPIURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("creating email request: %w", err)
 	}

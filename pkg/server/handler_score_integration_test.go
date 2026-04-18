@@ -26,7 +26,7 @@ func (m *mockGHWithOrg) IsOrgMember(_ context.Context, org, _ string) (bool, err
 }
 
 func newTestService(gh ghclient.Client) *service.ScoreService {
-	return service.NewScoreService(gh, nil, "v1.2.3-test")
+	return service.NewScoreService(gh, "v1.2.3-test")
 }
 
 func defaultMock() *mockGH {

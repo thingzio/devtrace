@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
 
+	gh "github.com/google/go-github/v83/github"
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/model"
@@ -22,7 +24,6 @@ type mockScorerStore struct {
 	stale          []postgres.StaleContributor
 	dequeueErr     error
 	staleErr       error
-	removed        []string
 	upserted       []string
 	scored         []string
 	reputations    []string
@@ -39,14 +40,11 @@ func (m *mockScorerStore) DequeueForScoring(_ context.Context, limit int) ([]pos
 	if limit > len(m.queue) {
 		limit = len(m.queue)
 	}
-	return m.queue[:limit], nil
-}
-
-func (m *mockScorerStore) RemoveFromQueue(_ context.Context, username, _ string) error {
-	m.mu.Lock()
-	m.removed = append(m.removed, username)
-	m.mu.Unlock()
-	return nil
+	// Simulate atomic DELETE ... RETURNING by consuming from queue.
+	result := make([]postgres.QueueEntry, limit)
+	copy(result, m.queue[:limit])
+	m.queue = m.queue[limit:]
+	return result, nil
 }
 
 func (m *mockScorerStore) GetBehavioralSignals(_ context.Context, _, _ string) (*model.Behavior, error) {
@@ -205,7 +203,7 @@ func TestScoreContributorFetchError(t *testing.T) {
 	}
 }
 
-func TestDrainQueueScoresAndRemoves(t *testing.T) {
+func TestDrainQueueScoresEntries(t *testing.T) {
 	t.Parallel()
 	store := &mockScorerStore{
 		queue: []postgres.QueueEntry{
@@ -219,8 +217,9 @@ func TestDrainQueueScoresAndRemoves(t *testing.T) {
 	if scored != 2 {
 		t.Errorf("scored = %d, want 2", scored)
 	}
-	if len(store.removed) != 2 {
-		t.Errorf("removed %d, want 2", len(store.removed))
+	// Queue should be empty after atomic dequeue.
+	if len(store.queue) != 0 {
+		t.Errorf("queue length = %d, want 0 after dequeue", len(store.queue))
 	}
 }
 
@@ -256,9 +255,6 @@ func TestDrainQueuePartialFailure(t *testing.T) {
 	scored := drainQueue(context.Background(), store, gh, nil, testVersion, 100, 1)
 	if scored != 0 {
 		t.Error("expected 0 scored on fetch error")
-	}
-	if len(store.removed) != 0 {
-		t.Error("failed scores should not be removed from queue")
 	}
 }
 
@@ -343,8 +339,8 @@ func TestDrainQueueConcurrent(t *testing.T) {
 	if scored != 4 {
 		t.Errorf("scored = %d, want 4", scored)
 	}
-	if len(store.removed) != 4 {
-		t.Errorf("removed %d, want 4", len(store.removed))
+	if len(store.queue) != 0 {
+		t.Errorf("queue length = %d, want 0 after dequeue", len(store.queue))
 	}
 	if stats.totalScored.Load() != 4 {
 		t.Errorf("stats.totalScored = %d, want 4", stats.totalScored.Load())
@@ -391,27 +387,37 @@ func TestRescoreStaleConcurrent(t *testing.T) {
 	}
 }
 
+func ghError(statusCode int) error {
+	return &gh.ErrorResponse{
+		Response: &http.Response{StatusCode: statusCode},
+	}
+}
+
 func TestIsTerminalError404(t *testing.T) {
 	t.Parallel()
-	err := fmt.Errorf("fetch signals: fetch user foo: GET https://api.github.com/users/foo: 404 Not Found []")
-	if !isTerminalError(err) {
+	if !isTerminalError(fmt.Errorf("fetch: %w", ghError(http.StatusNotFound))) {
 		t.Error("404 should be terminal")
 	}
 }
 
 func TestIsTerminalError451(t *testing.T) {
 	t.Parallel()
-	err := fmt.Errorf("fetch signals: 451 Unavailable For Legal Reasons")
-	if !isTerminalError(err) {
+	if !isTerminalError(fmt.Errorf("fetch: %w", ghError(http.StatusUnavailableForLegalReasons))) {
 		t.Error("451 should be terminal")
+	}
+}
+
+func TestIsTerminalError422(t *testing.T) {
+	t.Parallel()
+	if !isTerminalError(fmt.Errorf("fetch: %w", ghError(http.StatusUnprocessableEntity))) {
+		t.Error("422 should be terminal")
 	}
 }
 
 func TestIsTerminalErrorRateLimit(t *testing.T) {
 	t.Parallel()
-	err := fmt.Errorf("all tokens exhausted: rate limit exceeded")
-	if isTerminalError(err) {
-		t.Error("rate limit should not be terminal")
+	if isTerminalError(fmt.Errorf("fetch: %w", ghError(http.StatusForbidden))) {
+		t.Error("403 rate limit should not be terminal")
 	}
 }
 
@@ -430,7 +436,7 @@ func TestIsTerminalErrorNil(t *testing.T) {
 	}
 }
 
-func TestDrainQueueTerminalErrorRemoves(t *testing.T) {
+func TestDrainQueueTerminalErrorSkipped(t *testing.T) {
 	t.Parallel()
 	store := &mockScorerStore{
 		queue: []postgres.QueueEntry{
@@ -439,19 +445,19 @@ func TestDrainQueueTerminalErrorRemoves(t *testing.T) {
 		},
 	}
 	// Client returns 404 for all users — simulates deleted accounts.
-	gh := &mockGHClient{err: fmt.Errorf("fetch user deleted-user: GET https://api.github.com/users/deleted-user: 404 Not Found []")}
+	gh := &mockGHClient{err: fmt.Errorf("fetch: %w", ghError(http.StatusNotFound))}
 	stats := &scorerStats{}
 
 	scored := drainQueue(context.Background(), store, gh, stats, testVersion, 100, 1)
 	if scored != 0 {
 		t.Errorf("scored = %d, want 0 (all 404)", scored)
 	}
-	// Both should be removed from queue (terminal error).
-	if len(store.removed) != 2 {
-		t.Errorf("removed = %d, want 2 (terminal errors should be removed)", len(store.removed))
-	}
-	// Errors stat should be 0 (terminal errors are skipped, not counted as retryable errors).
+	// Terminal errors are skipped, not counted as retryable errors.
 	if stats.totalErrors.Load() != 0 {
 		t.Errorf("totalErrors = %d, want 0", stats.totalErrors.Load())
+	}
+	// Queue should be empty after atomic dequeue (entries already removed).
+	if len(store.queue) != 0 {
+		t.Errorf("queue length = %d, want 0", len(store.queue))
 	}
 }

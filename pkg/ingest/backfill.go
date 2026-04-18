@@ -35,7 +35,10 @@ func Backfill(ctx context.Context, store *postgres.Store, days int) error {
 		slog.Info("purged non-tenant queue entries", "count", purged)
 	}
 
-	cursor, _ := store.GetSyncState(ctx, backfillCursorKey)
+	cursor, err := store.GetSyncState(ctx, backfillCursorKey)
+	if err != nil {
+		slog.Warn("get backfill cursor failed, starting from scratch", "error", err)
+	}
 	now := time.Now().UTC().Truncate(time.Hour)
 	hours := backfillHours(now, days, cursor)
 
@@ -47,7 +50,10 @@ func Backfill(ctx context.Context, store *postgres.Store, days int) error {
 	baseURL := config.GetEnv("GHARCHIVE_BASE_URL", "")
 	reader := NewArchiveReader(baseURL)
 
-	tenantRepos, _ := store.GetTenantRepos(ctx)
+	tenantRepos, err := store.GetTenantRepos(ctx)
+	if err != nil {
+		slog.Warn("get tenant repos failed, proceeding without tenant filter", "error", err)
+	}
 
 	total := len(hours)
 	var processed int

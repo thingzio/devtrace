@@ -39,7 +39,10 @@ func Run(ctx context.Context, store *postgres.Store) error {
 	baseURL := config.GetEnv("GHARCHIVE_BASE_URL", "")
 	reader := NewArchiveReader(baseURL)
 
-	cursor, _ := store.GetSyncState(ctx, syncStateKey)
+	cursor, err := store.GetSyncState(ctx, syncStateKey)
+	if err != nil {
+		slog.Warn("get sync state failed, starting from scratch", "error", err)
+	}
 	lookback := config.GetEnvAsInt("GHARCHIVE_LOOKBACK_HOURS", 1)
 	catchupMax := config.GetEnvAsInt("GHARCHIVE_CATCHUP_MAX_HOURS", 24)
 	hours := computeHours(cursor, lookback, catchupMax)
@@ -49,7 +52,10 @@ func Run(ctx context.Context, store *postgres.Store) error {
 		return nil
 	}
 
-	tenantRepos, _ := store.GetTenantRepos(ctx)
+	tenantRepos, err := store.GetTenantRepos(ctx)
+	if err != nil {
+		slog.Warn("get tenant repos failed, proceeding without tenant filter", "error", err)
+	}
 	slog.Info("ingest starting", "hours", len(hours), "tenant_orgs", len(tenantRepos))
 
 	for _, hour := range hours {
@@ -74,7 +80,10 @@ func Run(ctx context.Context, store *postgres.Store) error {
 // maybeCompact runs activity compaction if it hasn't run in the last 24 hours.
 // Errors are logged but do not fail the ingest run.
 func maybeCompact(ctx context.Context, store ingestStore) {
-	lastCompact, _ := store.GetSyncState(ctx, compactStateKey)
+	lastCompact, err := store.GetSyncState(ctx, compactStateKey)
+	if err != nil {
+		slog.Warn("get compaction state failed", "error", err)
+	}
 	if !lastCompact.IsZero() && time.Since(lastCompact) < compactInterval {
 		return
 	}

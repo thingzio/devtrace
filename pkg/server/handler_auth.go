@@ -28,7 +28,7 @@ func oauthStartHandler(cfg *oauth.Config) http.HandlerFunc {
 			Value:    state,
 			Path:     "/",
 			MaxAge:   600,
-			Secure:   true,
+			Secure:   middleware.IsSecure(),
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
 		})
@@ -40,7 +40,7 @@ func oauthCallbackHandler(db *sql.DB, cfg *oauth.Config) http.HandlerFunc {
 	clearAndRedirect := func(w http.ResponseWriter, r *http.Request, msg string) {
 		http.SetCookie(w, &http.Cookie{
 			Name: "oauth_state", Value: "", MaxAge: -1, Path: "/",
-			HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode,
+			HttpOnly: true, Secure: middleware.IsSecure(), SameSite: http.SameSiteLaxMode,
 		})
 		middleware.ClearSessionCookie(w)
 		http.Redirect(w, r, "/?err="+url.QueryEscape(msg), http.StatusSeeOther)
@@ -60,7 +60,7 @@ func oauthCallbackHandler(db *sql.DB, cfg *oauth.Config) http.HandlerFunc {
 		// Clear state cookie
 		http.SetCookie(w, &http.Cookie{
 			Name: "oauth_state", Value: "", MaxAge: -1, Path: "/",
-			HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode,
+			HttpOnly: true, Secure: middleware.IsSecure(), SameSite: http.SameSiteLaxMode,
 		})
 
 		// 2. Exchange code for token

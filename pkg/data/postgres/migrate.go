@@ -67,7 +67,7 @@ func (s *Store) migrationApplied(ctx context.Context, version int) (bool, error)
 	err := s.db.QueryRowContext(ctx,
 		"SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = 'devtrace_schema_version')").Scan(&exists)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("check schema table: %w", err)
 	}
 	if !exists {
 		return false, nil
@@ -76,5 +76,8 @@ func (s *Store) migrationApplied(ctx context.Context, version int) (bool, error)
 	var count int
 	err = s.db.QueryRowContext(ctx,
 		"SELECT COUNT(*) FROM devtrace_schema_version WHERE version = $1", version).Scan(&count)
-	return count > 0, err
+	if err != nil {
+		return false, fmt.Errorf("check migration version: %w", err)
+	}
+	return count > 0, nil
 }

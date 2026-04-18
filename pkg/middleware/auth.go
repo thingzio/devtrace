@@ -42,6 +42,11 @@ func SessionCookieName() string {
 	return cookieName
 }
 
+// IsSecure returns true when the deployment uses HTTPS (derived from BASE_URL).
+func IsSecure() bool {
+	return secure
+}
+
 // RequireAuth validates session cookie, redirects to loginURL on failure. For UI routes.
 func RequireAuth(db *sql.DB, loginURL string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

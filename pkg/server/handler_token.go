@@ -5,11 +5,16 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"regexp"
 
 	"github.com/thingzio/devtrace/pkg/middleware"
 	"github.com/thingzio/devtrace/pkg/plan"
 	"github.com/thingzio/devtrace/pkg/tenant"
 )
+
+const maxTokenNameLen = 64
+
+var tokenNameRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9 _.-]*$`)
 
 func createTokenHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -22,8 +27,13 @@ func createTokenHandler(db *sql.DB) http.HandlerFunc {
 		var req struct {
 			Name string `json:"name"`
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<16) // 64 KB
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+			return
+		}
+		if len(req.Name) > maxTokenNameLen || !tokenNameRE.MatchString(req.Name) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name must be 1-64 alphanumeric characters, spaces, dots, hyphens, or underscores"})
 			return
 		}
 

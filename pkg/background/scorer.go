@@ -2,14 +2,16 @@ package background
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
-	"strings"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	gh "github.com/google/go-github/v83/github"
 	"github.com/thingzio/devtrace/pkg/config"
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
@@ -59,7 +61,6 @@ func (s *scorerStats) resetWindow() {
 // scorerStore defines the store operations needed by the background scorer.
 type scorerStore interface {
 	DequeueForScoring(ctx context.Context, limit int) ([]postgres.QueueEntry, error)
-	RemoveFromQueue(ctx context.Context, username, provider string) error
 	GetStaleContributors(ctx context.Context, lowDays, highDays, limit int) ([]postgres.StaleContributor, error)
 	GetBehavioralSignals(ctx context.Context, username, provider string) (*model.Behavior, error)
 	GetCachedSignals(ctx context.Context, username, provider string) (*score.InputSignals, error)
@@ -203,7 +204,6 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client,
 
 			if serr := scoreContributor(ctx, store, gh, q.Username, q.Provider, version); serr != nil {
 				if isTerminalError(serr) {
-					_ = store.RemoveFromQueue(ctx, q.Username, q.Provider)
 					slog.Debug("skipped terminal error", "username", q.Username, "error", serr)
 					skipped.Add(1)
 				} else {
@@ -212,7 +212,6 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client,
 				}
 				return
 			}
-			_ = store.RemoveFromQueue(ctx, q.Username, q.Provider)
 			scored.Add(1)
 			if hasHints {
 				hints.Add(1)
@@ -291,19 +290,19 @@ func rescoreStale(ctx context.Context, store scorerStore, gh ghclient.Client,
 }
 
 // isTerminalError returns true for errors that will never succeed on retry.
-// These users should be removed from the scoring queue.
+// Uses typed github.ErrorResponse when available, with string fallback.
 func isTerminalError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	// GitHub 404: user deleted or renamed.
-	if strings.Contains(msg, "404 Not Found") {
-		return true
-	}
-	// GitHub 451: legal/DMCA block.
-	if strings.Contains(msg, "451") {
-		return true
+	var ghErr *gh.ErrorResponse
+	if errors.As(err, &ghErr) && ghErr.Response != nil {
+		switch ghErr.Response.StatusCode {
+		case http.StatusNotFound, // 404: user deleted or renamed
+			http.StatusUnavailableForLegalReasons, // 451: DMCA block
+			http.StatusUnprocessableEntity:        // 422: invalid user
+			return true
+		}
 	}
 	return false
 }
@@ -348,7 +347,9 @@ func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client
 	value := score.Compute(*signals, false, behavior)
 	grade := score.Grade(value)
 
-	_ = store.UpsertContributor(ctx, username, provider)
+	if err := store.UpsertContributor(ctx, username, provider); err != nil {
+		slog.Warn("upsert contributor", "username", username, "error", err)
+	}
 
 	if err := store.SaveScoreHistory(ctx, username, provider, value, grade, true); err != nil {
 		slog.Warn("save history", "username", username, "error", err)

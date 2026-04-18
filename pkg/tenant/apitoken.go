@@ -65,8 +65,10 @@ func ValidateAPIToken(ctx context.Context, db *sql.DB, rawToken string) (*Tenant
 	// Fire-and-forget: update last_used_at. Uses background context intentionally
 	// so the update completes even if the request context is canceled.
 	go func() { //nolint:gosec // intentional background context for fire-and-forget
+		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
 		//nolint:errcheck // best-effort timestamp update, failure is non-critical
-		db.ExecContext(context.Background(),
+		db.ExecContext(bgCtx,
 			`UPDATE devtrace_api_token SET last_used_at = NOW() WHERE token_hash = $1`, hashed)
 	}()
 

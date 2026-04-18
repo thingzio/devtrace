@@ -12,12 +12,6 @@ import (
 	"github.com/thingzio/devtrace/pkg/score"
 )
 
-// ScoreStore is the subset of the data store needed for scoring.
-type ScoreStore interface {
-	GetCachedScore(ctx context.Context, username, provider string) (*model.ScoreResponse, error)
-	SaveScore(ctx context.Context, resp *model.ScoreResponse) error
-}
-
 // BehaviorStore provides behavioral signal data from contributor activity.
 type BehaviorStore interface {
 	GetBehavioralSignals(ctx context.Context, username, provider string) (*model.Behavior, error)
@@ -26,16 +20,22 @@ type BehaviorStore interface {
 // ScoreService orchestrates signal fetching, scoring, and response enrichment.
 type ScoreService struct {
 	gh       ghclient.Client
-	store    ScoreStore    // nil-safe for unit tests without DB
 	behStore BehaviorStore // nil-safe; behavioral signals omitted when nil
 	cache    *scoreCache
 	claude   *claude.Client // nil = fallback to templates
 	version  string         // DevTrace build version stamped on every response
 }
 
-// NewScoreService returns a ScoreService wired to the given GitHub client and optional store.
-func NewScoreService(gh ghclient.Client, store ScoreStore, version string) *ScoreService {
-	return &ScoreService{gh: gh, store: store, cache: newScoreCache(), version: version}
+// NewScoreService returns a ScoreService wired to the given GitHub client.
+func NewScoreService(gh ghclient.Client, version string) *ScoreService {
+	return &ScoreService{gh: gh, cache: newScoreCache(), version: version}
+}
+
+// Close stops background goroutines (e.g., cache eviction).
+func (s *ScoreService) Close() {
+	if s.cache != nil {
+		s.cache.Close()
+	}
 }
 
 // SetBehaviorStore sets an optional store for behavioral signal enrichment.
@@ -102,6 +102,7 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 	hasRepo := repo != ""
 	value := score.Compute(*signals, hasRepo, behavior)
 	grade := score.Grade(value)
+	categories := score.Categories(*signals, hasRepo, behavior)
 	now := time.Now().UTC()
 
 	// Build the full response (all fields populated).
@@ -119,7 +120,7 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 		Score: &model.Score{
 			Grade:      grade,
 			Value:      value,
-			Categories: score.Categories(*signals, hasRepo, behavior),
+			Categories: categories,
 		},
 		Signals:     signalsFromInput(signals, profile),
 		RiskSummary: generateRiskSummary(signals, value, repo != ""),
@@ -137,7 +138,7 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 			Username:       username,
 			Score:          value,
 			Grade:          grade,
-			Categories:     score.Categories(*signals, hasRepo, behavior),
+			Categories:     categories,
 			AccountAge:     signals.AgeDays,
 			PRsMerged:      signals.PRsMerged,
 			PRsClosed:      signals.PRsClosed,
@@ -170,10 +171,42 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 	return enrichForPlan(full, plan), nil
 }
 
-// enrichForPlan returns a copy of the response filtered for the caller's plan.
+// enrichForPlan returns a deep copy of the response filtered for the caller's plan.
+// Deep-copying pointer fields prevents downstream mutations from corrupting the cache.
 func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse {
-	// Start with a shallow copy.
 	resp := *full
+
+	// Deep copy pointer fields so the caller cannot mutate cached data.
+	if full.Score != nil {
+		scoreCopy := *full.Score
+		if full.Score.Categories != nil {
+			scoreCopy.Categories = make(map[string]float64, len(full.Score.Categories))
+			for k, v := range full.Score.Categories {
+				scoreCopy.Categories[k] = v
+			}
+		}
+		resp.Score = &scoreCopy
+	}
+	if full.Profile != nil {
+		profileCopy := *full.Profile
+		resp.Profile = &profileCopy
+	}
+	if full.Signals != nil {
+		signalsCopy := *full.Signals
+		resp.Signals = &signalsCopy
+	}
+	if full.RepoContext != nil {
+		rcCopy := *full.RepoContext
+		resp.RepoContext = &rcCopy
+	}
+	if full.AISensing != nil {
+		aiCopy := *full.AISensing
+		resp.AISensing = &aiCopy
+	}
+	if full.Behavior != nil {
+		behCopy := *full.Behavior
+		resp.Behavior = &behCopy
+	}
 
 	switch plan {
 	case "": // unauthenticated — score only
@@ -196,10 +229,8 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 		// Free gets categories, signals, risk summary, behavior, AI sensing Tier 1 (metadata).
 		resp.License = nil
 		if resp.AISensing != nil {
-			aiCopy := *resp.AISensing
-			aiCopy.PRAuthenticity = nil // Starter+ only
-			aiCopy.Behavioral = nil     // Pro only
-			resp.AISensing = &aiCopy
+			resp.AISensing.PRAuthenticity = nil // Starter+ only
+			resp.AISensing.Behavioral = nil     // Pro only
 		} else {
 			resp.AISensing = &model.AISensing{}
 		}
@@ -208,9 +239,7 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 		// Starter gets Tier 1 AI sensing (metadata + PR authenticity). No Tier 2.
 		resp.License = nil
 		if resp.AISensing != nil {
-			aiCopy := *resp.AISensing
-			aiCopy.Behavioral = nil // Tier 2 is Pro only
-			resp.AISensing = &aiCopy
+			resp.AISensing.Behavioral = nil // Tier 2 is Pro only
 		} else {
 			resp.AISensing = &model.AISensing{}
 		}
