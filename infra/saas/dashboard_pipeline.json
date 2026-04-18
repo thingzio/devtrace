@@ -1,0 +1,135 @@
+{
+  "displayName": "DevTrace: Pipeline",
+  "gridLayout": {
+    "columns": "3",
+    "widgets": [
+      {
+        "title": "Archive Hour Duration (seconds)",
+        "xyChart": {
+          "dataSets": [{
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "metric.type=\"logging.googleapis.com/user/devtrace-saas-archive-hour-complete\"",
+                "aggregation": {
+                  "alignmentPeriod": "3600s",
+                  "perSeriesAligner": "ALIGN_DELTA",
+                  "crossSeriesReducer": "REDUCE_MEAN"
+                }
+              }
+            },
+            "plotType": "STACKED_BAR"
+          }]
+        }
+      },
+      {
+        "title": "Backfill Batch Duration (seconds)",
+        "xyChart": {
+          "dataSets": [{
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "metric.type=\"logging.googleapis.com/user/devtrace-saas-backfill-batch-complete\"",
+                "aggregation": {
+                  "alignmentPeriod": "3600s",
+                  "perSeriesAligner": "ALIGN_DELTA",
+                  "crossSeriesReducer": "REDUCE_MEAN"
+                }
+              }
+            },
+            "plotType": "STACKED_BAR"
+          }]
+        }
+      },
+      {
+        "title": "Backfill Total Duration (seconds)",
+        "xyChart": {
+          "dataSets": [{
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "metric.type=\"logging.googleapis.com/user/devtrace-saas-backfill-complete\"",
+                "aggregation": {
+                  "alignmentPeriod": "3600s",
+                  "perSeriesAligner": "ALIGN_DELTA",
+                  "crossSeriesReducer": "REDUCE_MEAN"
+                }
+              }
+            },
+            "plotType": "STACKED_BAR"
+          }]
+        }
+      },
+      {
+        "title": "Queue Scoring (repos scored per batch)",
+        "xyChart": {
+          "dataSets": [{
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "metric.type=\"logging.googleapis.com/user/devtrace-saas-queue-scoring-complete\"",
+                "aggregation": {
+                  "alignmentPeriod": "3600s",
+                  "perSeriesAligner": "ALIGN_DELTA",
+                  "crossSeriesReducer": "REDUCE_SUM"
+                }
+              }
+            },
+            "plotType": "STACKED_BAR"
+          }]
+        }
+      },
+      {
+        "title": "Stale Rescoring (repos scored per batch)",
+        "xyChart": {
+          "dataSets": [{
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "metric.type=\"logging.googleapis.com/user/devtrace-saas-stale-rescoring-complete\"",
+                "aggregation": {
+                  "alignmentPeriod": "3600s",
+                  "perSeriesAligner": "ALIGN_DELTA",
+                  "crossSeriesReducer": "REDUCE_SUM"
+                }
+              }
+            },
+            "plotType": "STACKED_BAR"
+          }]
+        }
+      },
+      {
+        "title": "Scorer Quota Paused",
+        "xyChart": {
+          "dataSets": [{
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "metric.type=\"logging.googleapis.com/user/devtrace-saas-scorer-quota-paused\"",
+                "aggregation": {
+                  "alignmentPeriod": "3600s",
+                  "perSeriesAligner": "ALIGN_SUM",
+                  "crossSeriesReducer": "REDUCE_SUM"
+                }
+              }
+            },
+            "plotType": "STACKED_BAR"
+          }]
+        }
+      },
+      {
+        "title": "Token Exhaustion (by token)",
+        "xyChart": {
+          "dataSets": [{
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "metric.type=\"logging.googleapis.com/user/devtrace-saas-token-exhausted\"",
+                "aggregation": {
+                  "alignmentPeriod": "3600s",
+                  "perSeriesAligner": "ALIGN_SUM",
+                  "crossSeriesReducer": "REDUCE_SUM",
+                  "groupByFields": ["metric.labels.label"]
+                }
+              }
+            },
+            "plotType": "STACKED_BAR"
+          }]
+        }
+      }
+    ]
+  }
+}

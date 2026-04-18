@@ -365,3 +365,17 @@ resource "google_monitoring_alert_policy" "token_exhaustion" {
     }
   }
 }
+
+# ---------------------------------------------------------------------------
+# Dashboards
+# ---------------------------------------------------------------------------
+
+resource "google_monitoring_dashboard" "service" {
+  project        = var.project_id
+  dashboard_json = file("${path.module}/dashboard_service.json")
+}
+
+resource "google_monitoring_dashboard" "pipeline" {
+  project        = var.project_id
+  dashboard_json = file("${path.module}/dashboard_pipeline.json")
+}
