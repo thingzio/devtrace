@@ -376,28 +376,28 @@
   function initSettingsActions() {
     document.addEventListener('click', function(e) {
       var action = e.target.getAttribute('data-action');
-      if (!action) return;
-
-      switch (action) {
-        case 'dismiss-token':
-          var msg = document.getElementById('new-token-msg');
-          if (msg) msg.style.display = 'none';
-          break;
-        case 'copy-token':
-          var val = document.getElementById('new-token-value');
-          if (val) navigator.clipboard.writeText(val.textContent);
-          break;
-        case 'show-token-modal':
-          var modal = document.getElementById('token-modal');
-          if (modal) modal.style.display = 'flex';
-          break;
-        case 'hide-token-modal':
-          var modal2 = document.getElementById('token-modal');
-          if (modal2) modal2.style.display = 'none';
-          break;
-        case 'generate-token':
-          window.generateToken();
-          break;
+      if (action) {
+        switch (action) {
+          case 'dismiss-token':
+            var msg = document.getElementById('new-token-msg');
+            if (msg) msg.style.display = 'none';
+            break;
+          case 'copy-token':
+            var val = document.getElementById('new-token-value');
+            if (val) navigator.clipboard.writeText(val.textContent);
+            break;
+          case 'show-token-modal':
+            var modal = document.getElementById('token-modal');
+            if (modal) modal.style.display = 'flex';
+            break;
+          case 'hide-token-modal':
+            var modal2 = document.getElementById('token-modal');
+            if (modal2) modal2.style.display = 'none';
+            break;
+          case 'generate-token':
+            window.generateToken();
+            break;
+        }
       }
 
       var revokeId = e.target.getAttribute('data-revoke-token');
