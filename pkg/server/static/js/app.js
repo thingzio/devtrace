@@ -19,6 +19,10 @@
     } else {
       root.setAttribute('data-theme', theme);
     }
+    var btns = document.querySelectorAll('.theme-toggle [data-theme]');
+    btns.forEach(function(b) {
+      b.classList.toggle('active', b.getAttribute('data-theme') === theme);
+    });
   }
 
   applyTheme(getTheme());
@@ -424,5 +428,6 @@
     initToggleEdit();
     initConfirmDelete();
     initSettingsActions();
+    applyTheme(getTheme());
   });
 })();

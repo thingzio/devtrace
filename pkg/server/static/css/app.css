@@ -2026,6 +2026,11 @@ a.link {
 .btn-primary:hover {
   background: var(--button-primary-bgColor-hover, #2c974b);
 }
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .btn-small {
   padding: 0.4rem 0.8rem;
   font-size: 0.85rem;
@@ -2331,6 +2336,14 @@ a.link {
   color: var(--fgColor-muted, #6a737d);
   font-size: 0.9rem;
 }
+.settings-section .hint {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--fgColor-muted, #6a737d);
+}
+.settings-section .hint a {
+  color: var(--accent);
+}
 .theme-toggle {
   display: flex;
   gap: 0.5rem;
@@ -2562,6 +2575,11 @@ section h2 {
 }
 .theme-toggle .btn:hover {
   background: var(--page-header-bgColor-hover);
+}
+.theme-toggle .btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
 }
 
 /* Modal overlay */
