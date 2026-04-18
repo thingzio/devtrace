@@ -79,11 +79,15 @@ func (s *Store) GetCachedSignals(ctx context.Context, username, provider string)
 
 // UpdateReputation upserts a contributor's reputation score and cached signals.
 func (s *Store) UpdateReputation(ctx context.Context, username, provider string, value float64, grade, version string, deep bool, signals *score.InputSignals) error {
-	signalsJSON, err := json.Marshal(signals)
-	if err != nil {
-		return fmt.Errorf("marshal signals: %w", err)
+	var signalsJSON []byte
+	if signals != nil {
+		var err error
+		signalsJSON, err = json.Marshal(signals)
+		if err != nil {
+			return fmt.Errorf("marshal signals: %w", err)
+		}
 	}
-	_, err = s.db.ExecContext(ctx,
+	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO devtrace_reputation (username, provider, score, grade, model_version, deep, signals, scored_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())
 		 ON CONFLICT (username, provider) DO UPDATE SET
