@@ -90,6 +90,12 @@ variable "db_name" {
   default     = "thingz"
 }
 
+variable "notification_email" {
+  description = "Email address for alert notifications"
+  type        = string
+  default     = "devtrace@thingz.io"
+}
+
 variable "github_token" {
   description = "GitHub PAT fallback for API calls (optional, used during bootstrap)"
   type        = string
