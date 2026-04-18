@@ -310,31 +310,4 @@ export TOKEN=dt_your_token_here</code></pre>
     {{end}}
   </div>
 </div>
-
-<script>
-(function() {
-  var input = document.getElementById('help-search');
-  var sections = document.querySelectorAll('.help-section');
-  var noResults = document.getElementById('help-no-results');
-  input.addEventListener('input', function() {
-    var q = this.value.toLowerCase().trim();
-    var visibleSections = 0;
-    sections.forEach(function(s) {
-      var heading = s.querySelector('h3');
-      var headingMatch = !q || (heading && heading.textContent.toLowerCase().indexOf(q) !== -1);
-      var items = s.querySelectorAll('li');
-      var visibleItems = 0;
-      items.forEach(function(li) {
-        var match = !q || headingMatch || li.textContent.toLowerCase().indexOf(q) !== -1;
-        li.style.display = match ? '' : 'none';
-        if (match) visibleItems++;
-      });
-      var sectionVisible = !q || headingMatch || visibleItems > 0;
-      s.style.display = sectionVisible ? '' : 'none';
-      if (sectionVisible) visibleSections++;
-    });
-    noResults.style.display = visibleSections === 0 ? '' : 'none';
-  });
-})();
-</script>
 {{end}}

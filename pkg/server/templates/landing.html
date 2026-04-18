@@ -4,10 +4,9 @@
     <h1>Know your contributors</h1>
     <p class="hero-sub">Inspect the provenance of any open source contributor at a glance. Trace contribution history, assess license obligations, and surface trust signals before they become risks.</p>
 
-    <form id="try-search" class="search-form" onsubmit="return false;">
-      <input id="try-username" type="search" role="searchbox" placeholder="username or username in org/repo" autocomplete="off" name="q" data-1p-ignore data-lpignore="true" data-form-type="other"
-        onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('try-search').dispatchEvent(new Event('submit'));}">
-      <button type="button" onclick="document.getElementById('try-search').dispatchEvent(new Event('submit'));">Score</button>
+    <form id="try-search" class="search-form">
+      <input id="try-username" type="search" role="searchbox" placeholder="username or username in org/repo" autocomplete="off" name="q" data-1p-ignore data-lpignore="true" data-form-type="other">
+      <button type="submit">Score</button>
     </form>
 
     <div class="hero-cta">

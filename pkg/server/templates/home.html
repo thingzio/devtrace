@@ -23,10 +23,9 @@
 
   <div class="search-quota-row">
     <div class="search-quota-left">
-      <form id="try-search" class="search-form" onsubmit="return false;">
-        <input id="try-username" type="search" role="searchbox" placeholder="username or username in org/repo" autocomplete="off" name="q" data-1p-ignore data-lpignore="true" data-form-type="other"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('try-search').dispatchEvent(new Event('submit'));}">
-        <button type="button" onclick="document.getElementById('try-search').dispatchEvent(new Event('submit'));">Score</button>
+      <form id="try-search" class="search-form">
+        <input id="try-username" type="search" role="searchbox" placeholder="username or username in org/repo" autocomplete="off" name="q" data-1p-ignore data-lpignore="true" data-form-type="other">
+        <button type="submit">Score</button>
       </form>
     </div>
     <div class="quota-gauge">
@@ -73,15 +72,5 @@
   </section>
 </div>
 
-<script>
-document.querySelectorAll('time[datetime]').forEach(function(el){
-  var d=new Date(el.getAttribute('datetime'));
-  if(!isNaN(d)){
-    var pad=function(n){return n<10?'0'+n:n};
-    el.textContent=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes());
-  }
-});
-window.addEventListener('pageshow',function(e){if(e.persisted)location.reload()});
-</script>
 {{template "footer" .}}
 {{end}}

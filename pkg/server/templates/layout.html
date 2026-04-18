@@ -20,7 +20,7 @@
   <div class="nav-right">
     {{if .NavUser}}
     <div class="nav-profile">
-      <button class="nav-profile-btn" onclick="document.querySelector('.nav-dropdown').classList.toggle('open')">
+      <button class="nav-profile-btn">
         <img src="{{.NavAvatar}}" alt="" class="nav-avatar" width="28" height="28">
       </button>
       <div class="nav-dropdown">
@@ -37,12 +37,12 @@
     {{end}}
   </div>
 </nav>
-<script>document.addEventListener('click',function(e){var d=document.querySelector('.nav-dropdown');if(d&&!e.target.closest('.nav-profile'))d.classList.remove('open')})</script>
 {{template "content" .}}
 <footer class="app-footer">
   <div class="footer-left">VERSION {{if .Version}}{{.Version}}{{else}}DEV{{end}}{{if .Commit}} ({{.Commit}}{{if .Date}} - {{.Date}}{{end}}){{end}}</div>
   <div class="footer-right"><a href="/changelog">CHANGELOG</a> &middot; <a href="/help">HELP</a> &middot; <a href="/tos">TERMS</a></div>
 </footer>
+<script src="/static/js/chart.umd.min.js"></script>
 <script src="/static/js/app.js"></script>
 </body>
 </html>

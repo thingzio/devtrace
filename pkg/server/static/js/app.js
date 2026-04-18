@@ -28,6 +28,22 @@
     getTheme: getTheme,
   };
 
+  // Nav dropdown toggle and outside-click close.
+  function initNavDropdown() {
+    var btn = document.querySelector('.nav-profile-btn');
+    if (btn) {
+      btn.addEventListener('click', function() {
+        var dd = document.querySelector('.nav-dropdown');
+        if (dd) dd.classList.toggle('open');
+      });
+    }
+    document.addEventListener('click', function(e) {
+      var d = document.querySelector('.nav-dropdown');
+      if (d && !e.target.closest('.nav-profile')) d.classList.remove('open');
+    });
+  }
+
+  // Token management (settings page).
   window.generateToken = function() {
     var input = document.getElementById('token-name-input');
     var name = input ? input.value.trim() : '';
@@ -78,8 +94,8 @@
     var cell = row.querySelector('td:last-child');
     var original = cell.innerHTML;
     cell.innerHTML = '<span style="font-size:0.8rem;margin-right:0.5rem;">Revoke?</span>' +
-      '<button class="btn btn-sm btn-danger" onclick="confirmRevoke(\'' + id + '\')">Yes</button> ' +
-      '<button class="btn btn-sm" onclick="cancelRevoke(\'' + id + '\')">No</button>';
+      '<button class="btn btn-sm btn-danger" data-confirm-revoke="' + id + '">Yes</button> ' +
+      '<button class="btn btn-sm" data-cancel-revoke="' + id + '">No</button>';
     cell.dataset.original = original;
   };
 
@@ -123,7 +139,6 @@
       }
       input.disabled = true;
 
-      // Parse "username in org/repo" format
       var parts = raw.split(/\s+in\s+/);
       var username = parts[0].trim();
       var repo = parts.length > 1 ? parts[1].trim() : '';
@@ -180,7 +195,7 @@
       .then(function(r) { return r.ok ? r.json() : []; })
       .then(function(data) {
         if (!data || data.length < 2) {
-          return; // trend section stays hidden
+          return;
         }
         var section = document.getElementById('trend-section');
         if (section) section.style.display = 'block';
@@ -209,9 +224,200 @@
       });
   }
 
+  // Format <time datetime="..."> to local time.
+  function initLocalTime() {
+    document.querySelectorAll('time[datetime]').forEach(function(el) {
+      var d = new Date(el.getAttribute('datetime'));
+      if (!isNaN(d)) {
+        var pad = function(n) { return n < 10 ? '0' + n : n; };
+        el.textContent = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+      }
+    });
+  }
+
+  // Help page search filter.
+  function initHelpSearch() {
+    var input = document.getElementById('help-search');
+    if (!input) return;
+    var sections = document.querySelectorAll('.help-section');
+    var noResults = document.getElementById('help-no-results');
+    input.addEventListener('input', function() {
+      var q = this.value.toLowerCase().trim();
+      var visibleSections = 0;
+      sections.forEach(function(s) {
+        var heading = s.querySelector('h3');
+        var headingMatch = !q || (heading && heading.textContent.toLowerCase().indexOf(q) !== -1);
+        var items = s.querySelectorAll('li');
+        var visibleItems = 0;
+        items.forEach(function(li) {
+          var match = !q || headingMatch || li.textContent.toLowerCase().indexOf(q) !== -1;
+          li.style.display = match ? '' : 'none';
+          if (match) visibleItems++;
+        });
+        var sectionVisible = !q || headingMatch || visibleItems > 0;
+        s.style.display = sectionVisible ? '' : 'none';
+        if (sectionVisible) visibleSections++;
+      });
+      noResults.style.display = visibleSections === 0 ? '' : 'none';
+    });
+  }
+
+  // Admin tenants table: search, sort, paginate.
+  function initAdminTenants() {
+    var table = document.getElementById('tenant-table');
+    if (!table) return;
+
+    var PAGE_SIZE = 25, curPage = 1, sortCol = 5, sortAsc = true;
+    var tbody = table.querySelector('tbody');
+    var allRows = Array.from(tbody.querySelectorAll('tr'));
+    var filtered = allRows.slice();
+
+    function applyFilter() {
+      var q = (document.getElementById('tenant-search').value || '').toLowerCase();
+      filtered = allRows.filter(function(r) {
+        if (!q) return true;
+        var u = (r.getAttribute('data-username') || '').toLowerCase();
+        var n = (r.getAttribute('data-name') || '').toLowerCase();
+        return u.indexOf(q) !== -1 || n.indexOf(q) !== -1;
+      });
+      curPage = 1;
+      render();
+    }
+
+    function applySort() {
+      var type = sortCol === 5 ? 'num' : 'str';
+      filtered.sort(function(a, b) {
+        var ac = a.children[sortCol], bc = b.children[sortCol];
+        var av = ac ? ac.textContent.trim() : '', bv = bc ? bc.textContent.trim() : '';
+        if (type === 'num') { av = parseInt(av, 10) || 0; bv = parseInt(bv, 10) || 0; }
+        else { av = av.toLowerCase(); bv = bv.toLowerCase(); }
+        if (av < bv) return sortAsc ? -1 : 1;
+        if (av > bv) return sortAsc ? 1 : -1;
+        return 0;
+      });
+      curPage = 1;
+      render();
+    }
+
+    function render() {
+      var total = filtered.length, pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+      if (curPage > pages) curPage = pages;
+      var start = (curPage - 1) * PAGE_SIZE, end = start + PAGE_SIZE;
+      allRows.forEach(function(r) { r.style.display = 'none'; });
+      filtered.slice(start, end).forEach(function(r) { r.style.display = ''; });
+      var pager = document.getElementById('tenant-pager');
+      if (total <= PAGE_SIZE) { pager.style.display = 'none'; }
+      else {
+        pager.style.display = 'flex';
+        document.getElementById('pg-info').textContent = 'Page ' + curPage + ' of ' + pages + ' (' + total + ' tenants)';
+        document.getElementById('pg-prev').disabled = curPage <= 1;
+        document.getElementById('pg-next').disabled = curPage >= pages;
+      }
+      document.querySelectorAll('.sort-arrow').forEach(function(s) { s.textContent = ''; });
+      var active = table.querySelector('th[data-col="' + sortCol + '"] .sort-arrow');
+      if (active) active.textContent = sortAsc ? ' \u25B2' : ' \u25BC';
+    }
+
+    var searchInput = document.getElementById('tenant-search');
+    if (searchInput) searchInput.addEventListener('input', applyFilter);
+
+    table.querySelectorAll('th.sortable').forEach(function(th) {
+      th.style.cursor = 'pointer';
+      th.addEventListener('click', function() {
+        var col = parseInt(th.getAttribute('data-col'), 10);
+        if (col === sortCol) { sortAsc = !sortAsc; } else { sortCol = col; sortAsc = true; }
+        applySort();
+      });
+    });
+
+    document.querySelectorAll('[data-page-dir]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        curPage += parseInt(this.getAttribute('data-page-dir'), 10);
+        render();
+      });
+    });
+
+    render();
+  }
+
+  // Admin tenants: toggle edit/view mode per row.
+  function initToggleEdit() {
+    document.querySelectorAll('[data-toggle-edit]').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var u = this.getAttribute('data-toggle-edit');
+        document.querySelectorAll('.view-' + u).forEach(function(e) { e.style.display = e.style.display === 'none' ? '' : 'none'; });
+        document.querySelectorAll('.edit-' + u).forEach(function(e) { e.style.display = e.style.display === 'none' ? '' : 'none'; });
+      });
+    });
+  }
+
+  // Admin tenants: confirm before delete.
+  function initConfirmDelete() {
+    document.querySelectorAll('[data-confirm-delete]').forEach(function(form) {
+      form.addEventListener('submit', function(e) {
+        var u = this.getAttribute('data-confirm-delete');
+        if (!confirm('Delete tenant ' + u + '? This cannot be undone.')) {
+          e.preventDefault();
+        }
+      });
+    });
+  }
+
+  // Settings page: data-action handlers.
+  function initSettingsActions() {
+    document.addEventListener('click', function(e) {
+      var action = e.target.getAttribute('data-action');
+      if (!action) return;
+
+      switch (action) {
+        case 'dismiss-token':
+          var msg = document.getElementById('new-token-msg');
+          if (msg) msg.style.display = 'none';
+          break;
+        case 'copy-token':
+          var val = document.getElementById('new-token-value');
+          if (val) navigator.clipboard.writeText(val.textContent);
+          break;
+        case 'show-token-modal':
+          var modal = document.getElementById('token-modal');
+          if (modal) modal.style.display = 'flex';
+          break;
+        case 'hide-token-modal':
+          var modal2 = document.getElementById('token-modal');
+          if (modal2) modal2.style.display = 'none';
+          break;
+        case 'generate-token':
+          window.generateToken();
+          break;
+      }
+
+      var revokeId = e.target.getAttribute('data-revoke-token');
+      if (revokeId) window.revokeToken(revokeId);
+
+      var confirmId = e.target.getAttribute('data-confirm-revoke');
+      if (confirmId) window.confirmRevoke(confirmId);
+
+      var cancelId = e.target.getAttribute('data-cancel-revoke');
+      if (cancelId) window.cancelRevoke(cancelId);
+
+      var theme = e.target.getAttribute('data-theme');
+      if (theme) DevTrace.setTheme(theme);
+    });
+  }
+
+  // Reload page on back/forward cache restore.
+  window.addEventListener('pageshow', function(e) { if (e.persisted) location.reload(); });
+
   document.addEventListener('DOMContentLoaded', function() {
+    initNavDropdown();
     initSearch();
     initTokens();
     initTrendChart();
+    initLocalTime();
+    initHelpSearch();
+    initAdminTenants();
+    initToggleEdit();
+    initConfirmDelete();
+    initSettingsActions();
   });
 })();
