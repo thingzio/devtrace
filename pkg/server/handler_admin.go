@@ -212,8 +212,8 @@ func loadPipelineMetrics(ctx context.Context, store *postgres.Store, data map[st
 		data["ScorerAge"] = timeSince(ps.LastScored)
 	}
 
-	if ac, err := store.DailyActivityCounts(ctx, 7); err == nil {
-		data["ActivityBars"] = dailyCountBars(ac)
+	if ac, err := store.HourlyActivityCounts(ctx, 24); err == nil {
+		data["ActivityBars"] = hourlyCountBars(ac)
 	}
 }
 
@@ -224,19 +224,6 @@ func loadTenantList(ctx context.Context, store *postgres.Store, data map[string]
 		return
 	}
 	data["Tenants"] = buildTenantRows(ctx, store.DB(), tenants)
-}
-
-func dailyCountBars(dc []postgres.DailyCount) []activityBar {
-	if len(dc) == 0 {
-		return nil
-	}
-	days := make([]time.Time, len(dc))
-	counts := make([]int, len(dc))
-	for i, d := range dc {
-		days[i] = d.Day
-		counts[i] = d.Count
-	}
-	return buildBars(days, counts, "01/02")
 }
 
 func hourlyCountBars(hc []postgres.HourlyCount) []activityBar {

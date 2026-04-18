@@ -17,26 +17,35 @@
   <section class="settings-section">
     <h2>Pipeline Health</h2>
     {{if .PipelineStats}}
-    <dl>
-      <dt>Newest Activity Data</dt><dd>{{.IngestAge}}</dd>
-      <dt>Last Score Written</dt><dd>{{.ScorerAge}}</dd>
-      <dt>Total Activity Records</dt><dd>{{.PipelineStats.TotalActivities}}</dd>
-    </dl>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+      <div>
+        <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Last Ingest</div>
+        <div style="font-size:1.25rem;font-weight:600;">{{.IngestAge}}</div>
+      </div>
+      <div>
+        <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Last Scored</div>
+        <div style="font-size:1.25rem;font-weight:600;">{{.ScorerAge}}</div>
+      </div>
+      <div>
+        <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Activity Records</div>
+        <div style="font-size:1.25rem;font-weight:600;">{{.PipelineStats.TotalActivities}}</div>
+      </div>
+    </div>
     {{if .ActivityBars}}
     <div style="margin-top:1rem;">
-      <h3 style="font-size:0.9rem;color:var(--text-secondary,#8b949e);margin-bottom:0.5rem;">Activity (7 days)</h3>
-      <div style="display:flex;align-items:flex-end;gap:4px;height:80px;">
+      <h3 style="font-size:0.8rem;color:var(--text-secondary,#8b949e);margin-bottom:0.5rem;">Ingestion (24 hrs)</h3>
+      <div style="display:flex;align-items:flex-end;gap:2px;height:60px;">
         {{range .ActivityBars}}
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;" title="{{.Count}} records">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;" title="{{.Label}} — {{.Count}} records">
           <div style="flex:1;width:100%;display:flex;align-items:flex-end;">
-            <div style="width:100%;background:var(--accent-color,#58a6ff);border-radius:2px 2px 0 0;height:{{.Percent}}%;"></div>
+            <div style="width:100%;background:var(--accent-color,#58a6ff);border-radius:2px 2px 0 0;height:{{.Percent}}%;min-height:1px;"></div>
           </div>
         </div>
         {{end}}
       </div>
-      <div style="display:flex;gap:4px;margin-top:4px;">
+      <div style="display:flex;gap:2px;margin-top:4px;">
         {{range .ActivityBars}}
-        <div style="flex:1;text-align:center;font-size:0.65rem;color:var(--text-secondary,#8b949e);">{{.Label}}</div>
+        <div style="flex:1;text-align:center;font-size:0.6rem;color:var(--text-secondary,#8b949e);">{{.Label}}</div>
         {{end}}
       </div>
     </div>
@@ -45,32 +54,44 @@
   </section>
 
   <section class="settings-section">
-    <h2>Scoring Metrics</h2>
+    <h2>Scoring</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+      <div>
+        <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Queue Depth</div>
+        <div style="font-size:1.25rem;font-weight:600;">{{.QueueDepth}}</div>
+      </div>
+      <div>
+        <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Stale</div>
+        <div style="font-size:1.25rem;font-weight:600;">{{.StaleCount}}</div>
+      </div>
+      <div>
+        <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Scored</div>
+        <div style="font-size:1.25rem;font-weight:600;">{{.ScoredCount}}</div>
+      </div>
+      <div>
+        <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Contributors</div>
+        <div style="font-size:1.25rem;font-weight:600;">{{.ContributorCount}}</div>
+      </div>
+    </div>
     {{if .ScoringBars}}
-    <div style="margin-bottom:1rem;">
-      <h3 style="font-size:0.9rem;color:var(--text-secondary,#8b949e);margin-bottom:0.5rem;">Scores Written (12 hrs)</h3>
-      <div style="display:flex;align-items:flex-end;gap:4px;height:80px;">
+    <div>
+      <h3 style="font-size:0.8rem;color:var(--text-secondary,#8b949e);margin-bottom:0.5rem;">Scores Written (12 hrs)</h3>
+      <div style="display:flex;align-items:flex-end;gap:2px;height:60px;">
         {{range .ScoringBars}}
-        <div style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;" title="{{.Count}} scores">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;" title="{{.Label}} — {{.Count}} scores">
           <div style="flex:1;width:100%;display:flex;align-items:flex-end;">
-            <div style="width:100%;background:var(--accent-color,#58a6ff);border-radius:2px 2px 0 0;height:{{.Percent}}%;"></div>
+            <div style="width:100%;background:#3fb950;border-radius:2px 2px 0 0;height:{{.Percent}}%;min-height:1px;"></div>
           </div>
         </div>
         {{end}}
       </div>
-      <div style="display:flex;gap:4px;margin-top:4px;">
+      <div style="display:flex;gap:2px;margin-top:4px;">
         {{range .ScoringBars}}
-        <div style="flex:1;text-align:center;font-size:0.65rem;color:var(--text-secondary,#8b949e);">{{.Label}}</div>
+        <div style="flex:1;text-align:center;font-size:0.6rem;color:var(--text-secondary,#8b949e);">{{.Label}}</div>
         {{end}}
       </div>
     </div>
     {{end}}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem 2rem;">
-      <dl><dt>Queue depth</dt><dd>{{.QueueDepth}}</dd></dl>
-      <dl><dt>Total contributors</dt><dd>{{.ContributorCount}}</dd></dl>
-      <dl><dt>Stale contributors</dt><dd>{{.StaleCount}}</dd></dl>
-      <dl><dt>Total scored</dt><dd>{{.ScoredCount}}</dd></dl>
-    </div>
   </section>
 </div>
 </main>

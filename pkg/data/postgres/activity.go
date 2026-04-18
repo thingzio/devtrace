@@ -58,6 +58,16 @@ func (s *Store) DailyActivityCounts(ctx context.Context, days int) ([]DailyCount
 		 ORDER BY day ASC`, days, "daily activity counts")
 }
 
+// HourlyActivityCounts returns per-hour total activity counts for the last N hours.
+func (s *Store) HourlyActivityCounts(ctx context.Context, hours int) ([]HourlyCount, error) {
+	return s.dailyCounts(ctx,
+		`SELECT DATE_TRUNC('hour', hour) AS day, COUNT(*) AS count
+		 FROM devtrace_contributor_activity
+		 WHERE hour > NOW() - MAKE_INTERVAL(hours => $1)
+		 GROUP BY DATE_TRUNC('hour', hour)
+		 ORDER BY day ASC`, hours, "hourly activity counts")
+}
+
 // HourlySummary represents one hour of aggregated contributor activity from GH Archive.
 type HourlySummary struct {
 	Username      string
