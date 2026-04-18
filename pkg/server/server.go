@@ -75,6 +75,24 @@ var templateFuncs = template.FuncMap{
 	"mul":      func(a, b float64) float64 { return a * b },
 	"int":      func(n int64) int { return int(n) },
 	"prettify": func(s string) string { return strings.ReplaceAll(s, "_", " ") },
+	"flagDesc": func(s string) string {
+		switch s {
+		case "young_account":
+			return "Account created less than 30 days ago"
+		case "high_fork_ratio":
+			return "Over 80% of repos are forks, suggesting little original work"
+		case "empty_profile":
+			return "No bio, company, location, or website — minimal identity signal"
+		case "no_reviews":
+			return "No code reviews in the last 30 days — limited peer interaction"
+		case "no_consistency":
+			return "No sustained activity pattern detected across weeks"
+		case "no_verified_commits":
+			return "None of the contributor's commits are cryptographically signed"
+		default:
+			return ""
+		}
+	},
 	"velocityLabel": func(v float64) string {
 		if v > 5.0 {
 			return "suspicious"

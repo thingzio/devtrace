@@ -119,7 +119,7 @@
       <div class="synthetic-details open">
         <ul>
           {{range .AISensing.Behavioral.SyntheticRiskDetails}}
-          <li>{{prettify .}}</li>
+          <li><strong>{{prettify .}}</strong>{{with flagDesc .}} &mdash; <span class="metric-desc">{{.}}</span>{{end}}</li>
           {{end}}
         </ul>
       </div>
