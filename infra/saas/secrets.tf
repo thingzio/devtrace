@@ -42,6 +42,17 @@ resource "google_secret_manager_secret" "anthropic_api_key" {
   depends_on = [google_project_service.default]
 }
 
+resource "google_secret_manager_secret" "send_api_key" {
+  secret_id = "${var.prefix}-send-api-key"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.default]
+}
+
 resource "google_secret_manager_secret" "database_url" {
   secret_id = "${var.prefix}-database-url"
   project   = var.project_id
@@ -78,6 +89,12 @@ resource "google_secret_manager_secret_version" "github_token" {
 
 resource "google_secret_manager_secret_iam_member" "run_anthropic" {
   secret_id = google_secret_manager_secret.anthropic_api_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.run.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "run_send_api_key" {
+  secret_id = google_secret_manager_secret.send_api_key.id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.run.email}"
 }

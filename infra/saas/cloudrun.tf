@@ -102,6 +102,21 @@ resource "google_cloud_run_v2_service" "serve" {
         value = var.admin_users
       }
 
+      env {
+        name = "SEND_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.send_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name  = "SUPPORT_EMAIL"
+        value = "devtrace@thingz.io"
+      }
+
       dynamic "env" {
         for_each = var.github_token != "" ? [1] : []
         content {
