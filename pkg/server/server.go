@@ -48,10 +48,28 @@ var templateFuncs = template.FuncMap{
 		if n == 0 {
 			return "Unlimited"
 		}
-		if n < 1000 {
-			return fmt.Sprintf("%d", n)
+		neg := ""
+		if n < 0 {
+			neg = "-"
+			n = -n
 		}
-		return fmt.Sprintf("%d,%03d", n/1000, n%1000)
+		s := fmt.Sprintf("%d", n)
+		for i := len(s) - 3; i > 0; i -= 3 {
+			s = s[:i] + "," + s[i:]
+		}
+		return neg + s
+	},
+	"fmtnum": func(n int) string {
+		neg := ""
+		if n < 0 {
+			neg = "-"
+			n = -n
+		}
+		s := fmt.Sprintf("%d", n)
+		for i := len(s) - 3; i > 0; i -= 3 {
+			s = s[:i] + "," + s[i:]
+		}
+		return neg + s
 	},
 	"sub":      func(a, b int) int { return a - b },
 	"mul":      func(a, b float64) float64 { return a * b },

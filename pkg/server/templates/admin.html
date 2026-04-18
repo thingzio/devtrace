@@ -28,7 +28,7 @@
       </div>
       <div>
         <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Activity Records</div>
-        <div style="font-size:1.25rem;font-weight:600;">{{.PipelineStats.TotalActivities}}</div>
+        <div style="font-size:1.25rem;font-weight:600;">{{fmtnum .PipelineStats.TotalActivities}}</div>
       </div>
     </div>
     {{if .ActivityBars}}
@@ -58,19 +58,19 @@
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
       <div>
         <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Queue Depth</div>
-        <div style="font-size:1.25rem;font-weight:600;">{{.QueueDepth}}</div>
+        <div style="font-size:1.25rem;font-weight:600;">{{fmtnum .QueueDepth}}</div>
       </div>
       <div>
         <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Stale</div>
-        <div style="font-size:1.25rem;font-weight:600;">{{.StaleCount}}</div>
+        <div style="font-size:1.25rem;font-weight:600;">{{fmtnum .StaleCount}}</div>
       </div>
       <div>
         <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Scored</div>
-        <div style="font-size:1.25rem;font-weight:600;">{{.ScoredCount}}</div>
+        <div style="font-size:1.25rem;font-weight:600;">{{fmtnum .ScoredCount}}</div>
       </div>
       <div>
         <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Contributors</div>
-        <div style="font-size:1.25rem;font-weight:600;">{{.ContributorCount}}</div>
+        <div style="font-size:1.25rem;font-weight:600;">{{fmtnum .ContributorCount}}</div>
       </div>
     </div>
     {{if .ScoringBars}}
