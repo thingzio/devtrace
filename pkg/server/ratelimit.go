@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -159,6 +160,12 @@ func authAwareRateLimit(unauthRL, authRL *ipRateLimiter, htmlMode bool, version 
 			}
 
 			if !allowed {
+				tier := "unauth"
+				if tn != nil {
+					tier = "auth"
+				}
+				slog.Info("rate limit exceeded", "tier", tier, "path", r.URL.Path)
+
 				var retryAfter int
 				if tn == nil {
 					retryAfter = unauthRL.retryAfter(key)

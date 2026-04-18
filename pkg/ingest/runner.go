@@ -139,6 +139,7 @@ func computeHours(cursor time.Time, lookback, catchupMax int) []time.Time {
 
 func processHour(ctx context.Context, store ingestStore, reader *ArchiveReader,
 	hour time.Time, tenantRepos map[string]bool) error {
+	start := time.Now()
 	slog.Info("processing archive", "hour", hour.Format("2006-01-02-15"))
 
 	agg := NewAggregator(hour)
@@ -153,7 +154,6 @@ func processHour(ctx context.Context, store ingestStore, reader *ArchiveReader,
 	}
 
 	results := agg.Results()
-	slog.Info("aggregated", "events", eventCount, "contributors", len(results))
 
 	pgSummaries := make([]postgres.HourlySummary, 0, len(results))
 	for _, s := range results {
@@ -179,10 +179,18 @@ func processHour(ctx context.Context, store ingestStore, reader *ArchiveReader,
 	if err != nil {
 		return err
 	}
-	slog.Info("stored activity", "rows", stored)
 
 	queued := queueContributors(ctx, store, results, tenantRepos)
-	slog.Info("queued for scoring", "count", queued)
+
+	slog.Info("archive hour complete",
+		"hour", hour.Format("2006-01-02-15"),
+		"mode", "hourly",
+		"events", eventCount,
+		"contributors", len(results),
+		"stored", stored,
+		"queued", queued,
+		"duration_sec", time.Since(start).Seconds(),
+	)
 
 	return nil
 }

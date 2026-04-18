@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -162,6 +163,7 @@ func (p *TokenPool) Exhaust(token string) {
 		if e.token == token {
 			p.exhausted[i] = true
 			p.exhaustedAt[i] = time.Now()
+			slog.Warn("token exhausted", "label", e.label)
 			return
 		}
 	}

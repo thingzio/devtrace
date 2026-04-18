@@ -79,6 +79,11 @@ func handleInstallationEvent(ctx context.Context, db *sql.DB, body []byte) error
 		return fmt.Errorf("parsing installation event: %w", err)
 	}
 
+	slog.Info("installation event",
+		"action", event.Action,
+		"account", event.Installation.Account.Login,
+	)
+
 	switch event.Action {
 	case "created":
 		tn, err := tenant.GetTenantByGitHubID(ctx, db, event.Sender.ID)

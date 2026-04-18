@@ -129,7 +129,7 @@ func runContinuousScorer(ctx context.Context, store scorerStore, gh ghclient.Cli
 			if pct < minQuotaPct {
 				logScorerStats(ctx, store, stats)
 				wait := max(time.Until(earliestReset)+jitter(), time.Minute)
-				slog.Warn("scorer pausing: quota below threshold",
+				slog.Warn("scorer quota paused",
 					"aggregate_pct", pct,
 					"threshold_pct", minQuotaPct,
 					"resume_in", wait,

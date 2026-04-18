@@ -66,6 +66,7 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 		}
 
 		persistScore(store, username, resp.Score.Value, resp.Score.Grade, resp.Version)
+		slog.Info("score request", "source", "ui", "username", username)
 
 		gradeClass := "grade-f"
 		if g := resp.Score.Grade; len(g) > 0 {

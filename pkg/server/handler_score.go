@@ -67,6 +67,7 @@ func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) 
 		}
 
 		persistScore(store, username, resp.Score.Value, resp.Score.Grade, resp.Version)
+		slog.Info("score request", "source", "api", "username", username)
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(resp); err != nil {

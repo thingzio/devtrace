@@ -77,17 +77,24 @@ func Backfill(ctx context.Context, store *postgres.Store, days int) error {
 		remaining := total - processed
 		pct := float64(processed) / float64(total) * 100
 
-		slog.Info("backfill progress",
+		slog.Info("backfill batch complete",
+			"mode", "backfill",
 			"processed", processed,
 			"remaining", remaining,
 			"pct", fmt.Sprintf("%.1f", pct),
-			"batch_elapsed", time.Since(batchStart).Round(time.Millisecond),
+			"batch_duration_sec", time.Since(batchStart).Seconds(),
 			"total_elapsed", time.Since(totalStart).Round(time.Millisecond),
 		)
 
 		// Run maintenance (compaction + pruning) during long backfills.
 		maybeCompact(ctx, store)
 	}
+
+	slog.Info("backfill complete",
+		"total_hours", total,
+		"processed", processed,
+		"duration_sec", time.Since(totalStart).Seconds(),
+	)
 
 	return nil
 }
