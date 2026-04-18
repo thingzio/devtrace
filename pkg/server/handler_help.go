@@ -15,17 +15,18 @@ import (
 )
 
 type helpData struct {
-	Title     string
-	Version   string
-	Commit    string
-	Date      string
-	NavUser   string
-	NavAvatar string
-	Username  string
-	Name      string
-	Email     string
-	Sent      bool
-	Error     string
+	Title          string
+	Version        string
+	Commit         string
+	Date           string
+	NavUser        string
+	NavAvatar      string
+	Username       string
+	Name           string
+	Email          string
+	Sent           bool
+	Error          string
+	ContactEnabled bool
 }
 
 func tryGetTenant(r *http.Request, db *sql.DB) *tenant.Tenant {
@@ -40,13 +41,18 @@ func tryGetTenant(r *http.Request, db *sql.DB) *tenant.Tenant {
 	return tn
 }
 
+func contactEnabled() bool {
+	return os.Getenv("SEND_API_KEY") != "" && os.Getenv("SUPPORT_EMAIL") != ""
+}
+
 func helpPageHandler(db *sql.DB, opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		d := helpData{
-			Title:   "Help",
-			Version: opts.Version,
-			Commit:  opts.Commit,
-			Date:    opts.Date,
+			Title:          "Help",
+			Version:        opts.Version,
+			Commit:         opts.Commit,
+			Date:           opts.Date,
+			ContactEnabled: contactEnabled(),
 		}
 		if tn := tryGetTenant(r, db); tn != nil {
 			d.NavUser = tn.Username
@@ -102,16 +108,17 @@ func helpContactHandler(db *sql.DB, opts Options) http.HandlerFunc {
 		slog.Info("support email sent", "from", tn.Email, "username", tn.Username)
 
 		d := helpData{
-			Title:     "Help",
-			Version:   opts.Version,
-			Commit:    opts.Commit,
-			Date:      opts.Date,
-			NavUser:   tn.Username,
-			NavAvatar: tn.AvatarURL,
-			Username:  tn.Username,
-			Name:      tn.Name,
-			Email:     tn.Email,
-			Sent:      true,
+			Title:          "Help",
+			Version:        opts.Version,
+			Commit:         opts.Commit,
+			Date:           opts.Date,
+			NavUser:        tn.Username,
+			NavAvatar:      tn.AvatarURL,
+			Username:       tn.Username,
+			Name:           tn.Name,
+			Email:          tn.Email,
+			Sent:           true,
+			ContactEnabled: true,
 		}
 		renderTemplate(w, "help.html", d)
 	}
@@ -119,16 +126,17 @@ func helpContactHandler(db *sql.DB, opts Options) http.HandlerFunc {
 
 func renderHelpWithError(w http.ResponseWriter, _ *http.Request, _ *sql.DB, tn *tenant.Tenant, opts Options, msg string) {
 	d := helpData{
-		Title:     "Help",
-		Version:   opts.Version,
-		Commit:    opts.Commit,
-		Date:      opts.Date,
-		NavUser:   tn.Username,
-		NavAvatar: tn.AvatarURL,
-		Username:  tn.Username,
-		Name:      tn.Name,
-		Email:     tn.Email,
-		Error:     msg,
+		Title:          "Help",
+		Version:        opts.Version,
+		Commit:         opts.Commit,
+		Date:           opts.Date,
+		NavUser:        tn.Username,
+		NavAvatar:      tn.AvatarURL,
+		Username:       tn.Username,
+		Name:           tn.Name,
+		Email:          tn.Email,
+		Error:          msg,
+		ContactEnabled: contactEnabled(),
 	}
 	renderTemplate(w, "help.html", d)
 }

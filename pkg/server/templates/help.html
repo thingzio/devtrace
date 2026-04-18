@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="landing">
   <div style="max-width:700px;margin:0 auto;padding:0 0 1rem;">
-    <a href="javascript:history.back()" class="back-link">&larr; Back</a>
+    <a href="/dashboard" class="back-link">&larr; Dashboard</a>
   </div>
   <div class="landing-hero">
     <h1>Help</h1>
@@ -293,7 +293,7 @@ export TOKEN=dt_your_token_here</code></pre>
       <div style="padding:12px;background:rgba(34,197,94,0.1);border:1px solid #22c55e;border-radius:6px;">
         Message sent. We'll get back to you at <strong>{{.Email}}</strong>.
       </div>
-      {{else}}
+      {{else if .ContactEnabled}}
       {{if .Error}}
       <div style="padding:12px;background:rgba(248,81,73,0.1);border:1px solid #f85149;border-radius:6px;margin-bottom:12px;color:#f85149;">
         {{.Error}}
@@ -305,6 +305,8 @@ export TOKEN=dt_your_token_here</code></pre>
           style="width:100%;padding:10px 12px;border:1px solid var(--border-color);border-radius:6px;font-family:inherit;font-size:0.95em;resize:vertical;background:var(--page-content-blockColor);color:var(--page-content-txtColor);box-sizing:border-box;"></textarea>
         <button type="submit" class="btn btn-primary" style="margin-top:10px;">Send Message</button>
       </form>
+      {{else}}
+      <p style="color:var(--gray);font-size:0.9em;">Contact form is not available yet. Please email us directly at <a href="mailto:support@thingz.io">support@thingz.io</a>.</p>
       {{end}}
     </div>
     {{end}}
