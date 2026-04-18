@@ -5,18 +5,15 @@ import (
 
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	"github.com/thingzio/devtrace/pkg/middleware"
+	"github.com/thingzio/devtrace/pkg/plan"
 )
 
 // historyDays returns the score history window based on the tenant's plan.
-func historyDays(plan string) int {
-	switch plan {
-	case "pro":
-		return 365
-	case "starter":
-		return 90
-	default: // free
-		return 30
+func historyDays(planName string) int {
+	if p, ok := plan.Get(planName); ok {
+		return p.HistoryDays
 	}
+	return plan.Free().HistoryDays
 }
 
 func historyHandler(store *postgres.Store) http.HandlerFunc {
@@ -27,12 +24,12 @@ func historyHandler(store *postgres.Store) http.HandlerFunc {
 			return
 		}
 
-		plan := ""
+		planName := ""
 		if tn := middleware.TenantFromContext(r.Context()); tn != nil {
-			plan = tn.Plan
+			planName = tn.Plan
 		}
 
-		entries, err := store.GetScoreHistory(r.Context(), username, "github", historyDays(plan))
+		entries, err := store.GetScoreHistory(r.Context(), username, "github", historyDays(planName))
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to fetch history"})
 			return

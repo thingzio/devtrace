@@ -161,13 +161,19 @@ var templateFuncs = template.FuncMap{
 func init() {
 	simplePages := []string{
 		"admin.html", "admin_tokens.html", "admin_tenants.html",
-		"landing.html", "scorecard.html", "tos.html", "settings.html",
-		"stub.html", "help.html", "ratelimit.html", "changelog.html",
+		"scorecard.html", "tos.html", "settings.html",
+		"stub.html", "ratelimit.html", "changelog.html",
 	}
-	pageTemplates = make(map[string]*template.Template, len(simplePages)+1)
+	// +3: simplePages + landing + help + home
+	pageTemplates = make(map[string]*template.Template, len(simplePages)+3)
 	for _, p := range simplePages {
 		pageTemplates[p] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
 			"templates/layout.html", "templates/"+p))
+	}
+	// Pages that include the plans table partial.
+	for _, p := range []string{"landing.html", "help.html"} {
+		pageTemplates[p] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
+			"templates/layout.html", "templates/plans_table.html", "templates/"+p))
 	}
 	pageTemplates["home.html"] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
 		"templates/header.html", "templates/home.html", "templates/footer.html"))

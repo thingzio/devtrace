@@ -4,6 +4,20 @@
 
 NIST SP 800-218 (SSDF) and EU CRA (2024/2847) create implicit demand for contributor vetting evidence in software supply chains. No tool currently maps contributor trust signals to SSDF practices. DevTrace already collects the signals — it just doesn't surface the regulatory relevance.
 
+## Context 
+
+**SSDF (Secure Software Development Framework)** — NIST SP 800-218
+- A set of high-level practices (not prescriptive controls) for integrating security into the SDLC: secure design, protected development environments, well-secured software, and responding to vulnerabilities
+- Became practically mandatory for US federal software vendors via Executive Order 14028 and OMB M-22-18, requiring SSDF attestation for any software sold to the US government
+- Emphasizes provenance, integrity verification, and vulnerability disclosure — directly drives demand for SBOMs, signing, and supply chain transparency tooling
+
+**EU CRA (Cyber Resilience Act)**
+- EU regulation (passed Oct 2024, enforcement begins 2027) that imposes mandatory cybersecurity requirements on any product with digital elements sold in the EU — hardware or software, commercial or open source with commercial intent
+- Manufacturers must maintain a software bill of materials, report actively exploited vulnerabilities within 24 hours, provide security updates for the product's expected lifetime, and affix CE marking for compliance
+- Open source projects stewarded by foundations are largely exempt, but anything monetized (SaaS, support contracts, etc.) falls in scope — making it directly relevant to commercial developer tooling
+
+**Why they matter together:** SSDF is the US government's demand-side lever; CRA is the EU's supply-side mandate. Together they're creating a global floor for software supply chain transparency — and both make SBOM generation, vulnerability tracking, and attestation commercially essential rather than optional.
+
 ## Goal
 
 Surface SSDF practice mapping in DevTrace as an informational resource that supports organizational due-diligence obligations. Defensive framing: DevTrace provides additional signals, not compliance determinations.

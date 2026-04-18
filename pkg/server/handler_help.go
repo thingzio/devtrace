@@ -11,6 +11,7 @@ import (
 
 	"github.com/thingzio/devtrace/pkg/middleware"
 	devnet "github.com/thingzio/devtrace/pkg/net"
+	"github.com/thingzio/devtrace/pkg/plan"
 	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
@@ -27,6 +28,8 @@ type helpData struct {
 	Sent           bool
 	Error          string
 	ContactEnabled bool
+	Plans          []plan.Plan
+	Features       []plan.Feature
 }
 
 func tryGetTenant(r *http.Request, db *sql.DB) *tenant.Tenant {
@@ -53,6 +56,8 @@ func helpPageHandler(db *sql.DB, opts Options) http.HandlerFunc {
 			Commit:         opts.Commit,
 			Date:           opts.Date,
 			ContactEnabled: contactEnabled(),
+			Plans:          plan.DisplayPlans(),
+			Features:       plan.DisplayFeatures(),
 		}
 		if tn := tryGetTenant(r, db); tn != nil {
 			d.NavUser = tn.Username
@@ -119,6 +124,8 @@ func helpContactHandler(db *sql.DB, opts Options) http.HandlerFunc {
 			Email:          tn.Email,
 			Sent:           true,
 			ContactEnabled: true,
+			Plans:          plan.DisplayPlans(),
+			Features:       plan.DisplayFeatures(),
 		}
 		renderTemplate(w, "help.html", d)
 	}
@@ -137,6 +144,8 @@ func renderHelpWithError(w http.ResponseWriter, _ *http.Request, _ *sql.DB, tn *
 		Email:          tn.Email,
 		Error:          msg,
 		ContactEnabled: contactEnabled(),
+		Plans:          plan.DisplayPlans(),
+		Features:       plan.DisplayFeatures(),
 	}
 	renderTemplate(w, "help.html", d)
 }

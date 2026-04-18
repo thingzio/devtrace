@@ -3,8 +3,8 @@ package plan
 import "fmt"
 
 const (
-	valYes  = "Yes"
 	valDash = "\u2014"
+	valSoon = "Coming soon"
 )
 
 // Plan defines the capabilities and limits for a billing tier.
@@ -19,7 +19,7 @@ type Plan struct {
 	AISensing         bool
 	BatchAPI          bool
 	Webhooks          bool
-	TrendMonths       int
+	HistoryDays       int // score history window in days
 	MaxAPIKeys        int
 	ComplianceReports bool
 	RiskSummary       string // display value for plans table
@@ -46,14 +46,14 @@ var plans = map[string]Plan{
 		DisplayName:      "Free",
 		MaxContributors:  50,
 		RateLimitPerHour: 60,
-		TrendMonths:      0,
+		HistoryDays:      30,
 		MaxAPIKeys:       1,
 		RiskSummary:      "Metrics-based",
 		AISensingLabel:   "Metadata",
-		LicenseLabel:     "\u2014",
+		LicenseLabel:     valDash,
 		APIKeysLabel:     "1",
-		AlertsLabel:      "\u2014",
-		ComplianceLabel:  "\u2014",
+		AlertsLabel:      valDash,
+		ComplianceLabel:  valDash,
 	},
 	"starter": {
 		Name:             "starter",
@@ -61,16 +61,15 @@ var plans = map[string]Plan{
 		PriceLabel:       "$0/mo*",
 		MaxContributors:  200,
 		RateLimitPerHour: 300,
-		LicenseAnalysis:  true,
 		AISensing:        true,
-		TrendMonths:      3,
+		HistoryDays:      90,
 		MaxAPIKeys:       1,
 		RiskSummary:      "AI-powered",
 		AISensingLabel:   "Metadata + PR authenticity",
-		LicenseLabel:     "Basic",
-		APIKeysLabel:     "Multiple",
-		AlertsLabel:      "Email",
-		ComplianceLabel:  "\u2014",
+		LicenseLabel:     valDash,
+		APIKeysLabel:     "1",
+		AlertsLabel:      valSoon,
+		ComplianceLabel:  valDash,
 	},
 	"pro": {
 		Name:              "pro",
@@ -84,13 +83,13 @@ var plans = map[string]Plan{
 		BatchAPI:          true,
 		Webhooks:          true,
 		ComplianceReports: true,
-		TrendMonths:       12,
+		HistoryDays:       365,
 		MaxAPIKeys:        10,
 		RiskSummary:       "AI-powered",
 		AISensingLabel:    "Full Context",
-		LicenseLabel:      "Full Context",
-		APIKeysLabel:      "Multiple",
-		AlertsLabel:       "Email + Webhook",
+		LicenseLabel:      "Pro only",
+		APIKeysLabel:      "10",
+		AlertsLabel:       valSoon,
 		ComplianceLabel:   "SSDF + EU CRA",
 	},
 }
@@ -108,15 +107,12 @@ func DisplayPlans() []Plan {
 func DisplayFeatures() []Feature {
 	dp := DisplayPlans()
 	return []Feature{
-		{ID: "feature-scoring", Label: "Contributor Scoring", Values: []string{"Score + Grade + Signals"}, Span: true},
+		{ID: "feature-scoring", Label: "Contributor Scoring", Values: []string{"Score + Grade + Signals (available on all plans)"}, Span: true},
 		{ID: "feature-risk", Label: "Risk Summary", Values: pluck(dp, func(p Plan) string { return p.RiskSummary })},
 		{ID: "feature-ai-sensing", Label: "AI Sensing", Values: pluck(dp, func(p Plan) string { return p.AISensingLabel })},
 		{ID: "feature-license", Label: "License Analysis", Values: pluck(dp, func(p Plan) string { return p.LicenseLabel })},
 		{ID: "feature-history", Label: "Score History", Values: pluck(dp, func(p Plan) string {
-			if p.TrendMonths == 0 {
-				return "30 days"
-			}
-			return fmt.Sprintf("%d days", p.TrendMonths*30)
+			return fmt.Sprintf("%d days", p.HistoryDays)
 		})},
 		{ID: "feature-rate-limit", Label: "Rate Limit", Values: pluck(dp, func(p Plan) string {
 			return fmt.Sprintf("%d req/hour", p.RateLimitPerHour)
@@ -124,13 +120,13 @@ func DisplayFeatures() []Feature {
 		{ID: "feature-api-keys", Label: "API Keys", Values: pluck(dp, func(p Plan) string { return p.APIKeysLabel })},
 		{ID: "feature-batch", Label: "Batch API", Values: pluck(dp, func(p Plan) string {
 			if p.BatchAPI {
-				return valYes
+				return valSoon
 			}
 			return valDash
 		})},
 		{ID: "feature-webhooks", Label: "Webhooks", Values: pluck(dp, func(p Plan) string {
 			if p.Webhooks {
-				return valYes
+				return valSoon
 			}
 			return valDash
 		})},

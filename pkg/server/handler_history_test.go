@@ -9,6 +9,26 @@ import (
 	"testing"
 )
 
+func TestHistoryDays(t *testing.T) {
+	cases := []struct {
+		plan string
+		want int
+	}{
+		{"free", 30},
+		{"starter", 90},
+		{"pro", 365},
+		{"", 30},        // empty defaults to free
+		{"unknown", 30}, // unknown defaults to free
+	}
+	for _, tc := range cases {
+		t.Run(tc.plan, func(t *testing.T) {
+			if got := historyDays(tc.plan); got != tc.want {
+				t.Errorf("historyDays(%q) = %d, want %d", tc.plan, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestHistoryHandlerInvalidUsername(t *testing.T) {
 	handler := historyHandler(nil)
 

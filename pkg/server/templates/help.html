@@ -267,8 +267,8 @@ export TOKEN=dt_your_token_here</code></pre>
       <ul>
         <li><strong>Unauthenticated</strong> &mdash; 1 lookup per minute per IP. Sign in with GitHub to unlock higher limits and full features.</li>
         <li><strong>Free plan</strong> &mdash; 50 unique contributors/month, 60 API requests/hour, basic scoring with category breakdown and risk summary.</li>
-        <li><strong>Starter plan</strong> &mdash; 500 unique contributors/month, 600 API requests/hour, includes PR authenticity analysis.</li>
-        <li><strong>Pro plan</strong> &mdash; 2,000 unique contributors/month, 2,400 API requests/hour, full AI Sensing with behavioral heuristics (Velocity Anomaly, Active Hours, Burst-Vanish, Synthetic Risk).</li>
+        <li><strong>Starter plan</strong> &mdash; 200 unique contributors/month, 300 API requests/hour, includes PR authenticity analysis.</li>
+        <li><strong>Pro plan</strong> &mdash; 2,000 unique contributors/month, 1,000 API requests/hour, full AI Sensing with behavioral heuristics (Velocity Anomaly, Active Hours, Burst-Vanish, Synthetic Risk).</li>
         <li><strong>Quota</strong> &mdash; each unique contributor scored counts against your monthly limit. Rescoring the same contributor does not consume additional quota.</li>
         <li><strong>Rate limiting</strong> &mdash; unauthenticated requests are limited to 1 per minute. Authenticated requests are rate-limited per hour based on your plan. When the limit is reached, requests return HTTP 429 with a <code>Retry-After</code> header.</li>
       </ul>
@@ -309,5 +309,7 @@ export TOKEN=dt_your_token_here</code></pre>
     </div>
     {{end}}
   </div>
+
+  {{template "plans_table" .}}
 </div>
 {{end}}
