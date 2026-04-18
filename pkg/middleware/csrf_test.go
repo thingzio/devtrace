@@ -156,6 +156,132 @@ func TestValidateCSRF_TokenMismatch(t *testing.T) {
 	}
 }
 
+func TestSetCSRFCookie(t *testing.T) {
+	token, err := GenerateCSRFToken()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{"admin path", "/admin"},
+		{"tos path", "/tos"},
+		{"root path", "/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			SetCSRFCookie(rec, token, tt.path)
+
+			cookies := rec.Result().Cookies()
+			if len(cookies) != 1 {
+				t.Fatalf("expected 1 cookie, got %d", len(cookies))
+			}
+			c := cookies[0]
+			if c.Name != CSRFCookieName() {
+				t.Fatalf("expected cookie name %q, got %q", CSRFCookieName(), c.Name)
+			}
+			if c.Value != token {
+				t.Fatalf("expected cookie value %q, got %q", token, c.Value)
+			}
+			if c.Path != tt.path {
+				t.Fatalf("expected cookie path %q, got %q", tt.path, c.Path)
+			}
+		})
+	}
+}
+
+func TestValidateCSRF_TOSPath(t *testing.T) {
+	token, err := GenerateCSRFToken()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	called := false
+	handler := ValidateCSRF(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	form := url.Values{csrfFormField: {token}}
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/tos/accept", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: CSRFCookieName(), Value: token})
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if !called {
+		t.Fatal("handler was not called for valid TOS token")
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestInjectCSRF_GET(t *testing.T) {
+	var gotToken string
+	handler := InjectCSRF(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotToken = CSRFTokenFromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/dashboard", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	if gotToken == "" {
+		t.Fatal("expected CSRF token in context")
+	}
+	cookies := rec.Result().Cookies()
+	var found bool
+	for _, c := range cookies {
+		if c.Name == CSRFCookieName() {
+			found = true
+			if c.Value != gotToken {
+				t.Fatalf("cookie value %q != context token %q", c.Value, gotToken)
+			}
+			if c.Path != "/" {
+				t.Fatalf("expected cookie path %q, got %q", "/", c.Path)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("CSRF cookie not set")
+	}
+}
+
+func TestInjectCSRF_POSTPassthrough(t *testing.T) {
+	called := false
+	handler := InjectCSRF(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		if tok := CSRFTokenFromContext(r.Context()); tok != "" {
+			t.Fatal("POST should not inject CSRF token")
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/auth/signout", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if !called {
+		t.Fatal("handler not called for POST")
+	}
+}
+
+func TestCSRFTokenFromContext_Empty(t *testing.T) {
+	if tok := CSRFTokenFromContext(context.Background()); tok != "" {
+		t.Fatalf("expected empty token from bare context, got %q", tok)
+	}
+}
+
 func TestCSRFCookieNameFor(t *testing.T) {
 	if got := csrfCookieNameFor(true); got != csrfCookieSecure {
 		t.Fatalf("expected %q, got %q", csrfCookieSecure, got)

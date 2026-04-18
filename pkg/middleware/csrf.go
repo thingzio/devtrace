@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
@@ -15,6 +16,8 @@ const (
 	csrfFormField    = "csrf_token"
 	csrfTokenBytes   = 32
 )
+
+type csrfContextKey struct{}
 
 var csrfCookieName string
 
@@ -44,15 +47,47 @@ func GenerateCSRFToken() (string, error) {
 }
 
 // SetCSRFCookie writes the CSRF token cookie to the response.
-func SetCSRFCookie(w http.ResponseWriter, token string) {
+// The path parameter scopes the cookie to the given URL prefix (e.g. "/admin", "/").
+func SetCSRFCookie(w http.ResponseWriter, token, path string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     CSRFCookieName(),
 		Value:    token,
-		Path:     "/admin",
+		Path:     path,
 		Secure:   secure,
-		HttpOnly: false, // JS must be able to read if needed; form field is the primary mechanism
+		HttpOnly: false, // JS reads the cookie to inject hidden form fields
 		SameSite: http.SameSiteStrictMode,
 	})
+}
+
+// InjectCSRF generates a CSRF token, sets it as a cookie at Path="/",
+// and stores it in the request context. Apply to all authenticated GET
+// routes so that POST forms (sign-out, TOS accept, etc.) have a valid token.
+// Client-side JS reads the cookie and injects hidden csrf_token fields.
+func InjectCSRF(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Only inject on GET (the pages that render forms).
+		if r.Method != http.MethodGet {
+			next.ServeHTTP(w, r)
+			return
+		}
+		token, err := GenerateCSRFToken()
+		if err != nil {
+			slog.Error("csrf: generate token", "error", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		SetCSRFCookie(w, token, "/")
+		ctx := context.WithValue(r.Context(), csrfContextKey{}, token)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// CSRFTokenFromContext returns the CSRF token stored by InjectCSRF middleware.
+func CSRFTokenFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(csrfContextKey{}).(string); ok {
+		return v
+	}
+	return ""
 }
 
 // CSRFTokenFromRequest reads the CSRF token from the cookie.

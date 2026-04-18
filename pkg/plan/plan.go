@@ -9,23 +9,25 @@ const (
 
 // Plan defines the capabilities and limits for a billing tier.
 type Plan struct {
-	Name             string
-	DisplayName      string
-	PriceLabel       string // e.g. "$0/mo*", empty for free
-	MaxContributors  int    // per billing period, 0 = unlimited
-	RateLimitPerHour int
-	DeepScoring      bool
-	LicenseAnalysis  bool
-	AISensing        bool
-	BatchAPI         bool
-	Webhooks         bool
-	TrendMonths      int
-	MaxAPIKeys       int
-	RiskSummary      string // display value for plans table
-	AISensingLabel   string
-	LicenseLabel     string
-	APIKeysLabel     string
-	AlertsLabel      string
+	Name              string
+	DisplayName       string
+	PriceLabel        string // e.g. "$0/mo*", empty for free
+	MaxContributors   int    // per billing period, 0 = unlimited
+	RateLimitPerHour  int
+	DeepScoring       bool
+	LicenseAnalysis   bool
+	AISensing         bool
+	BatchAPI          bool
+	Webhooks          bool
+	TrendMonths       int
+	MaxAPIKeys        int
+	ComplianceReports bool
+	RiskSummary       string // display value for plans table
+	AISensingLabel    string
+	LicenseLabel      string
+	APIKeysLabel      string
+	AlertsLabel       string
+	ComplianceLabel   string
 }
 
 // Feature describes one row in the plans comparison table.
@@ -51,6 +53,7 @@ var plans = map[string]Plan{
 		LicenseLabel:     "\u2014",
 		APIKeysLabel:     "1",
 		AlertsLabel:      "\u2014",
+		ComplianceLabel:  "\u2014",
 	},
 	"starter": {
 		Name:             "starter",
@@ -67,25 +70,28 @@ var plans = map[string]Plan{
 		LicenseLabel:     "Basic",
 		APIKeysLabel:     "Multiple",
 		AlertsLabel:      "Email",
+		ComplianceLabel:  "\u2014",
 	},
 	"pro": {
-		Name:             "pro",
-		DisplayName:      "Pro",
-		PriceLabel:       "$0/mo*",
-		MaxContributors:  2000,
-		RateLimitPerHour: 1000,
-		DeepScoring:      true,
-		LicenseAnalysis:  true,
-		AISensing:        true,
-		BatchAPI:         true,
-		Webhooks:         true,
-		TrendMonths:      12,
-		MaxAPIKeys:       10,
-		RiskSummary:      "AI-powered",
-		AISensingLabel:   "Full Context",
-		LicenseLabel:     "Full Context",
-		APIKeysLabel:     "Multiple",
-		AlertsLabel:      "Email + Webhook",
+		Name:              "pro",
+		DisplayName:       "Pro",
+		PriceLabel:        "$0/mo*",
+		MaxContributors:   2000,
+		RateLimitPerHour:  1000,
+		DeepScoring:       true,
+		LicenseAnalysis:   true,
+		AISensing:         true,
+		BatchAPI:          true,
+		Webhooks:          true,
+		ComplianceReports: true,
+		TrendMonths:       12,
+		MaxAPIKeys:        10,
+		RiskSummary:       "AI-powered",
+		AISensingLabel:    "Full Context",
+		LicenseLabel:      "Full Context",
+		APIKeysLabel:      "Multiple",
+		AlertsLabel:       "Email + Webhook",
+		ComplianceLabel:   "SSDF + EU CRA",
 	},
 }
 
@@ -129,6 +135,7 @@ func DisplayFeatures() []Feature {
 			return valDash
 		})},
 		{ID: "feature-alerts", Label: "Risk Alerts", Values: pluck(dp, func(p Plan) string { return p.AlertsLabel })},
+		{ID: "feature-compliance", Label: "Compliance Reports", Values: pluck(dp, func(p Plan) string { return p.ComplianceLabel })},
 	}
 }
 

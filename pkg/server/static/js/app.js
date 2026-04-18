@@ -417,7 +417,29 @@
   // Reload page on back/forward cache restore.
   window.addEventListener('pageshow', function(e) { if (e.persisted) location.reload(); });
 
+  // Read a cookie value by name.
+  function getCookie(name) {
+    var match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^;]*)'));
+    return match ? decodeURIComponent(match[1]) : '';
+  }
+
+  // Inject hidden csrf_token fields into all POST forms that don't already have one.
+  function initCSRF() {
+    var cookieName = document.cookie.indexOf('__Host-csrf=') !== -1 ? '__Host-csrf' : 'csrf';
+    var token = getCookie(cookieName);
+    if (!token) return;
+    document.querySelectorAll('form[method="POST"], form[method="post"]').forEach(function(form) {
+      if (form.querySelector('input[name="csrf_token"]')) return;
+      var input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'csrf_token';
+      input.value = token;
+      form.appendChild(input);
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
+    initCSRF();
     initNavDropdown();
     initSearch();
     initTokens();

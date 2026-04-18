@@ -388,6 +388,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 
 	requireAny := middleware.RequireAnyAuth(db)
 	requireSession := middleware.RequireAuth(db, "/auth/github")
+	csrf := middleware.InjectCSRF
 
 	mux := http.NewServeMux()
 
@@ -404,15 +405,15 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	mux.HandleFunc("GET /auth/github/callback", oauthCallbackHandler(db, oauthCfg))
 
 	// Dashboard — requires session
-	mux.Handle("GET /dashboard", requireSession(dashboardHandler(store, opts)))
+	mux.Handle("GET /dashboard", requireSession(csrf(dashboardHandler(store, opts))))
 
 	// Settings + ToS — requires session
-	mux.Handle("GET /settings", requireSession(settingsHandler(store, opts)))
-	mux.Handle("GET /tos", requireAny(tosPageHandler(db, opts)))
+	mux.Handle("GET /settings", requireSession(csrf(settingsHandler(store, opts))))
+	mux.Handle("GET /tos", requireAny(csrf(tosPageHandler(db, opts))))
 	mux.Handle("POST /tos/accept", requireSession(middleware.ValidateCSRF(tosAcceptHandler(store))))
 
 	// Score card page — accepts any auth, rate-limited (HTML 429)
-	mux.Handle("GET /score/{username}", requireAny(authAwareRateLimit(unauthRL, authRL, true, opts.Version)(scorecardHandler(store, scoreSvc, opts))))
+	mux.Handle("GET /score/{username}", requireAny(csrf(authAwareRateLimit(unauthRL, authRL, true, opts.Version)(scorecardHandler(store, scoreSvc, opts)))))
 
 	// Score API — accepts any auth, rate-limited (JSON 429)
 	mux.Handle("GET /api/v1/score/{username}", requireAny(authAwareRateLimit(unauthRL, authRL, false, opts.Version)(scoreHandler(db, store, scoreSvc))))

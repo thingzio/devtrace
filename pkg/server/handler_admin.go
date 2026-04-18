@@ -229,7 +229,7 @@ func adminTenantsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		middleware.SetCSRFCookie(w, csrfToken)
+		middleware.SetCSRFCookie(w, csrfToken, "/admin")
 		data["CSRFToken"] = csrfToken
 
 		if store != nil {
