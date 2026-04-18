@@ -1,0 +1,164 @@
+{{define "content"}}
+<main class="dashboard-main">
+<div class="settings">
+  <a href="/dashboard" class="back-link">&larr; Dashboard</a>
+  <h1>Admin</h1>
+
+  <nav style="display:flex;gap:16px;margin-bottom:24px;border-bottom:1px solid var(--border-color);padding-bottom:8px">
+    <a href="/admin">Pipeline</a>
+    <a href="/admin/tokens">Tokens</a>
+    <a href="/admin/tenants" style="font-weight:bold">Tenants</a>
+  </nav>
+
+  {{if .FlashMsg}}
+  <div class="flash-msg">{{.FlashMsg}}{{if .FlashUser}} ({{.FlashUser}}){{end}}</div>
+  {{end}}
+
+  <section class="settings-section">
+    <h2>Tenants</h2>
+    {{if .Tenants}}
+    <input type="text" id="tenant-search" placeholder="Search by username or name..."
+      style="width:100%;padding:0.4rem 0.6rem;margin-bottom:0.5rem;background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:4px;font-size:0.85rem;">
+    <style>.data-table select{background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:3px;padding:0.15rem 0.3rem;font-size:0.8rem;}</style>
+    <table class="data-table" id="tenant-table">
+      <thead>
+        <tr>
+          <th class="sortable" data-col="0">Username <span class="sort-arrow"></span></th>
+          <th class="sortable" data-col="1">Name <span class="sort-arrow"></span></th>
+          <th class="sortable" data-col="2">Plan <span class="sort-arrow"></span></th>
+          <th>App</th>
+          <th class="sortable" data-col="4">Status <span class="sort-arrow"></span></th>
+          <th class="sortable" data-col="5">Created <span class="sort-arrow"></span></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Tenants}}
+        <tr id="row-{{.Username}}" data-username="{{.Username}}" data-name="{{.Name}}">
+          <td><a href="/score/{{.Username}}">{{.Username}}</a></td>
+          <td>{{.Name}}</td>
+          <td>
+            <span class="view-{{.Username}}">{{.Plan}}</span>
+            <form class="edit-{{.Username}}" method="POST" action="/admin/tenant/{{.Username}}/plan" style="display:none">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <select name="plan">
+                <option value="free" {{if eq .Plan "free"}}selected{{end}}>free</option>
+                <option value="starter" {{if eq .Plan "starter"}}selected{{end}}>starter</option>
+                <option value="pro" {{if eq .Plan "pro"}}selected{{end}}>pro</option>
+              </select>
+              <button type="submit" class="btn btn-sm">Save</button>
+            </form>
+          </td>
+          <td>{{if .HasInstall}}yes{{else if eq .Plan "free"}}-{{else}}<strong>no</strong>{{end}}</td>
+          <td>
+            <span class="view-{{.Username}}">{{.Status}}</span>
+            <form class="edit-{{.Username}}" method="POST" action="/admin/tenant/{{.Username}}/status" style="display:none">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <select name="status">
+                <option value="active" {{if eq .Status "active"}}selected{{end}}>active</option>
+                <option value="suspended" {{if eq .Status "suspended"}}selected{{end}}>suspended</option>
+              </select>
+              <button type="submit" class="btn btn-sm">Save</button>
+            </form>
+          </td>
+          <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+          <td>
+            <span class="view-{{.Username}}">
+              <button class="btn btn-sm" onclick="toggleEdit('{{.Username}}')">Edit</button>
+            </span>
+            <span class="edit-{{.Username}}" style="display:none">
+              <button class="btn btn-sm" onclick="toggleEdit('{{.Username}}')">Cancel</button>
+              <form method="POST" action="/admin/tenant/{{.Username}}/delete" style="display:inline" onsubmit="return confirm('Delete tenant {{.Username}}? This cannot be undone.')">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="btn btn-sm" style="color:#f85149;">Delete</button>
+              </form>
+            </span>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    <div id="tenant-pager" style="display:flex;align-items:center;justify-content:center;gap:0.75rem;margin-top:0.5rem;font-size:0.8rem;color:var(--text-secondary,#8b949e);">
+      <button id="pg-prev" class="btn btn-sm" onclick="tenantPage(-1)">Prev</button>
+      <span id="pg-info"></span>
+      <button id="pg-next" class="btn btn-sm" onclick="tenantPage(1)">Next</button>
+    </div>
+    <script>
+    (function(){
+      var PAGE_SIZE=25,curPage=1,sortCol=5,sortAsc=true;
+      var table=document.getElementById('tenant-table');
+      var tbody=table.querySelector('tbody');
+      var allRows=Array.from(tbody.querySelectorAll('tr'));
+      var filtered=allRows.slice();
+
+      function applyFilter(){
+        var q=(document.getElementById('tenant-search').value||'').toLowerCase();
+        filtered=allRows.filter(function(r){
+          if(!q)return true;
+          var u=(r.getAttribute('data-username')||'').toLowerCase();
+          var n=(r.getAttribute('data-name')||'').toLowerCase();
+          return u.indexOf(q)!==-1||n.indexOf(q)!==-1;
+        });
+        curPage=1;
+        render();
+      }
+
+      function applySort(){
+        var type=sortCol===5?'num':'str';
+        filtered.sort(function(a,b){
+          var ac=a.children[sortCol],bc=b.children[sortCol];
+          var av=ac?ac.textContent.trim():'',bv=bc?bc.textContent.trim():'';
+          if(type==='num'){av=parseInt(av,10)||0;bv=parseInt(bv,10)||0;}
+          else{av=av.toLowerCase();bv=bv.toLowerCase();}
+          if(av<bv)return sortAsc?-1:1;
+          if(av>bv)return sortAsc?1:-1;
+          return 0;
+        });
+        curPage=1;
+        render();
+      }
+
+      function render(){
+        var total=filtered.length,pages=Math.max(1,Math.ceil(total/PAGE_SIZE));
+        if(curPage>pages)curPage=pages;
+        var start=(curPage-1)*PAGE_SIZE,end=start+PAGE_SIZE;
+        allRows.forEach(function(r){r.style.display='none';});
+        filtered.slice(start,end).forEach(function(r){r.style.display='';});
+        var pager=document.getElementById('tenant-pager');
+        if(total<=PAGE_SIZE){pager.style.display='none';}
+        else{
+          pager.style.display='flex';
+          document.getElementById('pg-info').textContent='Page '+curPage+' of '+pages+' ('+total+' tenants)';
+          document.getElementById('pg-prev').disabled=curPage<=1;
+          document.getElementById('pg-next').disabled=curPage>=pages;
+        }
+        document.querySelectorAll('.sort-arrow').forEach(function(s){s.textContent='';});
+        var active=table.querySelector('th[data-col="'+sortCol+'"] .sort-arrow');
+        if(active)active.textContent=sortAsc?' \u25B2':' \u25BC';
+      }
+
+      document.getElementById('tenant-search').addEventListener('input',applyFilter);
+
+      table.querySelectorAll('th.sortable').forEach(function(th){
+        th.style.cursor='pointer';
+        th.addEventListener('click',function(){
+          var col=parseInt(th.getAttribute('data-col'),10);
+          if(col===sortCol){sortAsc=!sortAsc;}else{sortCol=col;sortAsc=true;}
+          applySort();
+        });
+      });
+
+      window.tenantPage=function(d){curPage+=d;render();};
+
+      render();
+    })();
+    function toggleEdit(u){
+      document.querySelectorAll('.view-'+u).forEach(function(e){e.style.display=e.style.display==='none'?'':'none'});
+      document.querySelectorAll('.edit-'+u).forEach(function(e){e.style.display=e.style.display==='none'?'':'none'});
+    }
+    </script>
+    {{else}}<p>No tenants found.</p>{{end}}
+  </section>
+</div>
+</main>
+{{end}}

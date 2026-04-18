@@ -1,0 +1,40 @@
+{{define "content"}}
+<main class="dashboard-main">
+<div class="settings">
+  <a href="/dashboard" class="back-link">&larr; Dashboard</a>
+  <h1>Admin</h1>
+
+  <nav style="display:flex;gap:16px;margin-bottom:24px;border-bottom:1px solid var(--border-color);padding-bottom:8px">
+    <a href="/admin">Pipeline</a>
+    <a href="/admin/tokens" style="font-weight:bold">Tokens</a>
+    <a href="/admin/tenants">Tenants</a>
+  </nav>
+
+  <section class="settings-section">
+    <h2>Token Pool</h2>
+    {{if .PoolQuotas}}
+    <dl>
+      <dt>Tokens</dt><dd>{{.PoolTotal}} total, {{.PoolActive}} active</dd>
+      <dt>Aggregate Quota</dt><dd>{{.PoolAggregatePct}}% remaining</dd>
+    </dl>
+    <table class="data-table">
+      <thead>
+        <tr><th>Source</th><th>Limit</th><th>Used</th><th>Remaining</th><th>%</th><th>Reset</th></tr>
+      </thead>
+      <tbody>
+        {{range .PoolQuotas}}
+        <tr>
+          {{if .Error}}
+          <td>{{if .Label}}{{.Label}}{{else}}#{{.Index}}{{end}}</td><td colspan="5">{{.Error}}</td>
+          {{else}}
+          <td>{{if .Label}}{{.Label}}{{else}}#{{.Index}}{{end}}</td><td>{{.Limit}}</td><td>{{.Used}}</td><td>{{.Remaining}}</td><td>{{.Percent}}%</td><td>{{.Reset}}</td>
+          {{end}}
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}<p>No token pool configured.</p>{{end}}
+  </section>
+</div>
+</main>
+{{end}}

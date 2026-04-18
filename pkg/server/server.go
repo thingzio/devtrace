@@ -123,7 +123,11 @@ var templateFuncs = template.FuncMap{
 }
 
 func init() {
-	simplePages := []string{"admin.html", "landing.html", "scorecard.html", "tos.html", "settings.html", "stub.html", "help.html", "ratelimit.html", "changelog.html"}
+	simplePages := []string{
+		"admin.html", "admin_tokens.html", "admin_tenants.html",
+		"landing.html", "scorecard.html", "tos.html", "settings.html",
+		"stub.html", "help.html", "ratelimit.html", "changelog.html",
+	}
 	pageTemplates = make(map[string]*template.Template, len(simplePages)+1)
 	for _, p := range simplePages {
 		pageTemplates[p] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
@@ -393,8 +397,10 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 
 	// Admin — session auth + admin user list, returns 404 for non-admins
 	requireAdmin := middleware.RequireAdmin(db)
-	mux.Handle("GET /admin", requireAdmin(adminDashboardHandler(store, pool, opts)))
-	mux.Handle("GET /admin/", requireAdmin(adminDashboardHandler(store, pool, opts)))
+	mux.Handle("GET /admin", requireAdmin(adminDashboardHandler(store, opts)))
+	mux.Handle("GET /admin/", requireAdmin(adminDashboardHandler(store, opts)))
+	mux.Handle("GET /admin/tokens", requireAdmin(adminTokensHandler(pool, opts)))
+	mux.Handle("GET /admin/tenants", requireAdmin(adminTenantsHandler(store, opts)))
 	mux.Handle("POST /admin/tenant/{username}/plan", requireAdmin(middleware.ValidateCSRF(adminUpdatePlanFormHandler(db))))
 	mux.Handle("POST /admin/tenant/{username}/status", requireAdmin(middleware.ValidateCSRF(adminUpdateStatusFormHandler(db))))
 	mux.Handle("POST /admin/tenant/{username}/delete", requireAdmin(middleware.ValidateCSRF(adminDeleteTenantHandler(db))))

@@ -42,7 +42,7 @@ func TestStaleCount(t *testing.T) {
 	t.Logf("stale count (7/30): %d", count)
 }
 
-func TestUpdateReputation(t *testing.T) {
+func TestUpdateReputationInsert(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()
 
@@ -50,25 +50,59 @@ func TestUpdateReputation(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	const user = "stale-test-user"
+	const user = "rep-insert-user"
 	const provider = "github"
 
-	// Create contributor and initial reputation via SyncDeveloperToDevTrace.
 	if err := store.UpsertContributor(ctx, user, provider); err != nil {
 		t.Fatalf("upsert contributor: %v", err)
 	}
 
-	// Insert initial reputation row.
-	db := store.DB()
-	if _, err := db.ExecContext(ctx,
-		`INSERT INTO devtrace_reputation (username, provider, score, grade, model_version, deep)
-		 VALUES ($1, $2, 0.40, 'D', '3.2.0', false)
-		 ON CONFLICT DO NOTHING`,
-		user, provider); err != nil {
-		t.Fatalf("insert initial reputation: %v", err)
+	// No reputation row exists — UpdateReputation should INSERT.
+	if err := store.UpdateReputation(ctx, user, provider, 0.65, "C+", "v0.0.1-test", false, nil); err != nil {
+		t.Fatalf("insert reputation: %v", err)
 	}
 
-	// Update with new signals.
+	db := store.DB()
+	var s float64
+	var g string
+	var deep bool
+	if err := db.QueryRowContext(ctx,
+		`SELECT score, grade, deep FROM devtrace_reputation WHERE username = $1 AND provider = $2`,
+		user, provider).Scan(&s, &g, &deep); err != nil {
+		t.Fatalf("query inserted reputation: %v", err)
+	}
+	if s != 0.65 {
+		t.Errorf("score: got %f, want 0.65", s)
+	}
+	if g != "C+" {
+		t.Errorf("grade: got %q, want C+", g)
+	}
+	if deep {
+		t.Errorf("deep: got true, want false")
+	}
+}
+
+func TestUpdateReputationUpsert(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	const user = "rep-upsert-user"
+	const provider = "github"
+
+	if err := store.UpsertContributor(ctx, user, provider); err != nil {
+		t.Fatalf("upsert contributor: %v", err)
+	}
+
+	// First call: inserts with nil signals.
+	if err := store.UpdateReputation(ctx, user, provider, 0.40, "D", "v1", false, nil); err != nil {
+		t.Fatalf("insert reputation: %v", err)
+	}
+
+	// Second call: updates with signals — should overwrite score but COALESCE keeps nil → null.
 	signals := &score.InputSignals{
 		AgeDays:      365,
 		Commits:      100,
@@ -77,11 +111,11 @@ func TestUpdateReputation(t *testing.T) {
 		Following:    5,
 		PublicRepos:  8,
 	}
-	if err := store.UpdateReputation(ctx, user, provider, 0.72, "B", "v0.0.1-test", signals); err != nil {
+	if err := store.UpdateReputation(ctx, user, provider, 0.72, "B", "v2", true, signals); err != nil {
 		t.Fatalf("update reputation: %v", err)
 	}
 
-	// Verify the update.
+	db := store.DB()
 	var s float64
 	var g string
 	var deep bool
@@ -98,5 +132,44 @@ func TestUpdateReputation(t *testing.T) {
 	}
 	if !deep {
 		t.Errorf("deep: got false, want true")
+	}
+}
+
+func TestUpdateReputationPreservesSignals(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	const user = "rep-preserve-user"
+	const provider = "github"
+
+	if err := store.UpsertContributor(ctx, user, provider); err != nil {
+		t.Fatalf("upsert contributor: %v", err)
+	}
+
+	// Background scorer writes with signals.
+	signals := &score.InputSignals{AgeDays: 100, Commits: 50}
+	if err := store.UpdateReputation(ctx, user, provider, 0.60, "C", "v1", true, signals); err != nil {
+		t.Fatalf("insert with signals: %v", err)
+	}
+
+	// On-demand score writes with nil signals — should preserve existing signals via COALESCE.
+	if err := store.UpdateReputation(ctx, user, provider, 0.70, "B-", "v2", false, nil); err != nil {
+		t.Fatalf("update with nil signals: %v", err)
+	}
+
+	// Verify signals are preserved.
+	cached, err := store.GetCachedSignals(ctx, user, provider)
+	if err != nil {
+		t.Fatalf("get cached signals: %v", err)
+	}
+	if cached == nil {
+		t.Fatal("expected cached signals, got nil")
+	}
+	if cached.AgeDays != 100 {
+		t.Errorf("AgeDays: got %d, want 100", cached.AgeDays)
 	}
 }

@@ -97,15 +97,76 @@ func auditLog(action string, tn *tenant.Tenant, path, remoteAddr, detail string)
 	)
 }
 
-func adminDashboardHandler(store *postgres.Store, pool *ghclient.TokenPool, opts Options) http.HandlerFunc {
+func adminBaseData(r *http.Request, opts Options) (map[string]any, *tenant.Tenant) {
+	tn := middleware.TenantFromContext(r.Context())
+	if tn == nil {
+		return nil, nil
+	}
+
+	data := map[string]any{
+		"Title":     "Admin",
+		"Version":   opts.Version,
+		"Commit":    opts.Commit,
+		"Date":      opts.Date,
+		"NavUser":   tn.Username,
+		"NavAvatar": tn.AvatarURL,
+	}
+
+	if msg := r.URL.Query().Get("msg"); msg != "" {
+		data["FlashMsg"] = msg
+	}
+	if user := r.URL.Query().Get("user"); user != "" {
+		data["FlashUser"] = user
+	}
+
+	return data, tn
+}
+
+func adminDashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tn := middleware.TenantFromContext(r.Context())
+		data, tn := adminBaseData(r, opts)
 		if tn == nil {
 			http.NotFound(w, r)
 			return
 		}
 
 		auditLog("view_dashboard", tn, r.URL.Path, r.RemoteAddr, "")
+
+		if store != nil {
+			loadPipelineMetrics(r.Context(), store, data)
+		}
+
+		renderTemplate(w, "admin.html", data)
+	}
+}
+
+func adminTokensHandler(pool *ghclient.TokenPool, opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data, tn := adminBaseData(r, opts)
+		if tn == nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		auditLog("view_tokens", tn, r.URL.Path, r.RemoteAddr, "")
+
+		if pool != nil {
+			loadPoolQuotas(r.Context(), pool, data)
+		}
+
+		renderTemplate(w, "admin_tokens.html", data)
+	}
+}
+
+func adminTenantsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data, tn := adminBaseData(r, opts)
+		if tn == nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		auditLog("view_tenants", tn, r.URL.Path, r.RemoteAddr, "")
 
 		csrfToken, err := middleware.GenerateCSRFToken()
 		if err != nil {
@@ -114,43 +175,17 @@ func adminDashboardHandler(store *postgres.Store, pool *ghclient.TokenPool, opts
 			return
 		}
 		middleware.SetCSRFCookie(w, csrfToken)
-
-		data := map[string]any{
-			"Title":     "Admin",
-			"Version":   opts.Version,
-			"Commit":    opts.Commit,
-			"Date":      opts.Date,
-			"NavUser":   tn.Username,
-			"NavAvatar": tn.AvatarURL,
-			"CSRFToken": csrfToken,
-		}
-
-		if msg := r.URL.Query().Get("msg"); msg != "" {
-			data["FlashMsg"] = msg
-		}
-		if user := r.URL.Query().Get("user"); user != "" {
-			data["FlashUser"] = user
-		}
+		data["CSRFToken"] = csrfToken
 
 		if store != nil {
-			loadStoreMetrics(r.Context(), store, data)
-		}
-		if pool != nil {
-			loadPoolQuotas(r.Context(), pool, data)
+			loadTenantList(r.Context(), store, data)
 		}
 
-		renderTemplate(w, "admin.html", data)
+		renderTemplate(w, "admin_tenants.html", data)
 	}
 }
 
-func loadStoreMetrics(ctx context.Context, store *postgres.Store, data map[string]any) {
-	tenants, err := tenant.ListTenants(ctx, store.DB())
-	if err != nil {
-		slog.Error("admin: list tenants", "error", err)
-	} else {
-		data["Tenants"] = buildTenantRows(ctx, store.DB(), tenants)
-	}
-
+func loadPipelineMetrics(ctx context.Context, store *postgres.Store, data map[string]any) {
 	if sc, err := store.HourlyScoringCounts(ctx, 12); err == nil {
 		data["ScoringBars"] = hourlyCountBars(sc)
 	}
@@ -180,6 +215,15 @@ func loadStoreMetrics(ctx context.Context, store *postgres.Store, data map[strin
 	if ac, err := store.DailyActivityCounts(ctx, 7); err == nil {
 		data["ActivityBars"] = dailyCountBars(ac)
 	}
+}
+
+func loadTenantList(ctx context.Context, store *postgres.Store, data map[string]any) {
+	tenants, err := tenant.ListTenants(ctx, store.DB())
+	if err != nil {
+		slog.Error("admin: list tenants", "error", err)
+		return
+	}
+	data["Tenants"] = buildTenantRows(ctx, store.DB(), tenants)
 }
 
 func dailyCountBars(dc []postgres.DailyCount) []activityBar {
@@ -260,31 +304,31 @@ func adminUpdatePlanFormHandler(db *sql.DB) http.HandlerFunc {
 		newPlan := r.FormValue("plan")
 
 		if username == "" {
-			http.Redirect(w, r, "/admin?msg=error", http.StatusFound)
+			http.Redirect(w, r, "/admin/tenants?msg=error", http.StatusFound)
 			return
 		}
 
 		_, ok := plan.Get(newPlan)
 		if !ok {
-			http.Redirect(w, r, "/admin?msg=invalid_plan&user="+url.QueryEscape(username), http.StatusFound)
+			http.Redirect(w, r, "/admin/tenants?msg=invalid_plan&user="+url.QueryEscape(username), http.StatusFound)
 			return
 		}
 
 		target, err := tenant.GetTenantByUsername(r.Context(), db, username)
 		if err != nil {
-			http.Redirect(w, r, "/admin?msg=not_found&user="+url.QueryEscape(username), http.StatusFound)
+			http.Redirect(w, r, "/admin/tenants?msg=not_found&user="+url.QueryEscape(username), http.StatusFound)
 			return
 		}
 
 		p, _ := plan.Get(newPlan)
 		if _, err := tenant.UpdateTenantPlan(r.Context(), db, target.ID, newPlan, p.MaxContributors); err != nil {
 			slog.Error("admin: update plan", "username", username, "error", err)
-			http.Redirect(w, r, "/admin?msg=error&user="+url.QueryEscape(username), http.StatusFound)
+			http.Redirect(w, r, "/admin/tenants?msg=error&user="+url.QueryEscape(username), http.StatusFound)
 			return
 		}
 
 		auditLog("update_plan", tn, r.URL.Path, r.RemoteAddr, fmt.Sprintf("user=%s plan=%s", username, newPlan))
-		http.Redirect(w, r, "/admin?msg=plan_updated&user="+url.QueryEscape(username), http.StatusFound)
+		http.Redirect(w, r, "/admin/tenants?msg=plan_updated&user="+url.QueryEscape(username), http.StatusFound)
 	}
 }
 
@@ -297,29 +341,29 @@ func adminUpdateStatusFormHandler(db *sql.DB) http.HandlerFunc {
 		newStatus := r.FormValue("status")
 
 		if username == "" {
-			http.Redirect(w, r, "/admin?msg=error", http.StatusFound)
+			http.Redirect(w, r, "/admin/tenants?msg=error", http.StatusFound)
 			return
 		}
 
 		if newStatus != tenant.StatusActive && newStatus != tenant.StatusSuspended {
-			http.Redirect(w, r, "/admin?msg=invalid_status&user="+url.QueryEscape(username), http.StatusFound)
+			http.Redirect(w, r, "/admin/tenants?msg=invalid_status&user="+url.QueryEscape(username), http.StatusFound)
 			return
 		}
 
 		target, err := tenant.GetTenantByUsername(r.Context(), db, username)
 		if err != nil {
-			http.Redirect(w, r, "/admin?msg=not_found&user="+url.QueryEscape(username), http.StatusFound)
+			http.Redirect(w, r, "/admin/tenants?msg=not_found&user="+url.QueryEscape(username), http.StatusFound)
 			return
 		}
 
 		if _, err := tenant.UpdateTenantStatus(r.Context(), db, target.ID, newStatus); err != nil {
 			slog.Error("admin: update status", "username", username, "error", err)
-			http.Redirect(w, r, "/admin?msg=error&user="+url.QueryEscape(username), http.StatusFound)
+			http.Redirect(w, r, "/admin/tenants?msg=error&user="+url.QueryEscape(username), http.StatusFound)
 			return
 		}
 
 		auditLog("update_status", tn, r.URL.Path, r.RemoteAddr, fmt.Sprintf("user=%s status=%s", username, newStatus))
-		http.Redirect(w, r, "/admin?msg=status_updated&user="+url.QueryEscape(username), http.StatusFound)
+		http.Redirect(w, r, "/admin/tenants?msg=status_updated&user="+url.QueryEscape(username), http.StatusFound)
 	}
 }
 
@@ -330,23 +374,23 @@ func adminDeleteTenantHandler(db *sql.DB) http.HandlerFunc {
 
 		username := r.PathValue("username")
 		if username == "" {
-			http.Redirect(w, r, "/admin?msg=error", http.StatusFound)
+			http.Redirect(w, r, "/admin/tenants?msg=error", http.StatusFound)
 			return
 		}
 
 		target, err := tenant.GetTenantByUsername(r.Context(), db, username)
 		if err != nil {
-			http.Redirect(w, r, "/admin?msg=not_found&user="+url.QueryEscape(username), http.StatusFound)
+			http.Redirect(w, r, "/admin/tenants?msg=not_found&user="+url.QueryEscape(username), http.StatusFound)
 			return
 		}
 
 		if err := tenant.DeleteTenant(r.Context(), db, target.ID); err != nil {
 			slog.Error("admin: delete tenant", "username", username, "error", err)
-			http.Redirect(w, r, "/admin?msg=error&user="+url.QueryEscape(username), http.StatusFound)
+			http.Redirect(w, r, "/admin/tenants?msg=error&user="+url.QueryEscape(username), http.StatusFound)
 			return
 		}
 
 		auditLog("delete_tenant", tn, r.URL.Path, r.RemoteAddr, fmt.Sprintf("user=%s id=%s", username, target.ID))
-		http.Redirect(w, r, "/admin?msg=tenant_deleted&user="+url.QueryEscape(username), http.StatusFound)
+		http.Redirect(w, r, "/admin/tenants?msg=tenant_deleted&user="+url.QueryEscape(username), http.StatusFound)
 	}
 }

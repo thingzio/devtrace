@@ -81,7 +81,7 @@ func (m *mockScorerStore) SaveScoreHistory(_ context.Context, username, _ string
 	return m.saveHistoryErr
 }
 
-func (m *mockScorerStore) UpdateReputation(_ context.Context, username, _ string, _ float64, _, _ string, _ *score.InputSignals) error {
+func (m *mockScorerStore) UpdateReputation(_ context.Context, username, _ string, _ float64, _, _ string, _ bool, _ *score.InputSignals) error {
 	m.mu.Lock()
 	m.reputations = append(m.reputations, username)
 	m.mu.Unlock()

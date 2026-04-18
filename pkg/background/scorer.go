@@ -65,7 +65,7 @@ type scorerStore interface {
 	GetCachedSignals(ctx context.Context, username, provider string) (*score.InputSignals, error)
 	UpsertContributor(ctx context.Context, username, provider string) error
 	SaveScoreHistory(ctx context.Context, username, provider string, value float64, grade string, deep bool) error
-	UpdateReputation(ctx context.Context, username, provider string, value float64, grade, version string, signals *score.InputSignals) error
+	UpdateReputation(ctx context.Context, username, provider string, value float64, grade, version string, deep bool, signals *score.InputSignals) error
 	QueueDepth(ctx context.Context) (int, error)
 }
 
@@ -354,7 +354,7 @@ func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client
 		slog.Warn("save history", "username", username, "error", err)
 	}
 
-	return store.UpdateReputation(ctx, username, provider, value, grade, version, signals)
+	return store.UpdateReputation(ctx, username, provider, value, grade, version, true, signals)
 }
 
 func jitter() time.Duration {

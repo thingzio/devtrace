@@ -13,8 +13,7 @@ import (
 )
 
 func TestAdminDashboardHandler_NoTenant(t *testing.T) {
-	pool := ghclient.NewTokenPool("tok1")
-	handler := adminDashboardHandler(nil, pool, Options{Version: "test"})
+	handler := adminDashboardHandler(nil, Options{Version: "test"})
 
 	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin", nil)
 	w := httptest.NewRecorder()
@@ -27,11 +26,10 @@ func TestAdminDashboardHandler_NoTenant(t *testing.T) {
 
 func TestAdminDashboardHandler_WithTenant(t *testing.T) {
 	t.Setenv("DEVTRACE_ADMIN_USERS", "admin-user")
-	pool := ghclient.NewTokenPool("tok1", "tok2")
 	tn := &tenant.Tenant{ID: "t-1", Username: "admin-user", Status: "active"}
 	ctx := middleware.WithTenantContext(context.Background(), tn)
 
-	handler := adminDashboardHandler(nil, pool, Options{Version: "test"})
+	handler := adminDashboardHandler(nil, Options{Version: "test"})
 
 	r := httptest.NewRequestWithContext(ctx, http.MethodGet, "/admin", nil)
 	w := httptest.NewRecorder()
@@ -41,6 +39,31 @@ func TestAdminDashboardHandler_WithTenant(t *testing.T) {
 	// and should attempt to render (status 200 or 500, not 404)
 	if w.Code == http.StatusNotFound {
 		t.Error("authenticated admin should not get 404")
+	}
+}
+
+func TestAdminTokensHandler_NoTenant(t *testing.T) {
+	pool := ghclient.NewTokenPool("tok1")
+	handler := adminTokensHandler(pool, Options{Version: "test"})
+
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/tokens", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestAdminTenantsHandler_NoTenant(t *testing.T) {
+	handler := adminTenantsHandler(nil, Options{Version: "test"})
+
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/tenants", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
 	}
 }
 

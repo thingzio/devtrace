@@ -77,15 +77,21 @@ func (s *Store) GetCachedSignals(ctx context.Context, username, provider string)
 	return &sig, nil
 }
 
-// UpdateReputation updates a contributor's reputation after rescoring.
-func (s *Store) UpdateReputation(ctx context.Context, username, provider string, value float64, grade, version string, signals *score.InputSignals) error {
+// UpdateReputation upserts a contributor's reputation score and cached signals.
+func (s *Store) UpdateReputation(ctx context.Context, username, provider string, value float64, grade, version string, deep bool, signals *score.InputSignals) error {
 	signalsJSON, err := json.Marshal(signals)
 	if err != nil {
 		return fmt.Errorf("marshal signals: %w", err)
 	}
 	_, err = s.db.ExecContext(ctx,
-		`UPDATE devtrace_reputation SET score = $1, grade = $2, model_version = $3, deep = true, signals = $4::jsonb, scored_at = NOW()
-		 WHERE username = $5 AND provider = $6`,
-		value, grade, version, signalsJSON, username, provider)
-	return err
+		`INSERT INTO devtrace_reputation (username, provider, score, grade, model_version, deep, signals, scored_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())
+		 ON CONFLICT (username, provider) DO UPDATE SET
+			score = EXCLUDED.score, grade = EXCLUDED.grade, model_version = EXCLUDED.model_version,
+			deep = EXCLUDED.deep, signals = COALESCE(EXCLUDED.signals, devtrace_reputation.signals), scored_at = NOW()`,
+		username, provider, value, grade, version, deep, signalsJSON)
+	if err != nil {
+		return fmt.Errorf("upsert reputation: %w", err)
+	}
+	return nil
 }
