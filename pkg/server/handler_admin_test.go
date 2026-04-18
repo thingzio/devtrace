@@ -184,12 +184,12 @@ func TestLoadNoInstallTenants_NilDB(t *testing.T) {
 
 func TestNoInstallTenantStruct(t *testing.T) {
 	t.Parallel()
-	nt := noInstallTenant{Username: "alice", Plan: "starter"}
+	nt := noInstallTenant{Username: "alice", Plan: "test-plan"}
 	if nt.Username != "alice" {
 		t.Errorf("Username = %q, want %q", nt.Username, "alice")
 	}
-	if nt.Plan != "starter" {
-		t.Errorf("Plan = %q, want %q", nt.Plan, "starter")
+	if nt.Plan != "test-plan" {
+		t.Errorf("Plan = %q, want %q", nt.Plan, "test-plan")
 	}
 }
 
