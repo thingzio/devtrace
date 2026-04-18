@@ -32,13 +32,18 @@ jobs:
 
       - name: Deploy to Cloud Run
         shell: bash
+        env:
+          TAG: ${{ inputs.image_tag }}
+          REGION: ${{ vars.REGION }}
+          PROJECT_ID: ${{ vars.PROJECT_ID }}
+          AR_REPO: ${{ vars.AR_REPO }}
+          SERVICE_NAME: ${{ vars.SERVICE_NAME }}
         run: |
           set -euo pipefail
-          TAG="${{ inputs.image_tag }}"
-          AR="${{ vars.REGION }}-docker.pkg.dev/${{ vars.PROJECT_ID }}/${{ vars.AR_REPO }}"
+          AR="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}"
           echo "Deploying ${TAG} via ${AR}..."
-          gcloud run services update ${{ vars.SERVICE_NAME }} \
-            --region=${{ vars.REGION }} \
+          gcloud run services update "${SERVICE_NAME}" \
+            --region="${REGION}" \
             --image="${AR}/devtrace-site:${TAG}" \
             --min-instances=1 \
             --max-instances=1

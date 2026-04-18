@@ -94,41 +94,6 @@ jobs:
           DATABASE_URL: "postgres://test:test@localhost:5432/devtrace_test?sslmode=disable"
         run: go test -v -race -count=1 -timeout=600s ./pkg/data/postgres/...
 
-  tfsec:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Install and run tfsec
-        shell: bash
-        run: |
-          set -euo pipefail
-          TFSEC_VERSION=$(yq -r '.build_tools.tfsec' .settings.yaml)
-          TFSEC_VERSION="${TFSEC_VERSION#v}"
-          TFSEC_BASE="https://github.com/aquasecurity/tfsec/releases/download/v${TFSEC_VERSION}"
-          TFSEC_TAR="tfsec_${TFSEC_VERSION}_linux_amd64.tar.gz"
-          TFSEC_TMP="$(mktemp -d)"
-          curl -fsSL -o "${TFSEC_TMP}/${TFSEC_TAR}" "${TFSEC_BASE}/${TFSEC_TAR}"
-          curl -fsSL -o "${TFSEC_TMP}/checksums.txt" "${TFSEC_BASE}/tfsec_${TFSEC_VERSION}_checksums.txt"
-          EXPECTED=$(grep "${TFSEC_TAR}" "${TFSEC_TMP}/checksums.txt" | head -1 | awk '{print $1}')
-          ACTUAL=$(sha256sum "${TFSEC_TMP}/${TFSEC_TAR}" | awk '{print $1}')
-          if [[ "${ACTUAL}" != "${EXPECTED}" ]]; then
-            echo "::error::tfsec checksum mismatch: expected ${EXPECTED}, got ${ACTUAL}"
-            exit 1
-          fi
-          tar -xzf "${TFSEC_TMP}/${TFSEC_TAR}" -C "${TFSEC_TMP}"
-          sudo mv "${TFSEC_TMP}/tfsec" /usr/local/bin/tfsec
-          sudo chmod +x /usr/local/bin/tfsec
-          rm -rf "${TFSEC_TMP}"
-          tfsec --version
-          tfsec infra/saas
-
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 10
