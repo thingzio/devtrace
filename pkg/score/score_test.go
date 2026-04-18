@@ -162,6 +162,38 @@ func TestBehavioralWithBehavior(t *testing.T) {
 	}
 }
 
+func TestFollowerScoreZeroFollowing(t *testing.T) {
+	// A user with many followers but following nobody should still get
+	// follower credit (saturated ratio), not zero.
+	s := InputSignals{
+		AgeDays:     365,
+		Followers:   133,
+		Following:   0,
+		PublicRepos: 10,
+	}
+
+	withFollowers := Compute(s, false, nil)
+
+	s.Followers = 0
+	withoutFollowers := Compute(s, false, nil)
+
+	if withFollowers <= withoutFollowers {
+		t.Errorf("followers with zero following should increase score: with=%f, without=%f",
+			withFollowers, withoutFollowers)
+	}
+
+	// Verify via categories too.
+	s.Followers = 133
+	cats := Categories(s, false, nil)
+	s.Followers = 0
+	catsNoFollowers := Categories(s, false, nil)
+
+	if cats["community"] <= catsNoFollowers["community"] {
+		t.Errorf("community category should increase with followers: with=%f, without=%f",
+			cats["community"], catsNoFollowers["community"])
+	}
+}
+
 func TestBehavioralNilBehaviorFallback(t *testing.T) {
 	s := InputSignals{
 		AgeDays:           365,

@@ -138,6 +138,9 @@ func Compute(s InputSignals, hasRepo bool, beh *model.Behavior) float64 {
 	if s.Following > 0 {
 		ratio := float64(s.Followers) / float64(s.Following)
 		rep += logCurve(ratio, followerRatioCeil) * followerWeight
+	} else if s.Followers > 0 {
+		// Followers with zero following implies an infinite ratio — saturate.
+		rep += followerWeight
 	}
 
 	rep += logCurve(float64(s.PublicRepos), repoCountCeil) * repoCountWeight
@@ -215,6 +218,8 @@ func Categories(s InputSignals, hasRepo bool, beh *model.Behavior) map[string]fl
 	if s.Following > 0 {
 		ratio := float64(s.Followers) / float64(s.Following)
 		community += logCurve(ratio, followerRatioCeil) * followerWeight
+	} else if s.Followers > 0 {
+		community += followerWeight
 	}
 	community += logCurve(float64(s.PublicRepos), repoCountCeil) * repoCountWeight
 	cats["community"] = toFixed(community*scale, 4)
