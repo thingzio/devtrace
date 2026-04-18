@@ -174,6 +174,41 @@ func pluck(plans []Plan, fn func(Plan) string) []string {
 	return out
 }
 
+// UpsellInfo describes a plan upgrade prompt shown on the scorecard.
+type UpsellInfo struct {
+	Message string // what the user gains by upgrading
+	CTA     string // button label
+	Link    string // button href
+}
+
+// Upsell returns upgrade messaging for the given plan tier.
+// Returns nil when no upsell applies (pro or highest tier).
+func Upsell(currentPlan string) *UpsellInfo {
+	switch currentPlan {
+	case "":
+		return &UpsellInfo{
+			Message: "Sign in to see full signal breakdown, category scores, and risk summaries.",
+			CTA:     "Sign in with GitHub",
+			Link:    "/auth/github",
+		}
+	case "free":
+		return &UpsellInfo{
+			Message: "Upgrade to Starter for AI-powered risk summaries and PR authenticity analysis.",
+			CTA:     "Upgrade to Starter",
+			Link:    "/settings",
+		}
+	case "starter":
+		return &UpsellInfo{
+			Message: "Upgrade to Pro for behavioral heuristics, compliance reports, " +
+				"and 365-day score history.",
+			CTA:  "Upgrade to Pro",
+			Link: "/settings",
+		}
+	default:
+		return nil
+	}
+}
+
 // Get returns the plan with the given name.
 func Get(name string) (Plan, bool) {
 	p, ok := plans[name]

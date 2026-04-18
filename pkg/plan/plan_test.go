@@ -72,6 +72,48 @@ func TestDisplayPlansOrder(t *testing.T) {
 	}
 }
 
+func TestUpsell(t *testing.T) {
+	cases := []struct {
+		plan    string
+		wantNil bool
+		wantCTA string
+		wantURL string
+	}{
+		{"", false, "Sign in with GitHub", "/auth/github"},
+		{"free", false, "Upgrade to Starter", "/settings"},
+		{"starter", false, "Upgrade to Pro", "/settings"},
+		{"pro", true, "", ""},
+		{"unknown", true, "", ""},
+	}
+	for _, tc := range cases {
+		name := tc.plan
+		if name == "" {
+			name = "unauthenticated"
+		}
+		t.Run(name, func(t *testing.T) {
+			u := Upsell(tc.plan)
+			if tc.wantNil {
+				if u != nil {
+					t.Fatalf("Upsell(%q) = %+v, want nil", tc.plan, u)
+				}
+				return
+			}
+			if u == nil {
+				t.Fatalf("Upsell(%q) = nil, want non-nil", tc.plan)
+			}
+			if u.CTA != tc.wantCTA {
+				t.Errorf("CTA = %q, want %q", u.CTA, tc.wantCTA)
+			}
+			if u.Link != tc.wantURL {
+				t.Errorf("Link = %q, want %q", u.Link, tc.wantURL)
+			}
+			if u.Message == "" {
+				t.Error("Message is empty")
+			}
+		})
+	}
+}
+
 func TestDisplayFeatures(t *testing.T) {
 	features := DisplayFeatures()
 	dash := "\u2014"

@@ -2090,6 +2090,22 @@ a.link {
   margin: 2rem auto;
   padding: 0 1rem;
 }
+
+.scorecard-upsell {
+  text-align: center;
+  margin: 2rem 0 0;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-color);
+}
+
+.scorecard-upsell p {
+  margin: 0 0 0.75rem;
+  font-size: 0.9em;
+  color: var(--gray);
+}
+
 .score-header {
   display: flex;
   align-items: center;

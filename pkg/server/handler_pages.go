@@ -43,13 +43,13 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 		// Score card page always shows full data — it's the marketing showcase.
 		// Use "free" as minimum to get signals/categories/risk summary.
 		// The API endpoint (/api/v1/score) still gates by actual plan.
-		plan := "free"
+		scorePlan := "free"
 		tn := middleware.TenantFromContext(r.Context())
 		if tn != nil {
-			plan = tn.Plan
+			scorePlan = tn.Plan
 		}
 
-		resp, err := svc.Score(r.Context(), username, repo, plan, nil)
+		resp, err := svc.Score(r.Context(), username, repo, scorePlan, nil)
 		if err != nil {
 			slog.Error("scoring for scorecard", "username", username, "error", err)
 			errData := map[string]any{
@@ -89,8 +89,11 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 			}
 		}
 
-		// Show sign-up CTA for unauthenticated visitors
-		showSignUp := tn == nil
+		// Determine current plan for upsell messaging.
+		planName := ""
+		if tn != nil {
+			planName = tn.Plan
+		}
 
 		data := map[string]any{
 			"Title":        username,
@@ -109,7 +112,7 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 			"RiskSummary":  resp.RiskSummary,
 			"RepoContext":  resp.RepoContext,
 			"AISensing":    resp.AISensing,
-			"ShowSignUp":   showSignUp,
+			"Upsell":       plan.Upsell(planName),
 		}
 		if tn != nil {
 			data["NavUser"] = tn.Username

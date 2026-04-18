@@ -174,12 +174,10 @@
     </section>
   </div>
 
-  {{if .ShowSignUp}}
-  <hr style="border:none;border-top:1px solid var(--border-color,#e1e4e8);margin:2rem 0;">
-  <div style="text-align:center;">
-    <p style="margin-bottom:1rem;">Sign up to track contributors, manage API tokens, and integrate with CI/CD.</p>
-    <a href="/auth/github" class="btn btn-primary">Sign in with GitHub</a>
-    <p class="muted" style="margin-top:0.5rem;font-size:0.85rem;">Takes 1 minute: GitHub login + a one-click app install.</p>
+  {{if .Upsell}}
+  <div class="scorecard-upsell">
+    <p>{{.Upsell.Message}}</p>
+    <a href="{{.Upsell.Link}}" class="btn btn-primary">{{.Upsell.CTA}}</a>
   </div>
   {{end}}
 </div>
