@@ -202,7 +202,10 @@
         new Chart(canvas, {
           type: 'line',
           data: {
-            labels: data.map(function(d) { return d.scored_at.substring(0, 10); }),
+            labels: data.map(function(d) {
+              var dt = new Date(d.scored_at);
+              return (dt.getMonth() + 1) + '/' + dt.getDate();
+            }),
             datasets: [{
               label: 'Score',
               data: data.map(function(d) { return d.score; }),
@@ -224,13 +227,15 @@
       });
   }
 
-  // Format <time datetime="..."> to local time.
+  // Format <time datetime="..."> to user-local time.
   function initLocalTime() {
     document.querySelectorAll('time[datetime]').forEach(function(el) {
       var d = new Date(el.getAttribute('datetime'));
       if (!isNaN(d)) {
-        var pad = function(n) { return n < 10 ? '0' + n : n; };
-        el.textContent = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        el.textContent = d.toLocaleString(undefined, {
+          month: 'numeric', day: 'numeric',
+          hour: '2-digit', minute: '2-digit',
+        });
       }
     });
   }

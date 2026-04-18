@@ -1,7 +1,7 @@
 {{define "content"}}
 <div class="scorecard">
   <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">
-    <a href="javascript:history.back()" class="back-link" style="margin:0;">&larr; Back</a>
+    <a href="/dashboard" class="back-link" style="margin:0;">&larr; Dashboard</a>
     <form id="try-search" class="search-form" style="margin:0;flex:1;">
       <input id="try-username" type="search" role="searchbox" placeholder="username or username in org/repo" autocomplete="off" name="q" data-1p-ignore data-lpignore="true" data-form-type="other">
       <button type="submit">Score</button>
@@ -130,7 +130,7 @@
 
   {{if .Signals}}
   <section class="signals">
-    <h2>Signals</h2>
+    <h2>Input Signals</h2>
     <table class="signal-table">
       <tr><th>Signal</th><th>Value</th></tr>
       <tr><td>Account age</td><td>{{.Signals.AccountAgeDays}} days</td></tr>

@@ -34,8 +34,8 @@
         <circle class="quota-ring-fill" cx="18" cy="18" r="15.9" fill="none" stroke-width="3"
           stroke-dasharray="{{.quota_pct}} {{sub 100 .quota_pct}}" stroke-dashoffset="25"/>
       </svg>
-      <span class="quota-gauge-pct">{{.quota_pct}}%</span>
-      <span class="quota-gauge-label">quota used</span>
+      <span class="quota-gauge-pct">{{.quota_used}}/{{.quota_limit}}</span>
+      <span class="quota-gauge-label">scored</span>
     </div>
   </div>
 
@@ -49,7 +49,7 @@
           <th>Contributor</th>
           <th>Repo</th>
           <th>Source</th>
-          <th>Deep</th>
+          <th>Scope</th>
           <th>Scored</th>
         </tr>
       </thead>
@@ -60,7 +60,7 @@
           <td>{{.Username}}</td>
           <td>{{if .Repo}}{{.Repo}}{{else}}&mdash;{{end}}</td>
           <td>{{if eq .Source "ui"}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;opacity:0.5;" title="Dashboard"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>{{else}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;opacity:0.5;" title="API"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>{{end}}</td>
-          <td>{{if .Deep}}&#10003;{{else}}&#10007;{{end}}</td>
+          <td>{{.Scope}}</td>
           <td><time datetime="{{.ScoredAt.Format "2006-01-02T15:04:05Z"}}">{{.ScoredAt.Format "2006-01-02 15:04"}}</time></td>
         </tr>
         {{end}}

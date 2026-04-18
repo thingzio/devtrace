@@ -49,6 +49,20 @@ type RecentScored struct {
 	ScoredAt time.Time
 }
 
+// Scope returns a human-readable label for the scoring scope.
+func (r RecentScored) Scope() string {
+	switch {
+	case r.Repo != "" && r.Deep:
+		return "Repo+Deep"
+	case r.Repo != "":
+		return "Repo"
+	case r.Deep:
+		return "Deep"
+	default:
+		return "Global"
+	}
+}
+
 // GetRecentScored returns the most recently scored contributors for a tenant.
 func GetRecentScored(ctx context.Context, db *sql.DB, tenantID string, limit int) ([]RecentScored, error) {
 	rows, err := db.QueryContext(ctx,
