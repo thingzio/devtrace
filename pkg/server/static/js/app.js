@@ -438,6 +438,33 @@
     });
   }
 
+  // Plans table: feature description tooltips.
+  function initFeatureTooltips() {
+    var tooltip = document.getElementById('feature-tooltip');
+    if (!tooltip) return;
+    var textEl = document.getElementById('feature-tooltip-text');
+    var closeBtn = tooltip.querySelector('.feature-tooltip-close');
+
+    document.querySelectorAll('.feature-info').forEach(function(link) {
+      link.addEventListener('click', function(e) {
+        e.preventDefault();
+        var desc = this.getAttribute('data-desc');
+        if (!desc) return;
+        textEl.textContent = desc;
+        // Position tooltip after the clicked row's parent table wrapper.
+        var wrap = this.closest('.plans-table-wrap');
+        if (wrap) wrap.parentNode.insertBefore(tooltip, wrap.nextSibling);
+        tooltip.style.display = 'flex';
+      });
+    });
+
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function() {
+        tooltip.style.display = 'none';
+      });
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     initCSRF();
     initNavDropdown();
@@ -449,6 +476,7 @@
     initAdminTenants();
     initToggleEdit();
     initConfirmDelete();
+    initFeatureTooltips();
     initSettingsActions();
     applyTheme(getTheme());
   });

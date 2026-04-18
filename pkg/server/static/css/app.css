@@ -1792,6 +1792,49 @@ a.link {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
+.plans-table .coming-soon {
+  opacity: 0.4;
+  font-style: italic;
+}
+
+.plans-table .feature-info {
+  cursor: pointer;
+  border-bottom: 1px dashed var(--gray);
+}
+
+.feature-tooltip {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin-top: -4px;
+}
+
+.feature-tooltip-content {
+  position: relative;
+  max-width: 480px;
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--white);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  font-size: 0.85em;
+  line-height: 1.5;
+  color: var(--text-color);
+}
+
+.feature-tooltip-close {
+  float: right;
+  cursor: pointer;
+  font-size: 1.2em;
+  color: var(--gray);
+  margin: -4px -4px 0 8px;
+  line-height: 1;
+}
+
+.feature-tooltip-close:hover {
+  color: var(--dark-color);
+}
 
 @media (max-width: 600px) {
   .landing { padding: 30px 15px; }

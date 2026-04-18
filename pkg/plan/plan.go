@@ -15,7 +15,6 @@ type Plan struct {
 	MaxContributors   int    // per billing period, 0 = unlimited
 	RateLimitPerHour  int
 	DeepScoring       bool
-	LicenseAnalysis   bool
 	AISensing         bool
 	BatchAPI          bool
 	Webhooks          bool
@@ -24,7 +23,6 @@ type Plan struct {
 	ComplianceReports bool
 	RiskSummary       string // display value for plans table
 	AISensingLabel    string
-	LicenseLabel      string
 	APIKeysLabel      string
 	AlertsLabel       string
 	ComplianceLabel   string
@@ -34,6 +32,7 @@ type Plan struct {
 type Feature struct {
 	ID     string   // HTML anchor id
 	Label  string   // first column
+	Desc   string   // plain-English tooltip shown on click
 	Values []string // one per plan, in display order
 	Span   bool     // if true, all values are the same — use colspan
 }
@@ -50,7 +49,6 @@ var plans = map[string]Plan{
 		MaxAPIKeys:       1,
 		RiskSummary:      "Metrics-based",
 		AISensingLabel:   "Metadata",
-		LicenseLabel:     valDash,
 		APIKeysLabel:     "1",
 		AlertsLabel:      valDash,
 		ComplianceLabel:  valDash,
@@ -66,7 +64,6 @@ var plans = map[string]Plan{
 		MaxAPIKeys:       1,
 		RiskSummary:      "AI-powered",
 		AISensingLabel:   "Metadata + PR authenticity",
-		LicenseLabel:     valDash,
 		APIKeysLabel:     "1",
 		AlertsLabel:      valSoon,
 		ComplianceLabel:  valDash,
@@ -78,7 +75,6 @@ var plans = map[string]Plan{
 		MaxContributors:   2000,
 		RateLimitPerHour:  1000,
 		DeepScoring:       true,
-		LicenseAnalysis:   true,
 		AISensing:         true,
 		BatchAPI:          true,
 		Webhooks:          true,
@@ -87,7 +83,6 @@ var plans = map[string]Plan{
 		MaxAPIKeys:        10,
 		RiskSummary:       "AI-powered",
 		AISensingLabel:    "Full Context",
-		LicenseLabel:      "Pro only",
 		APIKeysLabel:      "10",
 		AlertsLabel:       valSoon,
 		ComplianceLabel:   "SSDF + EU CRA",
@@ -107,31 +102,67 @@ func DisplayPlans() []Plan {
 func DisplayFeatures() []Feature {
 	dp := DisplayPlans()
 	return []Feature{
-		{ID: "feature-scoring", Label: "Contributor Scoring", Values: []string{"Score + Grade + Signals (available on all plans)"}, Span: true},
-		{ID: "feature-risk", Label: "Risk Summary", Values: pluck(dp, func(p Plan) string { return p.RiskSummary })},
-		{ID: "feature-ai-sensing", Label: "AI Sensing", Values: pluck(dp, func(p Plan) string { return p.AISensingLabel })},
-		{ID: "feature-license", Label: "License Analysis", Values: pluck(dp, func(p Plan) string { return p.LicenseLabel })},
-		{ID: "feature-history", Label: "Score History", Values: pluck(dp, func(p Plan) string {
-			return fmt.Sprintf("%d days", p.HistoryDays)
-		})},
-		{ID: "feature-rate-limit", Label: "Rate Limit", Values: pluck(dp, func(p Plan) string {
-			return fmt.Sprintf("%d req/hour", p.RateLimitPerHour)
-		})},
-		{ID: "feature-api-keys", Label: "API Keys", Values: pluck(dp, func(p Plan) string { return p.APIKeysLabel })},
-		{ID: "feature-batch", Label: "Batch API", Values: pluck(dp, func(p Plan) string {
-			if p.BatchAPI {
-				return valSoon
-			}
-			return valDash
-		})},
-		{ID: "feature-webhooks", Label: "Webhooks", Values: pluck(dp, func(p Plan) string {
-			if p.Webhooks {
-				return valSoon
-			}
-			return valDash
-		})},
-		{ID: "feature-alerts", Label: "Risk Alerts", Values: pluck(dp, func(p Plan) string { return p.AlertsLabel })},
-		{ID: "feature-compliance", Label: "Compliance Reports", Values: pluck(dp, func(p Plan) string { return p.ComplianceLabel })},
+		{
+			ID: "feature-scoring", Label: "Contributor Scoring",
+			Desc:   "Analyze any GitHub contributor across 22 signals in 5 categories. Every plan returns a numeric score, letter grade, and full signal breakdown.",
+			Values: []string{"Score + Grade + Signals (available on all plans)"}, Span: true,
+		},
+		{
+			ID: "feature-risk", Label: "Risk Summary",
+			Desc:   "A short narrative explaining the contributor's reputation, highlighting strengths and areas of concern. Free plans use metrics-based summaries; paid plans use AI-powered analysis.",
+			Values: pluck(dp, func(p Plan) string { return p.RiskSummary }),
+		},
+		{
+			ID: "feature-ai-sensing", Label: "AI Sensing",
+			Desc: "Detects AI-generated contributions by analyzing commit co-authorship, bot-associated PRs, and tool signatures. " +
+				"Higher tiers add PR authenticity classification and behavioral heuristics.",
+			Values: pluck(dp, func(p Plan) string { return p.AISensingLabel }),
+		},
+		{
+			ID: "feature-history", Label: "Score History",
+			Desc:   "Track how a contributor's score changes over time. The history window determines how far back trend data is retained for each scored contributor.",
+			Values: pluck(dp, func(p Plan) string { return fmt.Sprintf("%d days", p.HistoryDays) }),
+		},
+		{
+			ID: "feature-rate-limit", Label: "Rate Limit",
+			Desc:   "Maximum number of API requests allowed per hour. Applies to both the scoring API and the score history endpoint. Exceeding the limit returns HTTP 429 with a Retry-After header.",
+			Values: pluck(dp, func(p Plan) string { return fmt.Sprintf("%d req/hour", p.RateLimitPerHour) }),
+		},
+		{
+			ID: "feature-api-keys", Label: "API Keys",
+			Desc:   "Bearer tokens for programmatic API access. Create and revoke tokens in Settings. Each token counts against the same plan quota.",
+			Values: pluck(dp, func(p Plan) string { return p.APIKeysLabel }),
+		},
+		{
+			ID: "feature-batch", Label: "Batch API",
+			Desc: "Score multiple contributors in a single API call. Useful for CI/CD pipelines and bulk audits of project contributors.",
+			Values: pluck(dp, func(p Plan) string {
+				if p.BatchAPI {
+					return valSoon
+				}
+				return valDash
+			}),
+		},
+		{
+			ID: "feature-webhooks", Label: "Webhooks",
+			Desc: "Receive real-time HTTP callbacks when a contributor's score changes significantly. Configure endpoints in Settings to integrate with your existing tooling.",
+			Values: pluck(dp, func(p Plan) string {
+				if p.Webhooks {
+					return valSoon
+				}
+				return valDash
+			}),
+		},
+		{
+			ID: "feature-alerts", Label: "Risk Alerts",
+			Desc:   "Get notified when a contributor's score drops below a threshold or when new risk flags appear. Alerts can be delivered via webhook or email.",
+			Values: pluck(dp, func(p Plan) string { return p.AlertsLabel }),
+		},
+		{
+			ID: "feature-compliance", Label: "Compliance Reports",
+			Desc:   "Generate reports aligned with NIST SSDF (SP 800-218) and EU Cyber Resilience Act requirements. Documents contributor provenance and trust signals for audit and compliance workflows.",
+			Values: pluck(dp, func(p Plan) string { return p.ComplianceLabel }),
+		},
 	}
 }
 

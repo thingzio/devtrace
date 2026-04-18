@@ -8,24 +8,30 @@
         <tr>
           <th></th>
           {{range .Plans}}
-          <th id="plan-{{.Name}}"><a href="#plan-{{.Name}}">{{.DisplayName}}</a>{{if .PriceLabel}} <span style="font-size:0.75em;font-weight:normal;color:var(--gray);">({{.PriceLabel}})</span>{{end}}</th>
+          <th id="plan-{{.Name}}">{{.DisplayName}}{{if .PriceLabel}} <span style="font-size:0.75em;font-weight:normal;color:var(--gray);">({{.PriceLabel}})</span>{{end}}</th>
           {{end}}
         </tr>
       </thead>
       <tbody>
         {{range .Features}}
         <tr id="{{.ID}}">
-          <td><a href="#{{.ID}}">{{.Label}}</a></td>
+          <td>{{if .Desc}}<a href="#" class="feature-info" data-desc="{{.Desc}}">{{.Label}}</a>{{else}}{{.Label}}{{end}}</td>
           {{if .Span}}
           <td colspan="{{len $.Plans}}">{{index .Values 0}}</td>
           {{else}}
-          {{range .Values}}<td>{{.}}</td>{{end}}
+          {{range .Values}}<td{{if eq . "Coming soon"}} class="coming-soon"{{end}}>{{.}}</td>{{end}}
           {{end}}
         </tr>
         {{end}}
       </tbody>
     </table>
     <p style="margin-top:8px;font-size:0.8em;color:var(--gray);text-align:right;">* All plans are free during the beta preview.</p>
+  </div>
+  <div id="feature-tooltip" class="feature-tooltip" style="display:none;">
+    <div class="feature-tooltip-content">
+      <span class="feature-tooltip-close">&times;</span>
+      <p id="feature-tooltip-text"></p>
+    </div>
   </div>
 </div>
 {{end}}

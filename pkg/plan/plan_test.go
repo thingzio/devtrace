@@ -85,7 +85,6 @@ func TestDisplayFeatures(t *testing.T) {
 	}{
 		{"feature-scoring", "Contributor Scoring", []string{"Score + Grade + Signals (available on all plans)"}, true},
 		{"feature-risk", "Risk Summary", []string{"Metrics-based", "AI-powered", "AI-powered"}, false},
-		{"feature-license", "License Analysis", []string{dash, dash, "Pro only"}, false},
 		{"feature-history", "Score History", []string{"30 days", "90 days", "365 days"}, false},
 		{"feature-rate-limit", "Rate Limit", []string{"60 req/hour", "300 req/hour", "1000 req/hour"}, false},
 		{"feature-api-keys", "API Keys", []string{"1", "1", "10"}, false},
@@ -98,6 +97,9 @@ func TestDisplayFeatures(t *testing.T) {
 	byID := make(map[string]Feature, len(features))
 	for _, f := range features {
 		byID[f.ID] = f
+		if f.Desc == "" {
+			t.Errorf("feature %q has empty Desc", f.ID)
+		}
 	}
 
 	for _, tc := range checks {
