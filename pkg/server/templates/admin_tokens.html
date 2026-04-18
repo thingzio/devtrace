@@ -11,30 +11,92 @@
   </nav>
 
   <section class="settings-section">
-    <h2>Token Pool</h2>
+    <h2>Token Pool Status ({{len .PoolQuotas}})</h2>
+
     {{if .PoolQuotas}}
-    <dl>
-      <dt>Tokens</dt><dd>{{.PoolTotal}} total, {{.PoolActive}} active</dd>
-      <dt>Aggregate Quota</dt><dd>{{.PoolAggregatePct}}% remaining</dd>
-    </dl>
+    <div style="display:flex;gap:24px;margin-bottom:20px;flex-wrap:wrap">
+      <div style="padding:12px 18px;border:1px solid var(--border-color);border-radius:8px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-secondary,#8b949e);margin-bottom:4px">Total Limit</div>
+        <div style="font-size:22px;font-weight:700">{{fmtnum .TotalLimit}}</div>
+      </div>
+      <div style="padding:12px 18px;border:1px solid var(--border-color);border-radius:8px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-secondary,#8b949e);margin-bottom:4px">Used</div>
+        <div style="font-size:22px;font-weight:700">{{fmtnum .TotalUsed}}</div>
+      </div>
+      <div style="padding:12px 18px;border:1px solid var(--border-color);border-radius:8px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-secondary,#8b949e);margin-bottom:4px">Available</div>
+        <div style="font-size:22px;font-weight:700">{{fmtnum .TotalAvailable}}</div>
+      </div>
+      <div style="padding:12px 18px;border:1px solid var(--border-color);border-radius:8px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-secondary,#8b949e);margin-bottom:4px">Utilization</div>
+        <div style="font-size:22px;font-weight:700;{{if gt .UtilizationPct 90}}color:#ef4444{{else if gt .UtilizationPct 75}}color:#eab308{{else}}color:#22c55e{{end}}">{{.UtilizationPct}}%</div>
+      </div>
+    </div>
+
     <table class="data-table">
       <thead>
-        <tr><th>Source</th><th>Limit</th><th>Used</th><th>Remaining</th><th>%</th><th>Reset</th></tr>
+        <tr><th style="text-align:left">Login</th><th style="text-align:right">Installation ID</th><th style="text-align:right">Limit</th><th style="text-align:right">Used</th><th style="text-align:right">Remaining</th><th style="text-align:left">Reset At</th><th style="text-align:left">Status</th></tr>
       </thead>
       <tbody>
         {{range .PoolQuotas}}
         <tr>
+          <td>{{if .Label}}{{.Label}}{{else}}#{{.Index}}{{end}}</td>
           {{if .Error}}
-          <td>{{if .Label}}{{.Label}}{{else}}#{{.Index}}{{end}}</td><td colspan="5">{{.Error}}</td>
+          <td colspan="5">{{.Error}}</td>
+          <td><span style="color:#ef4444">Error</span></td>
           {{else}}
-          <td>{{if .Label}}{{.Label}}{{else}}#{{.Index}}{{end}}</td><td>{{.Limit}}</td><td>{{.Used}}</td><td>{{.Remaining}}</td><td>{{.Percent}}%</td><td>{{.Reset}}</td>
+          <td style="text-align:right">{{.InstallationID}}</td>
+          <td style="text-align:right">{{fmtnum .Limit}}</td>
+          <td style="text-align:right">{{fmtnum .Used}}</td>
+          <td style="text-align:right">{{fmtnum .Remaining}}</td>
+          <td>{{.Reset}}</td>
+          <td>{{if lt .Remaining 100}}<span style="color:#eab308">Low</span>{{else}}<span style="color:#22c55e">OK</span>{{end}}</td>
           {{end}}
         </tr>
         {{end}}
       </tbody>
     </table>
-    {{else}}<p>No token pool configured.</p>{{end}}
+    {{else}}<p style="color:var(--text-secondary,#8b949e)">No token pool configured.</p>{{end}}
   </section>
+
+  <section class="settings-section">
+    <h2>Pool Utilization</h2>
+    <div style="margin-bottom:12px">
+      <select id="quota-hours" style="padding:4px 8px;border:1px solid var(--border-color);border-radius:4px;background:var(--card-bg,#161b22);color:var(--text-primary,#e6edf3)">
+        <option value="6">6h</option>
+        <option value="12">12h</option>
+        <option value="24" selected>24h</option>
+        <option value="72">3d</option>
+        <option value="168">7d</option>
+      </select>
+    </div>
+    <div style="position:relative;height:320px;border:1px solid var(--border-color);border-radius:8px;padding:12px;background:var(--card-bg,#161b22)">
+      <canvas id="quotaChart"></canvas>
+    </div>
+    <p id="quota-empty" style="display:none;color:var(--text-secondary,#8b949e);margin-top:8px">No quota samples recorded yet. Samples are collected every 10 minutes when background ops are enabled.</p>
+
+    <script src="/static/js/chart.umd.min.js"></script>
+    <script src="/static/js/quota_chart.js"></script>
+  </section>
+
+  {{if .NoInstallTenants}}
+  <section class="settings-section">
+    <h2>Tenants without Installation <span style="font-size:0.6em;font-weight:normal;color:var(--text-secondary,#8b949e)">(consuming quota, not contributing)</span></h2>
+    <table class="data-table">
+      <thead>
+        <tr><th style="text-align:left">Tenant</th><th style="text-align:left">Plan</th></tr>
+      </thead>
+      <tbody>
+        {{range .NoInstallTenants}}
+        <tr>
+          <td>{{.Username}}</td>
+          <td style="text-transform:capitalize">{{.Plan}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </section>
+  {{end}}
 </div>
 </main>
 {{end}}

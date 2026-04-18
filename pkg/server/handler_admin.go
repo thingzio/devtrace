@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/thingzio/devtrace/pkg/data/postgres"
@@ -39,14 +40,15 @@ func buildTenantRows(ctx context.Context, db *sql.DB, tenants []*tenant.Tenant) 
 }
 
 type tokenQuotaRow struct {
-	Index     int
-	Label     string
-	Limit     int
-	Used      int
-	Remaining int
-	Percent   int
-	Reset     string
-	Error     string
+	Index          int
+	Label          string
+	InstallationID int64
+	Limit          int
+	Used           int
+	Remaining      int
+	Percent        int
+	Reset          string
+	Error          string
 }
 
 type activityBar struct {
@@ -140,7 +142,12 @@ func adminDashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc
 	}
 }
 
-func adminTokensHandler(pool *ghclient.TokenPool, opts Options) http.HandlerFunc {
+type noInstallTenant struct {
+	Username string
+	Plan     string
+}
+
+func adminTokensHandler(pool *ghclient.TokenPool, db *sql.DB, opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		data, tn := adminBaseData(r, opts)
 		if tn == nil {
@@ -154,7 +161,55 @@ func adminTokensHandler(pool *ghclient.TokenPool, opts Options) http.HandlerFunc
 			loadPoolQuotas(r.Context(), pool, data)
 		}
 
+		if db != nil {
+			loadNoInstallTenants(r.Context(), db, data)
+		}
+
 		renderTemplate(w, "admin_tokens.html", data)
+	}
+}
+
+func loadNoInstallTenants(ctx context.Context, db *sql.DB, data map[string]any) {
+	tenants, err := tenant.ListTenantsWithoutInstall(ctx, db)
+	if err != nil {
+		slog.Error("admin: list tenants without install", "error", err)
+		return
+	}
+	if len(tenants) == 0 {
+		return
+	}
+	rows := make([]noInstallTenant, len(tenants))
+	for i, t := range tenants {
+		rows[i] = noInstallTenant{Username: t.Username, Plan: t.Plan}
+	}
+	data["NoInstallTenants"] = rows
+}
+
+// GET /admin/tokens/quota-history — JSON time-series of token quota samples.
+func adminTokenQuotaHistoryHandler(store *postgres.Store, opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		_, tn := adminBaseData(r, opts)
+		if tn == nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		hours := 24
+		if h := r.URL.Query().Get("hours"); h != "" {
+			if v, err := strconv.Atoi(h); err == nil && v > 0 && v <= 720 {
+				hours = v
+			}
+		}
+
+		since := time.Now().UTC().Add(-time.Duration(hours) * time.Hour)
+		samples, err := store.GetTokenQuotaSamples(r.Context(), since)
+		if err != nil {
+			slog.Error("querying quota history", "error", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+
+		writeJSON(w, http.StatusOK, samples)
 	}
 }
 
@@ -243,26 +298,41 @@ func loadPoolQuotas(ctx context.Context, pool *ghclient.TokenPool, data map[stri
 	quotas := pool.CheckQuotas(ctx)
 	pct, _ := ghclient.AggregateQuota(quotas)
 	rows := make([]tokenQuotaRow, len(quotas))
+	var totalLimit, totalUsed int
 	for i, q := range quotas {
+		used := q.Limit - q.Remaining
 		rows[i] = tokenQuotaRow{
-			Index:     q.Index,
-			Label:     q.Label,
-			Limit:     q.Limit,
-			Used:      q.Limit - q.Remaining,
-			Remaining: q.Remaining,
-			Error:     q.Error,
+			Index:          q.Index,
+			Label:          q.Label,
+			InstallationID: q.InstallationID,
+			Limit:          q.Limit,
+			Used:           used,
+			Remaining:      q.Remaining,
+			Error:          q.Error,
+		}
+		if q.Error == "" {
+			totalLimit += q.Limit
+			totalUsed += used
 		}
 		if q.Limit > 0 {
 			rows[i].Percent = (q.Remaining * 100) / q.Limit
 		}
 		if !q.Reset.IsZero() {
-			rows[i].Reset = q.Reset.Format("15:04:05")
+			rows[i].Reset = q.Reset.Format(time.RFC3339)
 		}
+	}
+	utilPct := 0
+	if totalLimit > 0 {
+		utilPct = (totalUsed * 100) / totalLimit
 	}
 	data["PoolQuotas"] = rows
 	data["PoolTotal"] = pool.Size()
 	data["PoolActive"] = pool.ActiveCount()
 	data["PoolAggregatePct"] = pct
+	data["TotalLimit"] = totalLimit
+	data["TotalUsed"] = totalUsed
+	data["TotalAvailable"] = totalLimit - totalUsed
+	data["UtilizationPct"] = utilPct
 }
 
 func timeSince(t time.Time) string {

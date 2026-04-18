@@ -230,12 +230,13 @@ func (p *TokenPool) Labels() []string {
 
 // TokenQuota holds rate limit info for a single GitHub API token.
 type TokenQuota struct {
-	Index     int
-	Label     string
-	Limit     int
-	Remaining int
-	Reset     time.Time
-	Error     string
+	Index          int
+	Label          string
+	InstallationID int64
+	Limit          int
+	Remaining      int
+	Reset          time.Time
+	Error          string
 }
 
 // CheckQuotas calls the GitHub rate_limit API for each token in the pool.
@@ -251,6 +252,7 @@ func (p *TokenPool) CheckQuotas(ctx context.Context) []TokenQuota {
 		quotas[i] = checkTokenRateLimit(ctx, entry.token)
 		quotas[i].Index = i
 		quotas[i].Label = entry.label
+		quotas[i].InstallationID = entry.installationID
 	}
 	return quotas
 }

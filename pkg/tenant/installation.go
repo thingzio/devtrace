@@ -89,6 +89,45 @@ func GetActiveInstallations(ctx context.Context, db *sql.DB, tenantID string) ([
 		 WHERE tenant_id = $1 AND suspended_at IS NULL`, tenantID)
 }
 
+// TenantWithoutInstall is an active tenant with no GitHub App installation.
+type TenantWithoutInstall struct {
+	Username string
+	Plan     string
+}
+
+const listTenantsWithoutInstallSQL = `
+	SELECT t.username, t.plan
+	FROM devtrace_tenant t
+	WHERE t.status = 'active'
+	  AND NOT EXISTS (
+	    SELECT 1 FROM devtrace_app_installation ai
+	    WHERE ai.tenant_id = t.id
+	      AND ai.suspended_at IS NULL
+	  )
+	ORDER BY t.username`
+
+// ListTenantsWithoutInstall returns active tenants that have no GitHub App installation.
+func ListTenantsWithoutInstall(ctx context.Context, db *sql.DB) ([]TenantWithoutInstall, error) {
+	rows, err := db.QueryContext(ctx, listTenantsWithoutInstallSQL)
+	if err != nil {
+		return nil, fmt.Errorf("listing tenants without install: %w", err)
+	}
+	defer rows.Close()
+
+	var out []TenantWithoutInstall
+	for rows.Next() {
+		var t TenantWithoutInstall
+		if err := rows.Scan(&t.Username, &t.Plan); err != nil {
+			return nil, fmt.Errorf("scanning tenant without install: %w", err)
+		}
+		out = append(out, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating tenants without install: %w", err)
+	}
+	return out, nil
+}
+
 func queryActiveInstallations(ctx context.Context, db *sql.DB, query string, args ...any) ([]ActiveInstallation, error) {
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {

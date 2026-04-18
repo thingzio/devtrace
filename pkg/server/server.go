@@ -216,6 +216,9 @@ func Run(ctx context.Context, opts Options) error {
 		scorerStop := background.StartBackgroundScorer(ctx, store, ghClient, opts.Version)
 		defer scorerStop()
 
+		quotaStop := background.StartQuotaSampler(ctx, store, pool)
+		defer quotaStop()
+
 		backfillDays := config.GetEnvAsInt("GHARCHIVE_BACKFILL_DAYS", 0)
 		ingestStop := background.StartIngestLoop(ctx, func(ctx context.Context) error {
 			if backfillDays > 0 {
@@ -417,7 +420,10 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	requireAdmin := middleware.RequireAdmin(db)
 	mux.Handle("GET /admin", requireAdmin(adminDashboardHandler(store, opts)))
 	mux.Handle("GET /admin/", requireAdmin(adminDashboardHandler(store, opts)))
-	mux.Handle("GET /admin/tokens", requireAdmin(adminTokensHandler(pool, opts)))
+	mux.Handle("GET /admin/tokens", requireAdmin(adminTokensHandler(pool, db, opts)))
+	if store != nil {
+		mux.Handle("GET /admin/tokens/quota-history", requireAdmin(adminTokenQuotaHistoryHandler(store, opts)))
+	}
 	mux.Handle("GET /admin/tenants", requireAdmin(adminTenantsHandler(store, opts)))
 	mux.Handle("POST /admin/tenant/{username}/plan", requireAdmin(middleware.ValidateCSRF(adminUpdatePlanFormHandler(db))))
 	mux.Handle("POST /admin/tenant/{username}/status", requireAdmin(middleware.ValidateCSRF(adminUpdateStatusFormHandler(db))))
