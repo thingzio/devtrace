@@ -424,6 +424,74 @@ func adminUpdateStatusFormHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
+type dayOption struct {
+	Value  int
+	Label  string
+	Active bool
+}
+
+func adminMetricsHandler(store *postgres.Store, mcfg *adminMetricsConfig, opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data, tn := adminBaseData(r, opts)
+		if tn == nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		auditLog("view_metrics", tn, r.URL.Path, r.RemoteAddr, "")
+
+		if mcfg == nil {
+			data["MetricsDisabled"] = true
+			renderTemplate(w, "admin_metrics.html", data)
+			return
+		}
+
+		days := defaultMetricDays
+		if d := r.URL.Query().Get("days"); d != "" {
+			if v, err := strconv.Atoi(d); err == nil && v > 0 && v <= maxMetricDays {
+				days = v
+			}
+		}
+
+		options := make([]dayOption, len(metricDayOptions))
+		for i, d := range metricDayOptions {
+			label := fmt.Sprintf("%dd", d)
+			options[i] = dayOption{Value: d, Label: label, Active: d == days}
+		}
+		data["DayOptions"] = options
+
+		ctx := r.Context()
+
+		token, err := gcpMetadataToken(ctx)
+		if err != nil {
+			slog.Error("admin metrics: gcp token", "error", err)
+			data["AnalysisError"] = "Failed to obtain GCP access token"
+			renderTemplate(w, "admin_metrics.html", data)
+			return
+		}
+
+		gcpMetrics := collectGCPMetrics(ctx, mcfg, token, days)
+		dbMetrics := collectDBMetrics(ctx, store, store.DB(), days)
+		allMetrics := gcpMetrics + dbMetrics
+
+		data["RawMetrics"] = allMetrics
+
+		if mcfg.anthropicKey != "" {
+			analysis, err := analyzeAdminMetrics(ctx, mcfg, allMetrics)
+			if err != nil {
+				slog.Error("admin metrics: analysis", "error", err)
+				data["AnalysisError"] = err.Error()
+			} else {
+				data["Analysis"] = analysis
+			}
+		} else {
+			data["AnalysisError"] = "Anthropic API key not configured"
+		}
+
+		renderTemplate(w, "admin_metrics.html", data)
+	}
+}
+
 func adminDeleteTenantHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, 4096)

@@ -185,7 +185,7 @@ var templateFuncs = template.FuncMap{
 
 func init() {
 	simplePages := []string{
-		"admin.html", "admin_tokens.html", "admin_tenants.html",
+		"admin.html", "admin_tokens.html", "admin_tenants.html", "admin_metrics.html",
 		"scorecard.html", "tos.html", "settings.html",
 		"stub.html", "ratelimit.html", "changelog.html", "compliance.html",
 	}
@@ -476,6 +476,8 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 		mux.Handle("GET /admin/tokens/quota-history", requireAdmin(adminTokenQuotaHistoryHandler(store, opts)))
 	}
 	mux.Handle("GET /admin/tenants", requireAdmin(adminTenantsHandler(store, opts)))
+	mcfg := newAdminMetricsConfig()
+	mux.Handle("GET /admin/metrics", requireAdmin(adminMetricsHandler(store, mcfg, opts)))
 	mux.Handle("POST /admin/tenant/{username}/plan", requireAdmin(middleware.ValidateCSRF(adminUpdatePlanFormHandler(db))))
 	mux.Handle("POST /admin/tenant/{username}/status", requireAdmin(middleware.ValidateCSRF(adminUpdateStatusFormHandler(db))))
 	mux.Handle("POST /admin/tenant/{username}/delete", requireAdmin(middleware.ValidateCSRF(adminDeleteTenantHandler(db))))
