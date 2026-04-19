@@ -21,6 +21,7 @@ import (
 const (
 	monitoringBaseURL    = "https://monitoring.googleapis.com/v3/projects"
 	metadataTokenURL     = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" //nolint:gosec // GCP metadata URL, not a credential
+	metadataProjectURL   = "http://metadata.google.internal/computeMetadata/v1/project/project-id"
 	anthropicMessagesURL = "https://api.anthropic.com/v1/messages"
 	anthropicVersion     = "2023-06-01"
 	defaultInsightsModel = "claude-sonnet-4-6"
@@ -48,6 +49,10 @@ type adminMetricsConfig struct {
 func newAdminMetricsConfig() *adminMetricsConfig {
 	projectID := config.GetEnv("GCP_PROJECT_ID", "")
 	if projectID == "" {
+		// Try GCE metadata server (works on Cloud Run without extra env vars).
+		projectID = gcpMetadataProjectID()
+	}
+	if projectID == "" {
 		return nil
 	}
 
@@ -67,6 +72,35 @@ func newAdminMetricsConfig() *adminMetricsConfig {
 		model:        model,
 		service:      "devtrace-saas",
 	}
+}
+
+// gcpMetadataProjectID fetches the project ID from the GCE metadata server.
+// Returns empty string when not running on GCP.
+func gcpMetadataProjectID() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metadataProjectURL, nil)
+	if err != nil {
+		return ""
+	}
+	req.Header.Set("Metadata-Flavor", "Google")
+
+	resp, err := metricsHTTPClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(body))
 }
 
 // gcpAccessToken fetches an access token from the GCE metadata server.
