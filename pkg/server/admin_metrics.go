@@ -275,9 +275,6 @@ func collectDBMetrics(ctx context.Context, store *postgres.Store, db *sql.DB, da
 	if stale, err := store.StaleCount(ctx, 7, 30); err == nil {
 		fmt.Fprintf(&b, "  Stale (7-30d): %d\n", stale)
 	}
-	if ac, err := store.DistinctActivityContributors(ctx); err == nil {
-		fmt.Fprintf(&b, "  Archive Contributors (distinct): %d\n", ac)
-	}
 	if cc, err := store.ContributorCount(ctx); err == nil {
 		fmt.Fprintf(&b, "  Registered Contributors (scored at least once): %d\n", cc)
 	}

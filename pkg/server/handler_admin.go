@@ -455,10 +455,10 @@ func adminMetricsHandler(store *postgres.Store, mcfg *adminMetricsConfig, opts O
 		}
 		data["DayOptions"] = options
 
-		ctx, cancel := context.WithTimeout(r.Context(), handlerTimeout)
-		defer cancel()
+		gcpCtx, gcpCancel := context.WithTimeout(r.Context(), handlerTimeout)
+		defer gcpCancel()
 
-		token, err := gcpMetadataToken(ctx)
+		token, err := gcpMetadataToken(gcpCtx)
 		if err != nil {
 			slog.Error("admin metrics: gcp token", "error", err)
 			data["AnalysisError"] = "Failed to obtain GCP access token"
@@ -466,19 +466,19 @@ func adminMetricsHandler(store *postgres.Store, mcfg *adminMetricsConfig, opts O
 			return
 		}
 
-		gcpMetrics := collectGCPMetrics(ctx, mcfg, token, days)
-		dbMetrics := collectDBMetrics(ctx, store, store.DB(), days)
+		gcpMetrics := collectGCPMetrics(gcpCtx, mcfg, token, days)
+		dbMetrics := collectDBMetrics(r.Context(), store, store.DB(), days)
 		allMetrics := gcpMetrics + dbMetrics
 
 		data["RawMetrics"] = allMetrics
 
 		switch {
-		case ctx.Err() != nil:
+		case gcpCtx.Err() != nil:
 			data["AnalysisError"] = "Metrics collection timed out; analysis skipped"
 		case mcfg.anthropicKey == "":
 			data["AnalysisError"] = "Anthropic API key not configured"
 		default:
-			analysis, aErr := analyzeAdminMetrics(ctx, mcfg, allMetrics)
+			analysis, aErr := analyzeAdminMetrics(r.Context(), mcfg, allMetrics)
 			if aErr != nil {
 				slog.Error("admin metrics: analysis", "error", aErr)
 				data["AnalysisError"] = aErr.Error()
