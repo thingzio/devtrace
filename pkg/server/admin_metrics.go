@@ -244,8 +244,9 @@ func collectGCPMetrics(ctx context.Context, cfg *adminMetricsConfig, token strin
 	hourlyAlign := "aggregation.alignmentPeriod=3600s"
 
 	var b strings.Builder
-	fmt.Fprintf(&b, "DevTrace Cloud Metrics — Last %d day(s), Project: %s, %s\n\n",
+	fmt.Fprintf(&b, "DevTrace Cloud Metrics — Last %d day(s), Project: %s, %s\n",
 		days, cfg.projectID, now.Format("2006-01-02 15:04 UTC"))
+	b.WriteString("NOTE: Cloud Run metrics are service-wide. Admin/metrics page requests are included and may cause brief spikes.\n\n")
 
 	for _, r := range fetchQueries(ctx, cfg.projectID, token, adminMetricQueries(cfg, hourlyAlign), start, now) {
 		if r.err != nil {
@@ -392,63 +393,42 @@ func formatTimeSeries(raw string) string {
 	return b.String()
 }
 
-const metricsAnalysisPrompt = `You are a DevOps analyst reviewing GCP infrastructure metrics
-for DevTrace, a multi-tenant SaaS on Cloud Run for contributor trust scoring and risk analysis.
+const metricsAnalysisPrompt = `You are a health advisor for DevTrace, a multi-tenant SaaS on
+Cloud Run for contributor trust scoring. Your reader is the product owner checking overall
+system health — not debugging an incident.
 
-## Architecture
-- **Service** (devtrace-saas): Single Cloud Run service with embedded background workers.
-  min_instance_count=0 (scale-to-zero). Handles dashboard UI, OAuth, GitHub webhooks,
-  scoring API, plus background goroutines for GH Archive ingestion and continuous scoring.
-- **Ingest worker**: Fetches hourly GH Archive data, upserts contributor activity into PostgreSQL.
-- **Scorer worker**: Dequeues contributors, fetches GitHub API signals, computes reputation scores.
-- **Token pool**: GitHub App installation tokens from all tenants, round-robin with auto-retry
-  on rate limit. Tokens auto-skip when exhausted.
-- **Database**: Cloud SQL PostgreSQL.
+SYSTEM CONTEXT
+- Single Cloud Run service (scale-to-zero), Cloud SQL PostgreSQL.
+- Background workers: hourly GH Archive ingestion, continuous scoring.
+- Token pool: GitHub App installation tokens, round-robin with rate-limit handling.
+- Scorer pauses when token quota drops below 30% or queue is empty.
 
-## Known Baselines & Thresholds
-- Scale-to-zero: cold starts expected after idle periods (~2-3s startup latency).
-- Ingest runs hourly when ENABLE_BACKGROUND_OPS is true.
-- Scorer runs continuously when queue is non-empty, pauses when aggregate token quota drops below 30%.
-- Queue depth of 0 is normal when caught up.
-- Some contributor staleness (7-30d without re-score) is expected and not concerning below 50%.
+WHAT TO IGNORE (STRICT)
+- Admin/metrics page traffic: Cloud Run metrics are service-wide and include admin requests.
+  Any single-hour latency spike or instance scale-up that coincides with admin activity is
+  noise — IGNORE it entirely. Do not mention it.
+- Cold starts: expected with scale-to-zero. Only flag if sustained above 5s across many hours.
+- Contributor count gaps: "Registered Contributors" vs "With Current Score" reflects intentional
+  scoping (only contributors active in tenant repos get scored). A large gap is by design.
+  NEVER flag this as a coverage issue.
+- Queue depth 0 with no stale count: scorer is caught up. This is healthy.
+- Low weekend/off-hours traffic: normal usage pattern.
+- Token quota near 0% used: means scoring is idle or caught up, not a problem.
 
-## DB Metrics Context
-- Pipeline Health: last ingest/scored timestamps indicate worker liveness.
-- Queue Depth: pending contributors to score. 0 = caught up.
-- Stale (7-30d): contributors needing re-score. Normal range depends on contributor count.
-- Archive Contributors (distinct): total unique usernames seen in GH Archive data. This is the
-  broad universe of all GitHub users with PR/review/issue activity. Most are NOT scoring candidates.
-- Registered Contributors: subset that has been scored at least once (entry in contributor table).
-- With Current Score: subset with a current reputation record.
-- Scoring is intentionally scoped to contributors active in tenant repos. A large gap between
-  Archive Contributors and Registered Contributors is expected and healthy — do NOT flag it.
-- Scoring/Ingestion throughput: hourly counts show worker activity.
-- Token Pool Quota: GitHub API rate limit consumption across installations.
+OUTPUT FORMAT (use exactly this structure, plain text, ALL CAPS headings, no markdown)
 
-## Suppression Rules (STRICT — do NOT mention unless the override fires)
-| Signal | Steady State | Override |
-|--------|-------------|----------|
-| Cold-start latency | ~2-3s | 7-day average exceeds 4s |
-| Low traffic periods | Normal usage cycle | Weekday traffic declines 3+ consecutive days |
-| Queue depth 0 | Workers caught up | Stays >100 for 6+ hours |
+HEALTH STATUS
+One sentence: healthy, degraded, or needs attention.
 
-## Analysis Instructions
-Provide a brief, actionable analysis. Bias HARD toward brevity — a quiet day should
-produce a short report, not padding. Apply the Suppression Rules strictly.
+WHAT LOOKS GOOD
+- 2-4 bullets confirming healthy signals (ingestion running, errors low, resources stable, etc.)
 
-1. Key Observations — Only anomalies, threshold breaches, or multi-day trends.
-   One bullet per finding. Correlate across categories (e.g. latency + scoring throughput).
-   Skip ANYTHING that matches steady-state behavior in the Suppression Rules table.
-2. Risks — Rate each: critical, warning, watch.
-   Only include risks that are actionable. If none, say "No risks identified."
-3. Actions — Concrete next steps only if risks were found. One line each.
+WATCH LIST
+- Only items trending wrong or approaching a threshold. Include what to check if it worsens.
+- If nothing, write "Nothing to flag."
 
-Target: 3-8 bullet points on a normal day. Up to 15 only during incidents.
-If everything looks healthy, say so in 1-2 sentences and stop.
-
-## Output Format
-Respond in plain text. Use bullet points (- ) for lists. Use ALL CAPS for section headings.
-Do NOT use Markdown formatting (no #, **, or backticks).`
+Quiet day = 4-6 bullets total. Bias toward reassurance. Do not pad. Do not explain what
+metrics mean — the reader knows the system.`
 
 // analyzeAdminMetrics sends metrics to the Anthropic API for analysis.
 func analyzeAdminMetrics(ctx context.Context, cfg *adminMetricsConfig, metrics string) (string, error) {
