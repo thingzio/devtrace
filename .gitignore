@@ -16,7 +16,6 @@ dist
 /devtrace-site
 /devtrace-scorer
 /devtrace-admin
-/devtrace-ingest
 
 # Keys
 *.pem

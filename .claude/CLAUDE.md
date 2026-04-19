@@ -126,13 +126,14 @@ When choosing between approaches, prioritize in this order:
 cmd/devtrace-site/     HTTP server entrypoint (dashboard, OAuth, webhooks, scoring API)
 pkg/server/            HTTP server, handlers, rate limiting, templates
 pkg/server/static/     Frontend: CSS, JS, images (embedded via go:embed)
-pkg/server/templates/  HTML templates: layout, home, landing, scorecard, settings, help, changelog, admin
+pkg/server/templates/  HTML templates: layout, home, landing, scorecard, settings, help, changelog, compliance, admin
 pkg/score/             Scoring engine: heuristics, grade calculation
 pkg/ingest/            GitHub data ingestion: archive fetching, aggregation, runner
 pkg/background/        Background workers: ingestion scheduler, continuous scoring
 pkg/service/           Service layer: score caching, orchestration
 pkg/bot/               Bot detection and analysis
 pkg/claude/            Claude API client for AI-powered risk sensing
+pkg/compliance/        NIST SSDF practice-to-signal mapping
 pkg/data/              Store interface, shared types
 pkg/data/postgres/     PostgreSQL Store (migrations, history, activity, queue, sync)
 pkg/github/            GitHub API: client pool, token management, installations, fetching
@@ -149,7 +150,7 @@ infra/saas/            Terraform for GCP infrastructure
 tools/                 Dev scripts (version bump, e2e, seed, setup)
 ```
 
-Single binary (`devtrace-site`) with embedded background workers. The server handles HTTP requests (dashboard, OAuth, webhooks, scoring API, admin dashboard) while background goroutines run ingestion and continuous scoring pipelines. Admin dashboard at `/admin` is gated by `DEVTRACE_ADMIN_USERS` env var — returns 404 for non-admins. Public pages include changelog (`/changelog`) and help (`/help`).
+Single binary (`devtrace-site`) with embedded background workers. The server handles HTTP requests (dashboard, OAuth, webhooks, scoring API, admin dashboard) while background goroutines run ingestion and continuous scoring pipelines. Admin dashboard at `/admin` is gated by `DEVTRACE_ADMIN_USERS` env var — returns 404 for non-admins. Public pages include changelog (`/changelog`), help (`/help`), and SSDF compliance (`/compliance`).
 
 Data flow: GitHub App webhook → tenant repos → background ingest worker → GitHub Archive/API → PostgreSQL → scoring engine → dashboard/API
 
@@ -171,6 +172,8 @@ Data flow: GitHub App webhook → tenant repos → background ingest worker → 
 - `GHARCHIVE_BACKFILL_BATCH_SIZE` — hours per backfill batch (default 18)
 - `GHARCHIVE_BACKFILL_WORKERS` — concurrent backfill workers (default 3)
 - `ANTHROPIC_API_KEY` — optional, enables AI risk sensing
+- `SEND_API_KEY` — email service API key (enables contact form on help page)
+- `SUPPORT_EMAIL` — support email address for contact form
 
 ## CI/CD
 
@@ -183,6 +186,8 @@ GitHub Actions workflows in `.github/workflows/`:
 | `release-on-tag.yaml` | version tags (`v*.*.*`) | goreleaser build, container image push |
 | `deploy-saas.yaml` | manual (workflow_dispatch) | Deploy to Cloud Run |
 | `deploy-cloud-run.yaml` | reusable (workflow_call) | Cloud Run deployment logic |
+| `tfsec-on-push.yaml` | push/PR (infra changes) | Terraform security scanning |
+| `yamllint-on-push.yaml` | push/PR (YAML changes) | YAML linting |
 
 ## Release Process
 

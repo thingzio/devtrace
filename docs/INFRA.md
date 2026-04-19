@@ -10,20 +10,17 @@ DevTrace shares the same GCP project, VPC, and Cloud SQL instance as DevPulse. I
 
 | Resource | Type | Description |
 |----------|------|-------------|
-| `devtrace-saas-serve` | Service | Web UI + REST API (auto-scaling 0-10) |
-| `devtrace-saas-ingest` | Job | Hourly GH Archive ingest (1 task, 55min timeout) |
+| `devtrace-saas-serve` | Service | Web UI + REST API + background workers (auto-scaling 0-10) |
 
-`devtrace-saas-serve` requires `TRUST_PROXY=true` in production — Cloud Run sits behind Google's LB, and the rate limiter needs the real client IP from `X-Forwarded-For`.
+Single binary (`devtrace-site`) handles HTTP serving, background ingestion, and continuous scoring. `TRUST_PROXY=true` required in production — Cloud Run sits behind Google's LB, and the rate limiter needs the real client IP from `X-Forwarded-For`.
 
 ### Supporting Resources
 
 | Resource | Type | Description |
 |----------|------|-------------|
-| `devtrace-saas-images` | Artifact Registry | Container images for both binaries |
-| `devtrace-saas-run` | Service Account | Runtime SA for both Cloud Run workloads |
-| `devtrace-saas-scheduler` | Service Account | Cloud Scheduler invoker for ingest job |
+| `devtrace-saas-images` | Artifact Registry | Container images |
+| `devtrace-saas-run` | Service Account | Runtime SA for Cloud Run |
 | `github-actions-devtrace-saas` | Service Account | CI/CD deployer via WIF |
-| `devtrace-saas-ingest-hourly` | Cloud Scheduler | Triggers ingest at :20 past each hour |
 
 ### Secrets (Secret Manager)
 
@@ -32,7 +29,7 @@ DevTrace shares the same GCP project, VPC, and Cloud SQL instance as DevPulse. I
 | `devtrace-saas-github-app-key` | serve (GitHub App auth) |
 | `devtrace-saas-oauth-client-secret` | serve (OAuth flow) |
 | `devtrace-saas-webhook-secret` | serve (webhook verification) |
-| `devtrace-saas-anthropic-api-key` | serve + ingest (Claude API) |
+| `devtrace-saas-anthropic-api-key` | serve (Claude API) |
 
 All secret names are prefixed with `${var.prefix}` (`devtrace-saas`) to avoid collision with DevPulse secrets.
 
@@ -55,17 +52,21 @@ All secret names are prefixed with `${var.prefix}` (`devtrace-saas`) to avoid co
 
 ```
 infra/saas/
-├── main.tf              # APIs, locals
-├── providers.tf         # GCP provider + backend
-├── variables.tf         # All input variables with defaults
-├── cloudrun.tf          # serve service + ingest job
-├── scheduler.tf         # Cloud Scheduler + invoker SA
-├── iam.tf               # Runtime SA, deployer SA, WIF
-├── secrets.tf           # Secret Manager resources + IAM
-├── artifact-registry.tf # Container image repo
-├── database.tf          # DB user, password
-├── outputs.tf           # Service URL, SA emails, AR repo
-└── terraformrc          # Provider mirror config
+├── main.tf                    # APIs, locals
+├── providers.tf               # GCP provider + backend
+├── variables.tf               # All input variables with defaults
+├── terraform.tfvars           # Variable values
+├── cloudrun.tf                # Cloud Run service
+├── scheduler.tf               # Cloud Scheduler
+├── iam.tf                     # Runtime SA, deployer SA, WIF
+├── secrets.tf                 # Secret Manager resources + IAM
+├── artifact-registry.tf       # Container image repo
+├── database.tf                # DB user, password
+├── monitoring.tf              # Cloud Monitoring dashboards
+├── dashboard_service.json     # Service dashboard definition
+├── dashboard_pipeline.json    # Pipeline dashboard definition
+├── outputs.tf                 # Service URL, SA emails, AR repo
+└── terraformrc                # Provider mirror config
 ```
 
 ### Terraform Bootstrap Variables
@@ -82,13 +83,15 @@ infra/saas/
 
 ### Migrations
 
-| File | Tables |
-|------|--------|
-| `001_initial.sql` | tenant, session, api_token, contributor, reputation, score_history, usage_record, github_app_installation |
-| `002_sync_state.sql` | sync_state |
-| `003_gharchive.sql` | contributor_activity, scoring_queue |
+| File | Description |
+|------|-------------|
+| `001_schema.sql` | Squashed base schema: tenant, contributor, reputation, reputation_history, license_profile, ai_signal, api_token, session, app_installation, usage_record, rate_limit, sync_state, contributor_activity, scoring_queue |
+| `002_usage_repo.sql` | Add repo column to usage_record |
+| `003_usage_repo_fix.sql` | Re-apply repo column (idempotent fix) |
+| `004_reset_backfill_cursor.sql` | Reset backfill cursor for 8MB scanner buffer |
+| `005_token_quota_sample.sql` | Token quota sampling table for utilization tracking |
 
-Applied automatically at startup by `store.Migrate(ctx)`.
+Applied automatically at startup by `store.Migrate(ctx)`. All tables use `devtrace_` prefix.
 
 ### Schema Boundary
 
@@ -115,13 +118,17 @@ DevTrace uses its own `devtrace_tenant` table, not the shared DevPulse `tenant` 
 |--------|-------------|
 | `make test` | Unit tests with race detector + coverage |
 | `make lint` | Go vet + golangci-lint + yamllint + tfsec |
-| `make qualify` | test + lint + vulncheck |
+| `make qualify` | test-coverage + lint + vulncheck + e2e |
+| `make vulncheck` | Scan for known vulnerabilities |
+| `make e2e` | End-to-end tests (requires Docker) |
 | `make db-up` / `db-down` | Local Postgres lifecycle |
+| `make db-connect` | psql shell to local Postgres |
 | `make seed` | Create test tenant + API token |
 | `make server` | Run devtrace-site locally |
-| `make ingest` | Run devtrace-ingest locally |
 | `make build` / `release` | goreleaser build/release |
 | `make tf-init` / `tf-plan` / `tf-apply` | Terraform operations |
+| `make setup` | Validate and install local dev tools |
+| `make bump-patch` / `bump-minor` / `bump-major` | Version tagging |
 
 ---
 
@@ -129,10 +136,15 @@ DevTrace uses its own `devtrace_tenant` table, not the shared DevPulse `tenant` 
 
 | Workflow | Trigger | What it does |
 |----------|---------|-------------|
-| `test-on-push.yaml` | Push/PR | Unit tests, lint, coverage |
-| `release-on-tag.yaml` | Version tag | Test -> build -> push images -> create GitHub release |
+| `test-on-push.yaml` | Push/PR | Calls reusable test workflow |
+| `test-on-call.yaml` | Reusable (workflow_call) | tidy, lint, test with race detector |
+| `release-on-tag.yaml` | Version tag (`v*.*.*`) | Test, build, push images, create GitHub release |
+| `deploy-saas.yaml` | Manual (workflow_dispatch) | Deploy to Cloud Run |
+| `deploy-cloud-run.yaml` | Reusable (workflow_call) | Cloud Run deployment logic |
+| `tfsec-on-push.yaml` | Push/PR (infra changes) | Terraform security scanning |
+| `yamllint-on-push.yaml` | Push/PR (YAML changes) | YAML linting |
 
-Both use Workload Identity Federation for GCP auth — no stored credentials.
+Deployment workflows use Workload Identity Federation for GCP auth — no stored credentials.
 
 ### Release Process
 
@@ -241,7 +253,6 @@ gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
 AR_REGISTRY=$REGION-docker.pkg.dev/$PROJECT_ID/devtrace-saas-images
 
 KO_DOCKER_REPO=${AR_REGISTRY}/devtrace-site ko build ./cmd/devtrace-site/ --bare --tags latest
-KO_DOCKER_REPO=${AR_REGISTRY}/devtrace-ingest ko build ./cmd/devtrace-ingest/ --bare --tags latest
 ```
 
 ### 7. Second Terraform Apply (completes Cloud Run)
@@ -262,7 +273,7 @@ cd ../..  # back to repo root
 ./tools/setup-gh-env
 ```
 
-Creates 7 variables in the GitHub `saas` environment: `WIF_PROVIDER`, `DEPLOYER_SA`, `SERVICE_NAME`, `JOB_NAME`, `REGION`, `PROJECT_ID`, `AR_REPO`.
+Creates variables in the GitHub `saas` environment: `WIF_PROVIDER`, `DEPLOYER_SA`, `SERVICE_NAME`, `REGION`, `PROJECT_ID`, `AR_REPO`.
 
 ### 9. Configure DNS
 
@@ -292,10 +303,6 @@ gcloud run services update devtrace-saas-serve \
 # Enable background scoring and DevPulse sync
 gcloud run services update devtrace-saas-serve \
     --region=$REGION --set-env-vars=ENABLE_BACKGROUND_OPS=true
-
-# Backfill 24h of GH Archive data (set back to 1 after)
-gcloud run jobs update devtrace-saas-ingest \
-    --region=$REGION --set-env-vars=GHARCHIVE_LOOKBACK_HOURS=24
 
 # Enable deletion protection after verifying
 # Edit infra/saas/cloudrun.tf — set deletion_protection = true
@@ -342,14 +349,6 @@ curl -s -H "Authorization: Bearer $TOKEN" \
 curl -s -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/score/dependabot%5Bbot%5D | jq .
 ```
-
-### Test Ingest Pipeline
-
-```bash
-DATABASE_URL="postgres://devtrace:devtrace@localhost:5432/devtrace?sslmode=disable" make ingest
-```
-
-Verify data: `make db-connect` then `SELECT COUNT(*) FROM contributor_activity;`
 
 ### Run Tests
 
@@ -403,6 +402,8 @@ make qualify                            # test + lint + vulncheck
 | `DB_MAX_OPEN_CONNS` | `10` | Postgres pool max open |
 | `DB_MAX_IDLE_CONNS` | `5` | Postgres pool max idle |
 | `SERVER_SHUTDOWN_TIMEOUT_SEC` | `5` | Graceful shutdown timeout |
+| `SEND_API_KEY` | — | Email service API key (enables contact form) |
+| `SUPPORT_EMAIL` | — | Support email address for contact form |
 
 ---
 

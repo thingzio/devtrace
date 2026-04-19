@@ -90,9 +90,16 @@ Software supply chain security: $1.95B (2024) -> $3.27B (2034), 10.9% CAGR. Thir
 - **Tier 1 (metadata)**: Bot detection, commit trailers, tool signatures, PR authenticity classification (Claude, Starter+)
 - **Tier 2 (behavioral heuristics, Pro)**: Velocity anomaly ratio, active hour spread, burst-vanish score, synthetic contributor flags. 5 behavioral signals (consistency, review participation, repo diversity, burst rate, fork ratio).
 
+### SSDF/EU CRA Compliance
+
+- `/compliance` page — public, maps DevTrace signals to 8 of 20 NIST SP 800-218 practices across 3 of 4 practice groups
+- Scorecard "Regulatory Context" section — per-contributor SSDF practice relevance (all authenticated plans)
+- Defensive framing throughout: "relevant to", "provides signal for" — never "satisfies" or "certifies"
+- `pkg/compliance/` package with SSDF practice-to-signal mapping logic
+
 ### Admin Dashboard
 
-Session-based at `/admin`, behind GitHub OAuth + `DEVTRACE_ADMIN_USERS`. Tenant management, token pool health, scoring metrics (7-day chart + queue depth), pipeline health.
+Session-based at `/admin`, behind GitHub OAuth + `DEVTRACE_ADMIN_USERS`. Tenant management, token pool health, scoring metrics (7-day chart + queue depth), pipeline health, GCP Cloud Monitoring integration with Claude-powered metrics analysis.
 
 ---
 
@@ -181,7 +188,7 @@ Session-based at `/admin`, behind GitHub OAuth + `DEVTRACE_ADMIN_USERS`. Tenant 
 | Item | Target Plan | Competitive Rationale |
 |------|------------|----------------------|
 | **Enterprise tier** — SSO, audit logs, SLA | Enterprise | Addresses $10K+/yr market gap (NetRise, Apiiro, Arnica) |
-| **Compliance evidence** — exportable contributor trust reports | Enterprise | Unoccupied space; NIST SSDF + EU CRA create implicit demand |
+| **Compliance API** — `regulatory_context` in score response + batch export endpoint (`/api/v1/compliance/report`) | Enterprise | Builds on shipped `/compliance` page; exportable evidence for SSDF/CRA audits |
 | **AI sensing Tier 3** — Claude analysis for ambiguous cases | Pro | Integration point exists (`pkg/claude/`), prompts pending |
 
 ### P3 — Future
@@ -208,7 +215,6 @@ Session-based at `/admin`, behind GitHub OAuth + `DEVTRACE_ADMIN_USERS`. Tenant 
 - Enterprise pricing model — per-seat vs per-request vs flat annual
 - Custom scoring policy design for Enterprise (which weights/thresholds are configurable?)
 - Compliance report format — PDF vs structured JSON vs both
-- Which NIST SSDF practice groups map to DevTrace signals
 
 ---
 
@@ -228,3 +234,4 @@ Session-based at `/admin`, behind GitHub OAuth + `DEVTRACE_ADMIN_USERS`. Tenant 
 | Q18 | AI sensing Tier 2 elevated — behavioral heuristics are time-sensitive. |
 | Q19 | Enterprise tier planned — addresses $10K+/yr gap. |
 | Q20 | Compliance evidence — NIST SSDF + EU CRA create implicit demand. |
+| Q21 | SSDF Phase 1 shipped — `/compliance` page + scorecard regulatory context. Phase 2 (Enterprise API + batch export) deferred pending demand. |
