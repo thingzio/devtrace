@@ -1,0 +1,143 @@
+{{define "content"}}
+<div class="landing">
+  <div style="max-width:700px;margin:0 auto;padding:0 0 1rem;">
+    <a href="/dashboard" class="back-link">&larr; Dashboard</a>
+  </div>
+  <div class="landing-hero">
+    <h1>NIST SSDF Due-Diligence Support</h1>
+    <p>DevTrace contributor trust signals provide informational context relevant to 8 of 20 NIST SP 800-218 (SSDF) practices across 3 of 4 practice groups.</p>
+  </div>
+
+  <div style="max-width:800px;margin:0 auto">
+
+    <div class="landing-feature" style="margin-bottom:24px">
+      <h3>Coverage Summary</h3>
+      <div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin-bottom:12px;">
+        <div><strong>PS</strong> &mdash; Protect the Software <span style="color:var(--gray);">(3 of 3)</span></div>
+        <div><strong>PW</strong> &mdash; Produce Well-Secured Software <span style="color:var(--gray);">(3 of 9)</span></div>
+        <div><strong>PO</strong> &mdash; Prepare the Organization <span style="color:var(--gray);">(1 of 5)</span></div>
+        <div><strong>RV</strong> &mdash; Respond to Vulnerabilities <span style="color:var(--gray);">(1 of 3)</span></div>
+      </div>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:24px">
+      <h3>Practice-Level Mapping</h3>
+      <div class="plans-table-wrap">
+        <table class="plans-table" style="text-align:left;">
+          <thead>
+            <tr>
+              <th>Practice</th>
+              <th>Name</th>
+              <th>DevTrace Evidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>PS.1</strong></td>
+              <td>Protect code from unauthorized access</td>
+              <td>Author association, org membership, trusted org status</td>
+            </tr>
+            <tr>
+              <td><strong>PS.2</strong></td>
+              <td>Verify software release integrity</td>
+              <td>Cryptographic commit signing verification</td>
+            </tr>
+            <tr>
+              <td><strong>PS.3</strong></td>
+              <td>Archive and provide software provenance</td>
+              <td>Profile completeness: bio, company, location, website, email</td>
+            </tr>
+            <tr>
+              <td><strong>PW.4</strong></td>
+              <td>Reuse well-secured software</td>
+              <td>Fork ratio, distinct repos, PR acceptance across projects</td>
+            </tr>
+            <tr>
+              <td><strong>PW.6</strong></td>
+              <td>Review human-readable code</td>
+              <td>Code review participation in the last 30 days</td>
+            </tr>
+            <tr>
+              <td><strong>PW.7</strong></td>
+              <td>Test executable code</td>
+              <td>Contribution consistency score as disciplined-practice proxy</td>
+            </tr>
+            <tr>
+              <td><strong>RV.1</strong></td>
+              <td>Identify vulnerabilities</td>
+              <td>Velocity anomaly, burst-vanish, synthetic risk flag detection</td>
+            </tr>
+            <tr>
+              <td><strong>PO.4</strong></td>
+              <td>Security awareness</td>
+              <td>Account maturity, community engagement, follower presence</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:24px">
+      <h3>Strongest Task-Level Connections</h3>
+      <div class="plans-table-wrap">
+        <table class="plans-table" style="text-align:left;">
+          <thead>
+            <tr>
+              <th>SSDF Task</th>
+              <th>DevTrace Signal</th>
+              <th>Why It Maps</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>PS.2.1</strong></td>
+              <td>commits_verified</td>
+              <td>Direct evidence: contributor either signs commits or doesn't</td>
+            </tr>
+            <tr>
+              <td><strong>PS.3.1</strong></td>
+              <td>Identity category (5 signals)</td>
+              <td>Provenance starts with "who wrote this?" &mdash; DevTrace answers that</td>
+            </tr>
+            <tr>
+              <td><strong>PS.1.1</strong></td>
+              <td>author_association + org_member</td>
+              <td>Measures whether the contributor has appropriate access level</td>
+            </tr>
+            <tr>
+              <td><strong>PW.6.1</strong></td>
+              <td>reviews_given_30d</td>
+              <td>Contributors who review code participate in the security review process</td>
+            </tr>
+            <tr>
+              <td><strong>RV.1.1</strong></td>
+              <td>Synthetic contributor flags</td>
+              <td>Detects fabricated contributor patterns (social engineering vectors)</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:24px">
+      <h3>EU Cyber Resilience Act</h3>
+      <p style="font-size:0.9em;line-height:1.6;color:var(--gray);">
+        The EU CRA (2024/2847, enforcement begins 2027) requires manufacturers of products with digital elements to maintain software bills of materials, track vulnerabilities, and ensure supply chain transparency. DevTrace contributor trust signals provide additional context relevant to CRA due-diligence obligations around contributor provenance and software integrity.
+      </p>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:24px;background:var(--bg-color);border:1px solid var(--border-color);border-radius:var(--radius);padding:1.25rem 1.5rem;">
+      <p style="font-size:0.85em;line-height:1.6;color:var(--gray);margin:0;">
+        <strong>Disclaimer:</strong> DevTrace provides contributor-level signals that may be relevant to organizational SSDF and EU CRA due-diligence processes. These signals are informational and do not constitute a compliance determination. Full SSDF compliance requires organizational processes, tooling, and controls beyond contributor trust scoring. Consult qualified compliance professionals for formal assessments.
+      </p>
+    </div>
+
+    {{if not .NavUser}}
+    <div style="text-align:center;margin:2rem 0;">
+      <a href="/auth/github" class="btn btn-primary">Sign in with GitHub</a>
+      <p class="muted" style="margin-top:0.5rem;font-size:0.85rem;">Pro plan includes contributor-level SSDF practice mapping on every scorecard.</p>
+    </div>
+    {{end}}
+  </div>
+</div>
+{{end}}

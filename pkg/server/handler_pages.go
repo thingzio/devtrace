@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/thingzio/devtrace/pkg/compliance"
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	"github.com/thingzio/devtrace/pkg/middleware"
 	"github.com/thingzio/devtrace/pkg/plan"
@@ -113,6 +114,11 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 			"RepoContext":  resp.RepoContext,
 			"AISensing":    resp.AISensing,
 			"Upsell":       plan.Upsell(planName),
+		}
+		if scorePlan == "pro" {
+			data["Compliance"] = compliance.EvaluatePractices(
+				resp.Signals, resp.RepoContext, resp.Score.Categories,
+				resp.Behavior, resp.AISensing)
 		}
 		if tn != nil {
 			data["NavUser"] = tn.Username
@@ -264,6 +270,22 @@ func tosAcceptHandler(store *postgres.Store) http.HandlerFunc {
 			return
 		}
 		http.Redirect(w, r, "/dashboard", http.StatusFound)
+	}
+}
+
+func compliancePageHandler(opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data := pageData{
+			Title:   "Compliance",
+			Version: opts.Version,
+			Commit:  opts.Commit,
+			Date:    opts.Date,
+		}
+		if tn := middleware.TenantFromContext(r.Context()); tn != nil {
+			data.NavUser = tn.Username
+			data.NavAvatar = tn.AvatarURL
+		}
+		renderTemplate(w, "compliance.html", data)
 	}
 }
 

@@ -128,6 +128,23 @@
   </section>
   {{end}}{{end}}
 
+  {{if .Compliance}}
+  <section class="compliance">
+    <h2>Regulatory Context <span class="plan-badge">Pro</span></h2>
+    <p class="metric-desc" style="margin-bottom:0.75rem;">NIST SP 800-218 (SSDF) practice mapping based on this contributor's signals. These are informational and do not constitute a compliance determination. <a href="/compliance">Full methodology &rarr;</a></p>
+    <table class="signal-table">
+      <tr><th>SSDF Practice</th><th>Evidence</th><th style="text-align:center;">Status</th></tr>
+      {{range .Compliance}}
+      <tr>
+        <td><strong>{{.ID}}</strong> &mdash; {{.Name}}</td>
+        <td class="metric-desc">{{.Signal}}</td>
+        <td style="text-align:center;"><span class="{{complianceClass .Status}}">{{complianceIcon .Status}}</span></td>
+      </tr>
+      {{end}}
+    </table>
+  </section>
+  {{end}}
+
   {{if .Signals}}
   <section class="signals">
     <h2>Input Signals</h2>

@@ -41,6 +41,11 @@ const (
 	cssInterpGreen = "interp-green"
 	cssInterpAmber = "interp-amber"
 	cssInterpRed   = "interp-red"
+
+	// Compliance status values (duplicated from compliance package to avoid
+	// import in package-level var init).
+	statusPresent = "present"
+	statusAbsent  = "absent"
 )
 
 var templateFuncs = template.FuncMap{
@@ -156,13 +161,33 @@ var templateFuncs = template.FuncMap{
 		}
 		return "badge-green"
 	},
+	"complianceIcon": func(status string) string {
+		switch status {
+		case statusPresent:
+			return "\u2713" // ✓
+		case statusAbsent:
+			return "\u2717" // ✗
+		default:
+			return "\u2014" // —
+		}
+	},
+	"complianceClass": func(status string) string {
+		switch status {
+		case statusPresent:
+			return cssInterpGreen
+		case statusAbsent:
+			return cssInterpAmber
+		default:
+			return "interp-muted"
+		}
+	},
 }
 
 func init() {
 	simplePages := []string{
 		"admin.html", "admin_tokens.html", "admin_tenants.html",
 		"scorecard.html", "tos.html", "settings.html",
-		"stub.html", "ratelimit.html", "changelog.html",
+		"stub.html", "ratelimit.html", "changelog.html", "compliance.html",
 	}
 	// +3: simplePages + landing + help + home
 	pageTemplates = make(map[string]*template.Template, len(simplePages)+3)
@@ -405,6 +430,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	mux.Handle("GET /{$}", requireAny(landingHandler(opts)))
 	mux.HandleFunc("GET /health", health.Handler())
 	mux.HandleFunc("GET /changelog", changelogPageHandler(opts))
+	mux.HandleFunc("GET /compliance", compliancePageHandler(opts))
 	mux.HandleFunc("GET /help", helpPageHandler(db, opts))
 	mux.HandleFunc("POST /help/contact", helpContactHandler(db, opts))
 	mux.Handle("GET /auth/github", oauthRL.wrap(oauthStartHandler(oauthCfg)))

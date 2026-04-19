@@ -99,6 +99,14 @@ else
   err "GET /help → $STATUS (expected 200)"
 fi
 
+# Compliance page
+STATUS=$(curl -sf -o "$TMPDIR_E2E/compliance.html" -w "%{http_code}" "http://localhost:$SITE_PORT/compliance")
+if [[ "$STATUS" == "200" ]] && grep -qi "SSDF" "$TMPDIR_E2E/compliance.html"; then
+  pass "GET /compliance → 200 with SSDF content"
+else
+  err "GET /compliance → $STATUS (expected 200 with SSDF)"
+fi
+
 # Unauthenticated /dashboard redirects to auth
 STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$SITE_PORT/dashboard")
 [[ "$STATUS" == "302" ]] && pass "GET /dashboard (unauth) → 302" || err "GET /dashboard (unauth) → $STATUS (expected 302)"
