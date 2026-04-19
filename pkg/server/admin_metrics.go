@@ -66,11 +66,14 @@ func newAdminMetricsConfig() *adminMetricsConfig {
 		model = config.GetEnv("ANTHROPIC_MODEL", defaultInsightsModel)
 	}
 
+	// K_SERVICE is auto-set by Cloud Run to the actual service name.
+	service := config.GetEnv("K_SERVICE", config.GetEnv("DEVTRACE_SERVICE_NAME", "devtrace-saas-serve"))
+
 	return &adminMetricsConfig{
 		projectID:    projectID,
 		anthropicKey: key,
 		model:        model,
-		service:      "devtrace-saas",
+		service:      service,
 	}
 }
 
@@ -302,11 +305,14 @@ func collectDBMetrics(ctx context.Context, store *postgres.Store, db *sql.DB, da
 	if stale, err := store.StaleCount(ctx, 7, 30); err == nil {
 		fmt.Fprintf(&b, "  Stale (7-30d): %d\n", stale)
 	}
+	if ac, err := store.DistinctActivityContributors(ctx); err == nil {
+		fmt.Fprintf(&b, "  Archive Contributors (distinct): %d\n", ac)
+	}
 	if cc, err := store.ContributorCount(ctx); err == nil {
-		fmt.Fprintf(&b, "  Total Contributors: %d\n", cc)
+		fmt.Fprintf(&b, "  Registered Contributors (scored at least once): %d\n", cc)
 	}
 	if sc, err := store.ScoredCount(ctx); err == nil {
-		fmt.Fprintf(&b, "  Scored Contributors: %d\n\n", sc)
+		fmt.Fprintf(&b, "  With Current Score: %d\n\n", sc)
 	}
 
 	if hc, err := store.HourlyScoringCounts(ctx, 24); err == nil && len(hc) > 0 {
@@ -443,6 +449,12 @@ for DevTrace, a multi-tenant SaaS on Cloud Run for contributor trust scoring and
 - Pipeline Health: last ingest/scored timestamps indicate worker liveness.
 - Queue Depth: pending contributors to score. 0 = caught up.
 - Stale (7-30d): contributors needing re-score. Normal range depends on contributor count.
+- Archive Contributors (distinct): total unique usernames seen in GH Archive data. This is the
+  broad universe of all GitHub users with PR/review/issue activity. Most are NOT scoring candidates.
+- Registered Contributors: subset that has been scored at least once (entry in contributor table).
+- With Current Score: subset with a current reputation record.
+- Scoring is intentionally scoped to contributors active in tenant repos. A large gap between
+  Archive Contributors and Registered Contributors is expected and healthy — do NOT flag it.
 - Scoring/Ingestion throughput: hourly counts show worker activity.
 - Token Pool Quota: GitHub API rate limit consumption across installations.
 

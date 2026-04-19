@@ -128,6 +128,17 @@ func (s *Store) ScoredCount(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+// DistinctActivityContributors returns the number of unique contributors in the activity table.
+func (s *Store) DistinctActivityContributors(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(DISTINCT username) FROM devtrace_contributor_activity`).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("distinct activity contributors: %w", err)
+	}
+	return count, nil
+}
+
 // GetTenantRepos returns the set of org/user logins with active GitHub App installations.
 // The ingest job uses this to determine if a repo owner is a tenant.
 func (s *Store) GetTenantRepos(ctx context.Context) (map[string]bool, error) {
