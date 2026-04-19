@@ -241,8 +241,8 @@ func adminTenantsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 }
 
 func loadPipelineMetrics(ctx context.Context, store *postgres.Store, data map[string]any) {
-	if sc, err := store.HourlyScoringCounts(ctx, 12); err == nil {
-		data["ScoringBars"] = hourlyCountBars(sc)
+	if sc, err := store.HourlyScoringCounts(ctx, 24); err == nil {
+		data["ScoringBars"] = hourlyCountBars24(sc)
 	}
 
 	if depth, err := store.QueueDepth(ctx); err == nil {
@@ -290,6 +290,24 @@ func hourlyCountBars(hc []postgres.HourlyCount) []activityBar {
 	for i, h := range hc {
 		hours[i] = h.Day
 		counts[i] = h.Count
+	}
+	return buildBars(hours, counts, "3pm")
+}
+
+// hourlyCountBars24 returns exactly 24 bars, filling gaps with zeros.
+func hourlyCountBars24(hc []postgres.HourlyCount) []activityBar {
+	now := time.Now().UTC().Truncate(time.Hour)
+	lookup := make(map[string]int, len(hc))
+	for _, h := range hc {
+		lookup[h.Day.UTC().Truncate(time.Hour).Format("2006010215")] = h.Count
+	}
+
+	hours := make([]time.Time, 24)
+	counts := make([]int, 24)
+	for i := range 24 {
+		t := now.Add(-time.Duration(23-i) * time.Hour)
+		hours[i] = t
+		counts[i] = lookup[t.Format("2006010215")]
 	}
 	return buildBars(hours, counts, "3pm")
 }
