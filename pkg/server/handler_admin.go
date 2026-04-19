@@ -53,6 +53,7 @@ type tokenQuotaRow struct {
 
 type activityBar struct {
 	Label   string
+	UTC     string // ISO 8601 timestamp for client-side local time conversion
 	Count   int
 	Percent int
 }
@@ -78,6 +79,7 @@ func buildBars(times []time.Time, counts []int, format string) []activityBar {
 		}
 		bars[i] = activityBar{
 			Label:   times[i].Format(format),
+			UTC:     times[i].UTC().Format(time.RFC3339),
 			Count:   counts[i],
 			Percent: pct,
 		}
@@ -142,12 +144,7 @@ func adminDashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc
 	}
 }
 
-type noInstallTenant struct {
-	Username string
-	Plan     string
-}
-
-func adminTokensHandler(pool *ghclient.TokenPool, db *sql.DB, opts Options) http.HandlerFunc {
+func adminTokensHandler(pool *ghclient.TokenPool, opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		data, tn := adminBaseData(r, opts)
 		if tn == nil {
@@ -161,28 +158,8 @@ func adminTokensHandler(pool *ghclient.TokenPool, db *sql.DB, opts Options) http
 			loadPoolQuotas(r.Context(), pool, data)
 		}
 
-		if db != nil {
-			loadNoInstallTenants(r.Context(), db, data)
-		}
-
 		renderTemplate(w, "admin_tokens.html", data)
 	}
-}
-
-func loadNoInstallTenants(ctx context.Context, db *sql.DB, data map[string]any) {
-	tenants, err := tenant.ListTenantsWithoutInstall(ctx, db)
-	if err != nil {
-		slog.Error("admin: list tenants without install", "error", err)
-		return
-	}
-	if len(tenants) == 0 {
-		return
-	}
-	rows := make([]noInstallTenant, len(tenants))
-	for i, t := range tenants {
-		rows[i] = noInstallTenant{Username: t.Username, Plan: t.Plan}
-	}
-	data["NoInstallTenants"] = rows
 }
 
 // GET /admin/tokens/quota-history — JSON time-series of token quota samples.

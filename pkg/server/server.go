@@ -471,7 +471,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	requireAdmin := middleware.RequireAdmin(db)
 	mux.Handle("GET /admin", requireAdmin(adminDashboardHandler(store, opts)))
 	mux.Handle("GET /admin/", requireAdmin(adminDashboardHandler(store, opts)))
-	mux.Handle("GET /admin/tokens", requireAdmin(adminTokensHandler(pool, db, opts)))
+	mux.Handle("GET /admin/tokens", requireAdmin(adminTokensHandler(pool, opts)))
 	if store != nil {
 		mux.Handle("GET /admin/tokens/quota-history", requireAdmin(adminTokenQuotaHistoryHandler(store, opts)))
 	}

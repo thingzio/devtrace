@@ -1,6 +1,6 @@
 {{define "content"}}
 <main class="dashboard-main">
-<div class="settings">
+<div class="settings admin-wide">
   <a href="/dashboard" class="back-link">&larr; Dashboard</a>
   <h1>Admin</h1>
 
@@ -80,24 +80,6 @@
     <script src="/static/js/quota_chart.js"></script>
   </section>
 
-  {{if .NoInstallTenants}}
-  <section class="settings-section">
-    <h2>Tenants without Installation <span style="font-size:0.6em;font-weight:normal;color:var(--text-secondary,#8b949e)">(consuming quota, not contributing)</span></h2>
-    <table class="data-table">
-      <thead>
-        <tr><th style="text-align:left">Tenant</th><th style="text-align:left">Plan</th></tr>
-      </thead>
-      <tbody>
-        {{range .NoInstallTenants}}
-        <tr>
-          <td>{{.Username}}</td>
-          <td style="text-transform:capitalize">{{.Plan}}</td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
-  </section>
-  {{end}}
 </div>
 </main>
 {{end}}

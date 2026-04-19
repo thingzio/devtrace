@@ -2381,6 +2381,9 @@ a.link {
   margin: 2rem auto;
   padding: 0 1rem;
 }
+.settings.admin-wide {
+  max-width: 960px;
+}
 .settings-section {
   margin-bottom: 2rem;
   padding-bottom: 1.5rem;

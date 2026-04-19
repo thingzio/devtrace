@@ -1,6 +1,6 @@
 {{define "content"}}
 <main class="dashboard-main">
-<div class="settings">
+<div class="settings admin-wide">
   <a href="/dashboard" class="back-link">&larr; Dashboard</a>
   <h1>Admin</h1>
 
@@ -46,7 +46,7 @@
       </div>
       <div style="display:flex;gap:2px;margin-top:4px;">
         {{range .ActivityBars}}
-        <div style="flex:1;text-align:center;font-size:0.6rem;color:var(--text-secondary,#8b949e);">{{.Label}}</div>
+        <div class="utc-label" data-utc="{{.UTC}}" style="flex:1;text-align:center;font-size:0.6rem;color:var(--text-secondary,#8b949e);">{{.Label}}</div>
         {{end}}
       </div>
     </div>
@@ -88,7 +88,7 @@
       </div>
       <div style="display:flex;gap:2px;margin-top:4px;">
         {{range .ScoringBars}}
-        <div style="flex:1;text-align:center;font-size:0.6rem;color:var(--text-secondary,#8b949e);">{{.Label}}</div>
+        <div class="utc-label" data-utc="{{.UTC}}" style="flex:1;text-align:center;font-size:0.6rem;color:var(--text-secondary,#8b949e);">{{.Label}}</div>
         {{end}}
       </div>
     </div>
@@ -96,4 +96,10 @@
   </section>
 </div>
 </main>
+<script>
+document.querySelectorAll('.utc-label[data-utc]').forEach(function(el) {
+  var d = new Date(el.dataset.utc);
+  if (!isNaN(d)) el.textContent = d.toLocaleTimeString([], {hour:'numeric'});
+});
+</script>
 {{end}}

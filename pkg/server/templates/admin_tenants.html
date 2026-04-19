@@ -1,6 +1,6 @@
 {{define "content"}}
 <main class="dashboard-main">
-<div class="settings">
+<div class="settings admin-wide">
   <a href="/dashboard" class="back-link">&larr; Dashboard</a>
   <h1>Admin</h1>
 
@@ -20,14 +20,25 @@
     {{if .Tenants}}
     <input type="text" id="tenant-search" placeholder="Search by username or name..."
       style="width:100%;padding:0.4rem 0.6rem;margin-bottom:0.5rem;background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:4px;font-size:0.85rem;">
-    <style>.data-table select{background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:3px;padding:0.15rem 0.3rem;font-size:0.8rem;}</style>
+    <style>
+      .data-table select{background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:3px;padding:0.15rem 0.3rem;font-size:0.8rem;}
+      .icon-ok{color:#3fb950;font-weight:bold;}
+      .icon-no{color:var(--text-secondary,#8b949e);}
+      .icon-warn{color:#f85149;font-weight:bold;}
+      .badge-active{display:inline-block;padding:1px 8px;border-radius:10px;font-size:0.75rem;background:rgba(63,185,80,0.15);color:#3fb950;}
+      .badge-suspended{display:inline-block;padding:1px 8px;border-radius:10px;font-size:0.75rem;background:rgba(248,81,73,0.15);color:#f85149;}
+      .btn-action{padding:3px 10px;border:1px solid #3fb950;border-radius:4px;background:transparent;color:#3fb950;font-size:0.78rem;cursor:pointer;}
+      .btn-action:hover{background:rgba(63,185,80,0.15);}
+      .btn-danger{padding:3px 10px;border:1px solid #f85149;border-radius:4px;background:transparent;color:#f85149;font-size:0.78rem;cursor:pointer;}
+      .btn-danger:hover{background:rgba(248,81,73,0.15);}
+    </style>
     <table class="data-table" id="tenant-table">
       <thead>
         <tr>
           <th class="sortable" data-col="0">Username <span class="sort-arrow"></span></th>
           <th class="sortable" data-col="1">Name <span class="sort-arrow"></span></th>
           <th class="sortable" data-col="2">Plan <span class="sort-arrow"></span></th>
-          <th>App</th>
+          <th style="text-align:center">App</th>
           <th class="sortable" data-col="4">Status <span class="sort-arrow"></span></th>
           <th class="sortable" data-col="5">Created <span class="sort-arrow"></span></th>
           <th></th>
@@ -47,31 +58,31 @@
                 <option value="starter" {{if eq .Plan "starter"}}selected{{end}}>starter</option>
                 <option value="pro" {{if eq .Plan "pro"}}selected{{end}}>pro</option>
               </select>
-              <button type="submit" class="btn btn-sm">Save</button>
+              <button type="submit" class="btn-action">Save</button>
             </form>
           </td>
-          <td>{{if .HasInstall}}yes{{else if eq .Plan "free"}}-{{else}}<strong>no</strong>{{end}}</td>
+          <td style="text-align:center">{{if .HasInstall}}<span class="icon-ok" title="Installed">&#10003;</span>{{else if eq .Plan "free"}}<span class="icon-no" title="N/A">&mdash;</span>{{else}}<span class="icon-warn" title="Not installed">&#10007;</span>{{end}}</td>
           <td>
-            <span class="view-{{.Username}}">{{.Status}}</span>
+            <span class="view-{{.Username}}">{{if eq .Status "active"}}<span class="badge-active">active</span>{{else}}<span class="badge-suspended">{{.Status}}</span>{{end}}</span>
             <form class="edit-{{.Username}}" method="POST" action="/admin/tenant/{{.Username}}/status" style="display:none">
               <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
               <select name="status">
                 <option value="active" {{if eq .Status "active"}}selected{{end}}>active</option>
                 <option value="suspended" {{if eq .Status "suspended"}}selected{{end}}>suspended</option>
               </select>
-              <button type="submit" class="btn btn-sm">Save</button>
+              <button type="submit" class="btn-action">Save</button>
             </form>
           </td>
           <td>{{.CreatedAt.Format "2006-01-02"}}</td>
           <td>
             <span class="view-{{.Username}}">
-              <button class="btn btn-sm" data-toggle-edit="{{.Username}}">Edit</button>
+              <button class="btn-action" data-toggle-edit="{{.Username}}">Edit</button>
             </span>
             <span class="edit-{{.Username}}" style="display:none">
-              <button class="btn btn-sm" data-toggle-edit="{{.Username}}">Cancel</button>
+              <button class="btn-action" data-toggle-edit="{{.Username}}">Cancel</button>
               <form method="POST" action="/admin/tenant/{{.Username}}/delete" style="display:inline" data-confirm-delete="{{.Username}}">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <button type="submit" class="btn btn-sm" style="color:#f85149;">Delete</button>
+                <button type="submit" class="btn-danger">Delete</button>
               </form>
             </span>
           </td>

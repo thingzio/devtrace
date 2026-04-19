@@ -49,7 +49,7 @@ func TestAdminDashboardHandler_WithTenant(t *testing.T) {
 
 func TestAdminTokensHandler_NoTenant(t *testing.T) {
 	pool := ghclient.NewTokenPool("tok1")
-	handler := adminTokensHandler(pool, nil, Options{Version: "test"})
+	handler := adminTokensHandler(pool, Options{Version: "test"})
 
 	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/tokens", nil)
 	w := httptest.NewRecorder()
@@ -106,7 +106,7 @@ func TestAdminTokensHandler_WithTenant(t *testing.T) {
 	t.Setenv("DEVTRACE_ADMIN_USERS", "admin-user")
 
 	pool := ghclient.NewTokenPool() // empty pool, no HTTP calls
-	handler := adminTokensHandler(pool, nil, Options{Version: "test"})
+	handler := adminTokensHandler(pool, Options{Version: "test"})
 
 	r := httptest.NewRequestWithContext(adminCtx(), http.MethodGet, "/admin/tokens", nil)
 	w := httptest.NewRecorder()
@@ -120,7 +120,7 @@ func TestAdminTokensHandler_WithTenant(t *testing.T) {
 func TestAdminTokensHandler_NilPool(t *testing.T) {
 	t.Setenv("DEVTRACE_ADMIN_USERS", "admin-user")
 
-	handler := adminTokensHandler(nil, nil, Options{Version: "test"})
+	handler := adminTokensHandler(nil, Options{Version: "test"})
 
 	r := httptest.NewRequestWithContext(adminCtx(), http.MethodGet, "/admin/tokens", nil)
 	w := httptest.NewRecorder()
@@ -171,7 +171,7 @@ func TestLoadNoInstallTenants_NilDB(t *testing.T) {
 	// to call only with a real db. Verify the handler path instead.
 	t.Setenv("DEVTRACE_ADMIN_USERS", "admin-user")
 
-	handler := adminTokensHandler(nil, nil, Options{Version: "test"})
+	handler := adminTokensHandler(nil, Options{Version: "test"})
 	r := httptest.NewRequestWithContext(adminCtx(), http.MethodGet, "/admin/tokens", nil)
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, r)
@@ -179,17 +179,6 @@ func TestLoadNoInstallTenants_NilDB(t *testing.T) {
 	// Should not panic, and not 404.
 	if w.Code == http.StatusNotFound {
 		t.Error("should not return 404 for authenticated admin")
-	}
-}
-
-func TestNoInstallTenantStruct(t *testing.T) {
-	t.Parallel()
-	nt := noInstallTenant{Username: "alice", Plan: "test-plan"}
-	if nt.Username != "alice" {
-		t.Errorf("Username = %q, want %q", nt.Username, "alice")
-	}
-	if nt.Plan != "test-plan" {
-		t.Errorf("Plan = %q, want %q", nt.Plan, "test-plan")
 	}
 }
 

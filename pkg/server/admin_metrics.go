@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/thingzio/devtrace/pkg/config"
@@ -254,6 +255,28 @@ func adminTrendQueries(cfg *adminMetricsConfig) []metricQuery {
 	}
 }
 
+type queryResult struct {
+	label string
+	body  string
+	err   error
+}
+
+// fetchQueries runs all metric queries concurrently and returns results in order.
+func fetchQueries(ctx context.Context, projectID, token string, queries []metricQuery, start, end time.Time) []queryResult {
+	results := make([]queryResult, len(queries))
+	var wg sync.WaitGroup
+	wg.Add(len(queries))
+	for i, q := range queries {
+		go func(idx int, mq metricQuery) {
+			defer wg.Done()
+			raw, err := queryTimeSeries(ctx, projectID, token, mq.filter, mq.params, start, end)
+			results[idx] = queryResult{label: mq.label, body: raw, err: err}
+		}(i, q)
+	}
+	wg.Wait()
+	return results
+}
+
 func collectGCPMetrics(ctx context.Context, cfg *adminMetricsConfig, token string, days int) string {
 	now := time.Now().UTC()
 	start := now.Add(-time.Duration(days) * 24 * time.Hour)
@@ -263,25 +286,23 @@ func collectGCPMetrics(ctx context.Context, cfg *adminMetricsConfig, token strin
 	fmt.Fprintf(&b, "DevTrace Cloud Metrics — Last %d day(s), Project: %s, %s\n\n",
 		days, cfg.projectID, now.Format("2006-01-02 15:04 UTC"))
 
-	for _, q := range adminMetricQueries(cfg, hourlyAlign) {
-		raw, err := queryTimeSeries(ctx, cfg.projectID, token, q.filter, q.params, start, now)
-		if err != nil {
-			fmt.Fprintf(&b, "--- %s ---\n  (error: %s)\n\n", q.label, err)
+	for _, r := range fetchQueries(ctx, cfg.projectID, token, adminMetricQueries(cfg, hourlyAlign), start, now) {
+		if r.err != nil {
+			fmt.Fprintf(&b, "--- %s ---\n  (error: %s)\n\n", r.label, r.err)
 			continue
 		}
-		fmt.Fprintf(&b, "--- %s ---\n%s\n\n", q.label, formatTimeSeries(raw))
+		fmt.Fprintf(&b, "--- %s ---\n%s\n\n", r.label, formatTimeSeries(r.body))
 	}
 
 	if days < trendDays {
 		trendStart := now.Add(-time.Duration(trendDays) * 24 * time.Hour)
 		fmt.Fprintf(&b, "=== 7-Day Trend Baseline ===\n\n")
-		for _, q := range adminTrendQueries(cfg) {
-			raw, err := queryTimeSeries(ctx, cfg.projectID, token, q.filter, q.params, trendStart, now)
-			if err != nil {
-				fmt.Fprintf(&b, "--- %s ---\n  (error: %s)\n\n", q.label, err)
+		for _, r := range fetchQueries(ctx, cfg.projectID, token, adminTrendQueries(cfg), trendStart, now) {
+			if r.err != nil {
+				fmt.Fprintf(&b, "--- %s ---\n  (error: %s)\n\n", r.label, r.err)
 				continue
 			}
-			fmt.Fprintf(&b, "--- %s ---\n%s\n\n", q.label, formatTimeSeries(raw))
+			fmt.Fprintf(&b, "--- %s ---\n%s\n\n", r.label, formatTimeSeries(r.body))
 		}
 	}
 
