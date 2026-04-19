@@ -26,10 +26,11 @@ const (
 	anthropicMessagesURL = "https://api.anthropic.com/v1/messages"
 	anthropicVersion     = "2023-06-01"
 	defaultInsightsModel = "claude-sonnet-4-6"
-	metricsHTTPTimeout   = 30 * time.Second
-	analysisHTTPTimeout  = 90 * time.Second
-	analysisMaxTokens    = 2048
-	defaultMetricDays    = 2
+	metricsHTTPTimeout   = 10 * time.Second
+	analysisHTTPTimeout  = 30 * time.Second
+	handlerTimeout       = 50 * time.Second
+	analysisMaxTokens    = 1024
+	defaultMetricDays    = 1
 	maxMetricDays        = 30
 )
 
@@ -172,85 +173,45 @@ type metricQuery struct {
 }
 
 func adminMetricQueries(cfg *adminMetricsConfig, hourlyAlign string) []metricQuery {
+	svc := cfg.service
 	return []metricQuery{
 		{
-			label:  "Service: Request Count (req/s by response class)",
-			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/request_count"`, cfg.service),
+			label:  "Request Count (req/s by response class)",
+			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/request_count"`, svc),
 			params: hourlyAlign + "&aggregation.perSeriesAligner=ALIGN_RATE&aggregation.crossSeriesReducer=REDUCE_SUM&aggregation.groupByFields=metric.labels.response_code_class",
 		},
 		{
-			label:  "Service: Request Latency p50 (ms)",
-			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/request_latencies"`, cfg.service),
+			label:  "Request Latency p50 (ms)",
+			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/request_latencies"`, svc),
 			params: hourlyAlign + "&aggregation.perSeriesAligner=ALIGN_PERCENTILE_50&aggregation.crossSeriesReducer=REDUCE_MEAN",
 		},
 		{
-			label:  "Service: Request Latency p95 (ms)",
-			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/request_latencies"`, cfg.service),
-			params: hourlyAlign + "&aggregation.perSeriesAligner=ALIGN_PERCENTILE_95&aggregation.crossSeriesReducer=REDUCE_MEAN",
-		},
-		{
-			label:  "Service: Request Latency p99 (ms)",
-			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/request_latencies"`, cfg.service),
+			label:  "Request Latency p99 (ms)",
+			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/request_latencies"`, svc),
 			params: hourlyAlign + "&aggregation.perSeriesAligner=ALIGN_PERCENTILE_99&aggregation.crossSeriesReducer=REDUCE_MEAN",
 		},
 		{
-			label:  "Service: Instance Count",
-			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/container/instance_count"`, cfg.service),
+			label:  "Instance Count",
+			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/container/instance_count"`, svc),
 			params: hourlyAlign + "&aggregation.perSeriesAligner=ALIGN_MAX&aggregation.crossSeriesReducer=REDUCE_SUM",
 		},
 		{
-			label:  "Service: Startup Latency (ms, cold starts)",
-			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/container/startup_latencies"`, cfg.service),
+			label:  "CPU Utilization",
+			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/container/cpu/utilizations"`, svc),
 			params: hourlyAlign + "&aggregation.perSeriesAligner=ALIGN_PERCENTILE_99&aggregation.crossSeriesReducer=REDUCE_MAX",
 		},
 		{
-			label:  "Service: CPU Utilization",
-			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/container/cpu/utilizations"`, cfg.service),
+			label:  "Memory Utilization",
+			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/container/memory/utilizations"`, svc),
 			params: hourlyAlign + "&aggregation.perSeriesAligner=ALIGN_PERCENTILE_99&aggregation.crossSeriesReducer=REDUCE_MAX",
-		},
-		{
-			label:  "Service: Memory Utilization",
-			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/container/memory/utilizations"`, cfg.service),
-			params: hourlyAlign + "&aggregation.perSeriesAligner=ALIGN_PERCENTILE_99&aggregation.crossSeriesReducer=REDUCE_MAX",
-		},
-		{
-			label:  "Service: Billable Instance Time (s/s)",
-			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/container/billable_instance_time"`, cfg.service),
-			params: hourlyAlign + "&aggregation.perSeriesAligner=ALIGN_RATE&aggregation.crossSeriesReducer=REDUCE_SUM",
 		},
 		{
 			label: "Application Errors (hourly)",
 			filter: fmt.Sprintf(
 				`resource.type="cloud_run_revision" AND resource.labels.service_name="%s"`+
 					` AND metric.type="logging.googleapis.com/log_entry_count" AND metric.labels.severity="ERROR"`,
-				cfg.service),
+				svc),
 			params: hourlyAlign + "&aggregation.perSeriesAligner=ALIGN_SUM&aggregation.crossSeriesReducer=REDUCE_SUM",
-		},
-	}
-}
-
-const trendDays = 7
-
-func adminTrendQueries(cfg *adminMetricsConfig) []metricQuery {
-	daily := "aggregation.alignmentPeriod=86400s"
-	return []metricQuery{
-		{
-			label:  "Service: Request Count (daily total)",
-			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/request_count"`, cfg.service),
-			params: daily + "&aggregation.perSeriesAligner=ALIGN_DELTA&aggregation.crossSeriesReducer=REDUCE_SUM",
-		},
-		{
-			label:  "Service: Request Latency p99 (daily max, ms)",
-			filter: fmt.Sprintf(`resource.type="cloud_run_revision" AND resource.labels.service_name="%s" AND metric.type="run.googleapis.com/request_latencies"`, cfg.service),
-			params: daily + "&aggregation.perSeriesAligner=ALIGN_PERCENTILE_99&aggregation.crossSeriesReducer=REDUCE_MAX",
-		},
-		{
-			label: "Application Errors (daily total)",
-			filter: fmt.Sprintf(
-				`resource.type="cloud_run_revision" AND resource.labels.service_name="%s"`+
-					` AND metric.type="logging.googleapis.com/log_entry_count" AND metric.labels.severity="ERROR"`,
-				cfg.service),
-			params: daily + "&aggregation.perSeriesAligner=ALIGN_SUM&aggregation.crossSeriesReducer=REDUCE_SUM",
 		},
 	}
 }
@@ -292,18 +253,6 @@ func collectGCPMetrics(ctx context.Context, cfg *adminMetricsConfig, token strin
 			continue
 		}
 		fmt.Fprintf(&b, "--- %s ---\n%s\n\n", r.label, formatTimeSeries(r.body))
-	}
-
-	if days < trendDays {
-		trendStart := now.Add(-time.Duration(trendDays) * 24 * time.Hour)
-		fmt.Fprintf(&b, "=== 7-Day Trend Baseline ===\n\n")
-		for _, r := range fetchQueries(ctx, cfg.projectID, token, adminTrendQueries(cfg), trendStart, now) {
-			if r.err != nil {
-				fmt.Fprintf(&b, "--- %s ---\n  (error: %s)\n\n", r.label, r.err)
-				continue
-			}
-			fmt.Fprintf(&b, "--- %s ---\n%s\n\n", r.label, formatTimeSeries(r.body))
-		}
 	}
 
 	return b.String()
@@ -496,9 +445,6 @@ produce a short report, not padding. Apply the Suppression Rules strictly.
 2. Risks — Rate each: critical, warning, watch.
    Only include risks that are actionable. If none, say "No risks identified."
 3. Actions — Concrete next steps only if risks were found. One line each.
-
-If a "7-Day Trend Baseline" section is present, compare today's metrics against the trailing
-7-day pattern. Only flag regressions that exceed normal variance.
 
 Target: 3-8 bullet points on a normal day. Up to 15 only during incidents.
 If everything looks healthy, say so in 1-2 sentences and stop.

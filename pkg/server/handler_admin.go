@@ -455,7 +455,8 @@ func adminMetricsHandler(store *postgres.Store, mcfg *adminMetricsConfig, opts O
 		}
 		data["DayOptions"] = options
 
-		ctx := r.Context()
+		ctx, cancel := context.WithTimeout(r.Context(), handlerTimeout)
+		defer cancel()
 
 		token, err := gcpMetadataToken(ctx)
 		if err != nil {
@@ -471,16 +472,19 @@ func adminMetricsHandler(store *postgres.Store, mcfg *adminMetricsConfig, opts O
 
 		data["RawMetrics"] = allMetrics
 
-		if mcfg.anthropicKey != "" {
-			analysis, err := analyzeAdminMetrics(ctx, mcfg, allMetrics)
-			if err != nil {
-				slog.Error("admin metrics: analysis", "error", err)
-				data["AnalysisError"] = err.Error()
+		switch {
+		case ctx.Err() != nil:
+			data["AnalysisError"] = "Metrics collection timed out; analysis skipped"
+		case mcfg.anthropicKey == "":
+			data["AnalysisError"] = "Anthropic API key not configured"
+		default:
+			analysis, aErr := analyzeAdminMetrics(ctx, mcfg, allMetrics)
+			if aErr != nil {
+				slog.Error("admin metrics: analysis", "error", aErr)
+				data["AnalysisError"] = aErr.Error()
 			} else {
 				data["Analysis"] = analysis
 			}
-		} else {
-			data["AnalysisError"] = "Anthropic API key not configured"
 		}
 
 		renderTemplate(w, "admin_metrics.html", data)
