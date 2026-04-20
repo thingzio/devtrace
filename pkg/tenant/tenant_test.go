@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	"github.com/thingzio/devtrace/pkg/tenant"
@@ -241,6 +242,64 @@ func TestSearchTenants_PaginationTotal(t *testing.T) {
 	}
 	if total2 != 3 {
 		t.Errorf("total page 2 = %d, want 3", total2)
+	}
+}
+
+func TestSearchTenants_SortByLastSignIn(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	ids := []int64{99900030, 99900031, 99900032}
+	t.Cleanup(func() {
+		for _, id := range ids {
+			cleanup(t, db, id)
+		}
+	})
+
+	// Create three tenants.
+	tn1, err := tenant.UpsertTenant(ctx, db, ids[0], "sorttest-old", "", "", "", "", "", "")
+	if err != nil {
+		t.Fatalf("upsert 1: %v", err)
+	}
+	tn2, err := tenant.UpsertTenant(ctx, db, ids[1], "sorttest-new", "", "", "", "", "", "")
+	if err != nil {
+		t.Fatalf("upsert 2: %v", err)
+	}
+	// tn3 has no session — should appear last.
+	_, err = tenant.UpsertTenant(ctx, db, ids[2], "sorttest-none", "", "", "", "", "", "")
+	if err != nil {
+		t.Fatalf("upsert 3: %v", err)
+	}
+
+	// Create session for tn1 first (older), then tn2 (newer).
+	_, err = tenant.CreateSession(ctx, db, tn1.ID, 10*time.Minute)
+	if err != nil {
+		t.Fatalf("session 1: %v", err)
+	}
+	// Small delay to ensure distinct timestamps.
+	time.Sleep(50 * time.Millisecond)
+	_, err = tenant.CreateSession(ctx, db, tn2.ID, 10*time.Minute)
+	if err != nil {
+		t.Fatalf("session 2: %v", err)
+	}
+
+	results, _, err := tenant.SearchTenants(ctx, db, "sorttest-", 10, 0)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("got %d results, want 3", len(results))
+	}
+
+	// Most recent sign-in (tn2) should be first, oldest (tn1) second, no session last.
+	if results[0].Username != "sorttest-new" {
+		t.Errorf("results[0] = %q, want sorttest-new (most recent sign-in)", results[0].Username)
+	}
+	if results[1].Username != "sorttest-old" {
+		t.Errorf("results[1] = %q, want sorttest-old (older sign-in)", results[1].Username)
+	}
+	if results[2].Username != "sorttest-none" {
+		t.Errorf("results[2] = %q, want sorttest-none (no sign-in)", results[2].Username)
 	}
 }
 

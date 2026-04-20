@@ -17,9 +17,10 @@
 
   <section class="settings-section">
     <h2>Tenants</h2>
-    <form method="GET" action="/admin/tenants" style="margin-bottom:0.5rem;">
+    <form method="GET" action="/admin/tenants" style="display:flex;gap:0.5rem;margin-bottom:0.5rem;">
       <input type="text" name="q" value="{{.Query}}" placeholder="Search by username or name..."
-        style="width:100%;padding:0.4rem 0.6rem;background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:4px;font-size:0.85rem;">
+        style="flex:1;padding:0.4rem 0.6rem;background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:4px;font-size:0.85rem;">
+      <button type="submit" class="btn btn-sm">Search</button>
     </form>
     {{if .Tenants}}
     <style>
@@ -48,7 +49,7 @@
           <td>{{.Plan}}</td>
           <td style="text-align:center">{{if .HasInstall}}<span class="icon-ok" title="Installed">&#10003;</span>{{else if eq .Plan "free"}}<span class="icon-no" title="N/A">&mdash;</span>{{else}}<span class="icon-warn" title="Not installed">&#10007;</span>{{end}}</td>
           <td>{{if eq .Status "active"}}<span class="badge-active">active</span>{{else}}<span class="badge-suspended">{{.Status}}</span>{{end}}</td>
-          <td>{{if .LastSignIn}}{{.LastSignIn.Format "2006-01-02"}}{{else}}&mdash;{{end}}</td>
+          <td>{{if .LastSignIn}}{{.LastSignIn.Format "2006-01-02 15:04"}}{{else}}&mdash;{{end}}</td>
         </tr>
         {{end}}
       </tbody>

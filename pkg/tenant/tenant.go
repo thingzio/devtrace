@@ -89,8 +89,8 @@ func ListTenants(ctx context.Context, db *sql.DB) ([]*Tenant, error) {
 	return tenants, rows.Err()
 }
 
-// SearchTenants returns a page of tenants matching the query, ordered by creation date,
-// along with the total count of matching tenants.
+// SearchTenants returns a page of tenants matching the query, ordered by most
+// recent sign-in descending, along with the total count of matching tenants.
 func SearchTenants(ctx context.Context, db *sql.DB, query string, limit, offset int) ([]*Tenant, int, error) {
 	const countQ = `SELECT COUNT(*) FROM devtrace_tenant
 		WHERE ($1 = '' OR username ILIKE '%' || $1 || '%' OR name ILIKE '%' || $1 || '%')`
@@ -105,9 +105,9 @@ func SearchTenants(ctx context.Context, db *sql.DB, query string, limit, offset 
 	const q = `SELECT id, github_id, username, email, avatar_url,
 		COALESCE(name,''), COALESCE(company,''), COALESCE(location,''), COALESCE(bio,''),
 		plan, status, max_contributors, tos_accepted_at, created_at, updated_at
-		FROM devtrace_tenant
-		WHERE ($1 = '' OR username ILIKE '%' || $1 || '%' OR name ILIKE '%' || $1 || '%')
-		ORDER BY created_at
+		FROM devtrace_tenant t
+		WHERE ($1 = '' OR t.username ILIKE '%' || $1 || '%' OR t.name ILIKE '%' || $1 || '%')
+		ORDER BY (SELECT MAX(s.created_at) FROM devtrace_session s WHERE s.tenant_id = t.id) DESC NULLS LAST
 		LIMIT $2 OFFSET $3`
 	rows, err := db.QueryContext(ctx, q, query, limit, offset)
 	if err != nil {

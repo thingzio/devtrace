@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -304,5 +306,73 @@ func TestTenantRow_LastSignIn(t *testing.T) {
 	}
 	if row.LastSignIn != &now {
 		t.Error("LastSignIn pointer mismatch")
+	}
+}
+
+func TestAdminTenantsTemplate_SearchButton(t *testing.T) {
+	tmpl, ok := pageTemplates["admin_tenants.html"]
+	if !ok {
+		t.Fatal("admin_tenants.html template not found")
+	}
+
+	data := map[string]any{
+		"Title":      "Admin",
+		"Query":      "",
+		"Page":       1,
+		"TotalPages": 1,
+		"Total":      0,
+		"HasPrev":    false,
+		"HasNext":    false,
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "layout.html", data); err != nil {
+		t.Fatalf("execute template: %v", err)
+	}
+
+	body := buf.String()
+	if !strings.Contains(body, `type="submit"`) {
+		t.Error("search form missing submit button")
+	}
+	if !strings.Contains(body, ">Search</button>") {
+		t.Error("search button missing 'Search' label")
+	}
+}
+
+func TestAdminTenantsTemplate_LastAuthenticatedFormat(t *testing.T) {
+	tmpl, ok := pageTemplates["admin_tenants.html"]
+	if !ok {
+		t.Fatal("admin_tenants.html template not found")
+	}
+
+	signIn := time.Date(2026, 4, 15, 14, 30, 0, 0, time.UTC)
+	rows := []tenantRow{
+		{
+			Tenant:     &tenant.Tenant{Username: "tpl-test", Plan: "free", Status: "active"},
+			LastSignIn: &signIn,
+		},
+	}
+
+	data := map[string]any{
+		"Title":      "Admin",
+		"Query":      "",
+		"Page":       1,
+		"TotalPages": 1,
+		"Total":      1,
+		"HasPrev":    false,
+		"HasNext":    false,
+		"Tenants":    rows,
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "layout.html", data); err != nil {
+		t.Fatalf("execute template: %v", err)
+	}
+
+	body := buf.String()
+	// Must contain date AND time (HH:MM).
+	if !strings.Contains(body, "2026-04-15 14:30") {
+		t.Errorf("expected '2026-04-15 14:30' in template output, got:\n%s",
+			body[strings.Index(body, "Last Authenticated"):strings.Index(body, "Last Authenticated")+200])
 	}
 }
