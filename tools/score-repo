@@ -1,0 +1,105 @@
+#!/bin/bash
+set -euo pipefail
+
+# ── Config ───────────────────────────────────────────────────────────────
+REPO="${1:-NVIDIA/nodewright}"
+HOST="${DEVTRACE_API_URL:-https://devtrace.thingz.io}"
+TOKEN="${DEVTRACE_API_TOKEN:?Set DEVTRACE_API_TOKEN}"
+
+# ── Colors ───────────────────────────────────────────────────────────────
+BOLD='\033[1m'
+DIM='\033[2m'
+RESET='\033[0m'
+GREEN='\033[32m'
+YELLOW='\033[33m'
+RED='\033[31m'
+CYAN='\033[36m'
+
+grade_color() {
+  case "$1" in
+    A+|A) echo "$GREEN" ;;
+    A-|B+|B) echo "$CYAN" ;;
+    B-|C+|C) echo "$YELLOW" ;;
+    *) echo "$RED" ;;
+  esac
+}
+
+# ── Header ───────────────────────────────────────────────────────────────
+echo ""
+echo -e "${BOLD}DevTrace Contributor Trust Scores${RESET}"
+echo -e "${DIM}repo: ${REPO}${RESET}"
+echo -e "${DIM}api:  ${HOST}${RESET}"
+echo ""
+
+# ── Validate token ────────────────────────────────────────────────────────
+http_code=$(curl -s -o /dev/null -w '%{http_code}' \
+  -H "Authorization: Bearer ${TOKEN}" \
+  "${HOST}/api/v1/score/octocat")
+
+if [[ "$http_code" == "401" ]]; then
+  echo -e "${RED}error: invalid API token (HTTP 401)${RESET}"
+  echo -e "${DIM}Generate a token at ${HOST}/settings or via 'make seed'${RESET}"
+  exit 1
+elif [[ "$http_code" == "403" ]]; then
+  echo -e "${RED}error: account suspended or quota exceeded (HTTP 403)${RESET}"
+  exit 1
+elif [[ "$http_code" != "200" ]]; then
+  echo -e "${RED}error: API returned HTTP ${http_code}${RESET}"
+  exit 1
+fi
+
+echo -e "${GREEN}token valid${RESET}"
+echo ""
+
+# ── Fetch contributors ───────────────────────────────────────────────────
+contributors=$(gh api "repos/${REPO}/contributors" --paginate --jq '.[].login')
+total=$(echo "$contributors" | wc -l | tr -d ' ')
+
+printf "${BOLD}%-24s %6s %6s  %-6s  %-10s  %s${RESET}\n" \
+  "CONTRIBUTOR" "SCORE" "GRADE" "AGE(d)" "ORG" "RISK"
+printf '%.0s─' {1..90}; echo ""
+
+# ── Score each contributor ───────────────────────────────────────────────
+i=0
+for user in $contributors; do
+  i=$((i + 1))
+
+  # Skip bot accounts
+  if [[ "$user" == *"[bot]" || "$user" == *"-bot" ]]; then
+    printf "%-24s ${DIM}%48s${RESET}\n" "$user" "bot — skipped"
+    continue
+  fi
+
+  # Progress on stderr so it doesn't pollute piped output
+  >&2 printf "\r${DIM}[%d/%d] scoring %s...${RESET}%30s" "$i" "$total" "$user" ""
+
+  response=$(curl -s -w '\n%{http_code}' \
+    -H "Authorization: Bearer ${TOKEN}" \
+    "${HOST}/api/v1/score/${user}?repo=${REPO}")
+
+  body=$(echo "$response" | sed '$d')
+  code=$(echo "$response" | tail -1)
+
+  if [[ "$code" != "200" ]]; then
+    err=$(echo "$body" | jq -r '.error // "HTTP '"$code"'"' 2>/dev/null || echo "HTTP $code")
+    printf "\r%-24s ${RED}%48s${RESET}\n" "$user" "$err"
+    continue
+  fi
+
+  grade=$(echo "$body" | jq -r '.score.grade // "—"')
+  value=$(echo "$body" | jq -r '.score.value // 0 | . * 100 | round / 100')
+  age=$(echo "$body" | jq -r '.signals.account_age_days // "—"')
+  org=$(echo "$body" | jq -r '.repo_context.org_member // false')
+  risk=$(echo "$body" | jq -r '.risk_summary // "—"' | cut -c1-40)
+
+  color=$(grade_color "$grade")
+  org_label=$( [[ "$org" == "true" ]] && echo -e "${GREEN}member${RESET}" || echo -e "${DIM}external${RESET}" )
+
+  printf "\r%-24s ${BOLD}%6s${RESET}  ${color}%5s${RESET}   %6s  %-10b  %s\n" \
+    "$user" "$value" "$grade" "$age" "$org_label" "$risk"
+done
+
+# ── Footer ───────────────────────────────────────────────────────────────
+>&2 printf "\r%80s\r" ""
+echo ""
+echo -e "${DIM}scored ${total} contributors — $(date -u +%Y-%m-%dT%H:%M:%SZ)${RESET}"
