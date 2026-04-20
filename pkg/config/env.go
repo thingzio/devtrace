@@ -4,7 +4,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// ArchivePublishDelay is the expected lag between an hour ending and
+// GH Archive publishing the corresponding file (~2 hours).
+const ArchivePublishDelay = 2 * time.Hour
 
 func GetEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {

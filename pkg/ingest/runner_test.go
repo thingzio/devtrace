@@ -3,13 +3,15 @@ package ingest
 import (
 	"testing"
 	"time"
+
+	"github.com/thingzio/devtrace/pkg/config"
 )
 
 func TestComputeHoursNoCursor(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC().Truncate(time.Hour)
-	lastAvailable := now.Add(-time.Hour)
+	lastAvailable := now.Add(-config.ArchivePublishDelay)
 
 	hours := computeHours(time.Time{}, 3, 24)
 
@@ -31,7 +33,7 @@ func TestComputeHoursWithCursor(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC().Truncate(time.Hour)
-	lastAvailable := now.Add(-time.Hour)
+	lastAvailable := now.Add(-config.ArchivePublishDelay)
 	cursor := lastAvailable.Add(-2 * time.Hour) // 2 hours behind
 
 	hours := computeHours(cursor, 1, 24)
@@ -51,7 +53,7 @@ func TestComputeHoursCaughtUp(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC().Truncate(time.Hour)
-	lastAvailable := now.Add(-time.Hour)
+	lastAvailable := now.Add(-config.ArchivePublishDelay)
 
 	hours := computeHours(lastAvailable, 5, 24)
 
@@ -81,7 +83,7 @@ func TestComputeHoursLookbackNoCursor(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now().UTC().Truncate(time.Hour)
-	lastAvailable := now.Add(-time.Hour)
+	lastAvailable := now.Add(-config.ArchivePublishDelay)
 
 	// Fresh install with lookback=24, catchupMax=5.
 	// Lookback should apply (not catchupMax) since there's no cursor.

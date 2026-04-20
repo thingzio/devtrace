@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -63,6 +64,10 @@ func Run(ctx context.Context, store *postgres.Store) error {
 			return ctx.Err()
 		}
 		if err := processHour(ctx, store, reader, hour, tenantRepos); err != nil {
+			if errors.Is(err, ErrArchiveNotFound) {
+				slog.Warn("archive not yet available", "hour", hour)
+				break // later hours won't be available either
+			}
 			slog.Error("process hour failed", "hour", hour, "error", err)
 			continue
 		}
@@ -123,7 +128,7 @@ func maybeCompact(ctx context.Context, store ingestStore) {
 //   - With cursor (catching up): returns up to catchupMax hours from cursor+1h.
 func computeHours(cursor time.Time, lookback, catchupMax int) []time.Time {
 	now := time.Now().UTC().Truncate(time.Hour)
-	lastAvailable := now.Add(-time.Hour)
+	lastAvailable := now.Add(-config.ArchivePublishDelay)
 
 	var start time.Time
 	var cap int

@@ -5,10 +5,14 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 )
+
+// ErrArchiveNotFound is returned when a GH Archive hourly file is not yet published.
+var ErrArchiveNotFound = errors.New("archive not found")
 
 const defaultBaseURL = "https://data.gharchive.org"
 
@@ -60,6 +64,9 @@ func (r *ArchiveReader) Stream(ctx context.Context, hour time.Time, fn func(Even
 		return fmt.Errorf("download %s: %w", url, err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("archive %s: %w", url, ErrArchiveNotFound)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("archive %s: status %d", url, resp.StatusCode)
 	}
