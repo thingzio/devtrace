@@ -99,6 +99,70 @@ func TestDestroySession(t *testing.T) {
 	}
 }
 
+func TestGetLastSignIns(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	ids := []int64{99910010, 99910011}
+	t.Cleanup(func() {
+		for _, id := range ids {
+			cleanup(t, db, id)
+		}
+	})
+
+	// Create two tenants.
+	tn1, err := tenant.UpsertTenant(ctx, db, ids[0], "signin-alice", "sa@test.com", "", "", "", "", "")
+	if err != nil {
+		t.Fatalf("upsert 1: %v", err)
+	}
+	tn2, err := tenant.UpsertTenant(ctx, db, ids[1], "signin-bob", "sb@test.com", "", "", "", "", "")
+	if err != nil {
+		t.Fatalf("upsert 2: %v", err)
+	}
+
+	// Create a session only for tn1.
+	_, err = tenant.CreateSession(ctx, db, tn1.ID, 10*time.Minute)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	result, err := tenant.GetLastSignIns(ctx, db, []string{tn1.ID, tn2.ID})
+	if err != nil {
+		t.Fatalf("GetLastSignIns: %v", err)
+	}
+
+	// tn1 should have a sign-in time.
+	if result[tn1.ID] == nil {
+		t.Error("expected sign-in time for tn1")
+	}
+
+	// tn2 should not (no sessions).
+	if result[tn2.ID] != nil {
+		t.Errorf("expected nil sign-in for tn2, got %v", result[tn2.ID])
+	}
+}
+
+func TestGetLastSignIns_Empty(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	result, err := tenant.GetLastSignIns(ctx, db, nil)
+	if err != nil {
+		t.Fatalf("GetLastSignIns(nil): %v", err)
+	}
+	if result != nil {
+		t.Errorf("expected nil result for empty input, got %v", result)
+	}
+
+	result, err = tenant.GetLastSignIns(ctx, db, []string{})
+	if err != nil {
+		t.Fatalf("GetLastSignIns(empty): %v", err)
+	}
+	if result != nil {
+		t.Errorf("expected nil result for empty slice, got %v", result)
+	}
+}
+
 func TestHashToken(t *testing.T) {
 	const input = "test-token-value"
 	want := sha256.Sum256([]byte(input))

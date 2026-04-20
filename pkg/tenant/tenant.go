@@ -89,6 +89,46 @@ func ListTenants(ctx context.Context, db *sql.DB) ([]*Tenant, error) {
 	return tenants, rows.Err()
 }
 
+// SearchTenants returns a page of tenants matching the query, ordered by creation date,
+// along with the total count of matching tenants.
+func SearchTenants(ctx context.Context, db *sql.DB, query string, limit, offset int) ([]*Tenant, int, error) {
+	const countQ = `SELECT COUNT(*) FROM devtrace_tenant
+		WHERE ($1 = '' OR username ILIKE '%' || $1 || '%' OR name ILIKE '%' || $1 || '%')`
+	var total int
+	if err := db.QueryRowContext(ctx, countQ, query).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count tenants: %w", err)
+	}
+	if total == 0 {
+		return nil, 0, nil
+	}
+
+	const q = `SELECT id, github_id, username, email, avatar_url,
+		COALESCE(name,''), COALESCE(company,''), COALESCE(location,''), COALESCE(bio,''),
+		plan, status, max_contributors, tos_accepted_at, created_at, updated_at
+		FROM devtrace_tenant
+		WHERE ($1 = '' OR username ILIKE '%' || $1 || '%' OR name ILIKE '%' || $1 || '%')
+		ORDER BY created_at
+		LIMIT $2 OFFSET $3`
+	rows, err := db.QueryContext(ctx, q, query, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("search tenants: %w", err)
+	}
+	defer rows.Close()
+
+	var tenants []*Tenant
+	for rows.Next() {
+		t, err := scanTenant(rows)
+		if err != nil {
+			return nil, 0, fmt.Errorf("scan tenant: %w", err)
+		}
+		tenants = append(tenants, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("search tenants rows: %w", err)
+	}
+	return tenants, total, nil
+}
+
 func AcceptToS(ctx context.Context, db *sql.DB, tenantID string) error {
 	const q = `UPDATE devtrace_tenant SET tos_accepted_at = NOW(), updated_at = NOW() WHERE id = $1`
 	res, err := db.ExecContext(ctx, q, tenantID)

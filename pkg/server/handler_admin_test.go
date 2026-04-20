@@ -201,3 +201,108 @@ func TestTokenQuotaRow_Fields(t *testing.T) {
 		t.Errorf("Used = %d, want 1000", row.Used)
 	}
 }
+
+func TestAdminTenantDetailHandler_NoTenant(t *testing.T) {
+	handler := adminTenantDetailHandler(nil, Options{Version: "test"})
+
+	r := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/admin/tenant/alice", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusNotFound)
+	}
+}
+
+func TestAdminTenantDetailHandler_EmptyUsername(t *testing.T) {
+	t.Setenv("DEVTRACE_ADMIN_USERS", "admin-user")
+
+	handler := adminTenantDetailHandler(nil, Options{Version: "test"})
+
+	// PathValue returns "" when not routed through mux.
+	r := httptest.NewRequestWithContext(adminCtx(), http.MethodGet, "/admin/tenant/", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	// Empty username → redirect to tenants list.
+	if w.Code != http.StatusFound {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusFound)
+	}
+	loc := w.Header().Get("Location")
+	if loc != "/admin/tenants" {
+		t.Errorf("location = %q, want /admin/tenants", loc)
+	}
+}
+
+func TestAdminTenantsHandler_PaginationParams(t *testing.T) {
+	t.Setenv("DEVTRACE_ADMIN_USERS", "admin-user")
+
+	handler := adminTenantsHandler(nil, Options{Version: "test"})
+
+	r := httptest.NewRequestWithContext(adminCtx(), http.MethodGet, "/admin/tenants?q=test&page=2", nil)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	// With nil store, template rendering will still be attempted (not 404).
+	if w.Code == http.StatusNotFound {
+		t.Error("authenticated admin should not get 404")
+	}
+}
+
+func TestAdminUpdatePlanRedirect(t *testing.T) {
+	t.Setenv("DEVTRACE_ADMIN_USERS", "admin-user")
+
+	handler := adminUpdatePlanFormHandler(nil)
+
+	r := httptest.NewRequestWithContext(adminCtx(), http.MethodPost, "/admin/tenant/alice/plan", nil)
+	r.SetPathValue("username", "alice")
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	// With nil db, plan validation fails → redirect to detail page with error.
+	if w.Code != http.StatusFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusFound)
+	}
+	loc := w.Header().Get("Location")
+	if loc != "/admin/tenant/alice?msg=invalid_plan" {
+		t.Errorf("location = %q, want /admin/tenant/alice?msg=invalid_plan", loc)
+	}
+}
+
+func TestAdminUpdateStatusRedirect(t *testing.T) {
+	t.Setenv("DEVTRACE_ADMIN_USERS", "admin-user")
+
+	handler := adminUpdateStatusFormHandler(nil)
+
+	r := httptest.NewRequestWithContext(adminCtx(), http.MethodPost, "/admin/tenant/bob/status", nil)
+	r.SetPathValue("username", "bob")
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, r)
+
+	// With no form value, status is empty → invalid_status → redirect to detail page.
+	if w.Code != http.StatusFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusFound)
+	}
+	loc := w.Header().Get("Location")
+	if loc != "/admin/tenant/bob?msg=invalid_status" {
+		t.Errorf("location = %q, want /admin/tenant/bob?msg=invalid_status", loc)
+	}
+}
+
+func TestTenantRow_LastSignIn(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	row := tenantRow{
+		Tenant:     &tenant.Tenant{Username: "test"},
+		HasInstall: true,
+		LastSignIn: &now,
+	}
+	if row.LastSignIn == nil {
+		t.Error("LastSignIn should not be nil")
+	}
+	if row.LastSignIn != &now {
+		t.Error("LastSignIn pointer mismatch")
+	}
+}

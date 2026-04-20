@@ -271,107 +271,6 @@
     });
   }
 
-  // Admin tenants table: search, sort, paginate.
-  function initAdminTenants() {
-    var table = document.getElementById('tenant-table');
-    if (!table) return;
-
-    var PAGE_SIZE = 25, curPage = 1, sortCol = 5, sortAsc = true;
-    var tbody = table.querySelector('tbody');
-    var allRows = Array.from(tbody.querySelectorAll('tr'));
-    var filtered = allRows.slice();
-
-    function applyFilter() {
-      var q = (document.getElementById('tenant-search').value || '').toLowerCase();
-      filtered = allRows.filter(function(r) {
-        if (!q) return true;
-        var u = (r.getAttribute('data-username') || '').toLowerCase();
-        var n = (r.getAttribute('data-name') || '').toLowerCase();
-        return u.indexOf(q) !== -1 || n.indexOf(q) !== -1;
-      });
-      curPage = 1;
-      render();
-    }
-
-    function applySort() {
-      var type = sortCol === 5 ? 'num' : 'str';
-      filtered.sort(function(a, b) {
-        var ac = a.children[sortCol], bc = b.children[sortCol];
-        var av = ac ? ac.textContent.trim() : '', bv = bc ? bc.textContent.trim() : '';
-        if (type === 'num') { av = parseInt(av, 10) || 0; bv = parseInt(bv, 10) || 0; }
-        else { av = av.toLowerCase(); bv = bv.toLowerCase(); }
-        if (av < bv) return sortAsc ? -1 : 1;
-        if (av > bv) return sortAsc ? 1 : -1;
-        return 0;
-      });
-      curPage = 1;
-      render();
-    }
-
-    function render() {
-      var total = filtered.length, pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-      if (curPage > pages) curPage = pages;
-      var start = (curPage - 1) * PAGE_SIZE, end = start + PAGE_SIZE;
-      allRows.forEach(function(r) { r.style.display = 'none'; });
-      filtered.slice(start, end).forEach(function(r) { r.style.display = ''; });
-      var pager = document.getElementById('tenant-pager');
-      if (total <= PAGE_SIZE) { pager.style.display = 'none'; }
-      else {
-        pager.style.display = 'flex';
-        document.getElementById('pg-info').textContent = 'Page ' + curPage + ' of ' + pages + ' (' + total + ' tenants)';
-        document.getElementById('pg-prev').disabled = curPage <= 1;
-        document.getElementById('pg-next').disabled = curPage >= pages;
-      }
-      document.querySelectorAll('.sort-arrow').forEach(function(s) { s.textContent = ''; });
-      var active = table.querySelector('th[data-col="' + sortCol + '"] .sort-arrow');
-      if (active) active.textContent = sortAsc ? ' \u25B2' : ' \u25BC';
-    }
-
-    var searchInput = document.getElementById('tenant-search');
-    if (searchInput) searchInput.addEventListener('input', applyFilter);
-
-    table.querySelectorAll('th.sortable').forEach(function(th) {
-      th.style.cursor = 'pointer';
-      th.addEventListener('click', function() {
-        var col = parseInt(th.getAttribute('data-col'), 10);
-        if (col === sortCol) { sortAsc = !sortAsc; } else { sortCol = col; sortAsc = true; }
-        applySort();
-      });
-    });
-
-    document.querySelectorAll('[data-page-dir]').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        curPage += parseInt(this.getAttribute('data-page-dir'), 10);
-        render();
-      });
-    });
-
-    render();
-  }
-
-  // Admin tenants: toggle edit/view mode per row.
-  function initToggleEdit() {
-    document.querySelectorAll('[data-toggle-edit]').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var u = this.getAttribute('data-toggle-edit');
-        document.querySelectorAll('.view-' + u).forEach(function(e) { e.style.display = e.style.display === 'none' ? '' : 'none'; });
-        document.querySelectorAll('.edit-' + u).forEach(function(e) { e.style.display = e.style.display === 'none' ? '' : 'none'; });
-      });
-    });
-  }
-
-  // Admin tenants: confirm before delete.
-  function initConfirmDelete() {
-    document.querySelectorAll('[data-confirm-delete]').forEach(function(form) {
-      form.addEventListener('submit', function(e) {
-        var u = this.getAttribute('data-confirm-delete');
-        if (!confirm('Delete tenant ' + u + '? This cannot be undone.')) {
-          e.preventDefault();
-        }
-      });
-    });
-  }
-
   // Settings page: data-action handlers.
   function initSettingsActions() {
     document.addEventListener('click', function(e) {
@@ -473,9 +372,6 @@
     initTrendChart();
     initLocalTime();
     initHelpSearch();
-    initAdminTenants();
-    initToggleEdit();
-    initConfirmDelete();
     initFeatureTooltips();
     initSettingsActions();
     applyTheme(getTheme());

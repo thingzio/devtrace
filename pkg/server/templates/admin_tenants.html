@@ -17,83 +17,46 @@
 
   <section class="settings-section">
     <h2>Tenants</h2>
+    <form method="GET" action="/admin/tenants" style="margin-bottom:0.5rem;">
+      <input type="text" name="q" value="{{.Query}}" placeholder="Search by username or name..."
+        style="width:100%;padding:0.4rem 0.6rem;background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:4px;font-size:0.85rem;">
+    </form>
     {{if .Tenants}}
-    <input type="text" id="tenant-search" placeholder="Search by username or name..."
-      style="width:100%;padding:0.4rem 0.6rem;margin-bottom:0.5rem;background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:4px;font-size:0.85rem;">
     <style>
-      .data-table select{background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:3px;padding:0.15rem 0.3rem;font-size:0.8rem;}
       .icon-ok{color:#3fb950;font-weight:bold;}
       .icon-no{color:var(--text-secondary,#8b949e);}
       .icon-warn{color:#f85149;font-weight:bold;}
       .badge-active{display:inline-block;padding:1px 8px;border-radius:10px;font-size:0.75rem;background:rgba(63,185,80,0.15);color:#3fb950;}
       .badge-suspended{display:inline-block;padding:1px 8px;border-radius:10px;font-size:0.75rem;background:rgba(248,81,73,0.15);color:#f85149;}
-      .btn-action{padding:3px 10px;border:1px solid #3fb950;border-radius:4px;background:transparent;color:#3fb950;font-size:0.78rem;cursor:pointer;}
-      .btn-action:hover{background:rgba(63,185,80,0.15);}
-      .btn-danger{padding:3px 10px;border:1px solid #f85149;border-radius:4px;background:transparent;color:#f85149;font-size:0.78rem;cursor:pointer;}
-      .btn-danger:hover{background:rgba(248,81,73,0.15);}
     </style>
-    <table class="data-table" id="tenant-table">
+    <table class="data-table">
       <thead>
         <tr>
-          <th class="sortable" data-col="0">Username <span class="sort-arrow"></span></th>
-          <th class="sortable" data-col="1">Name <span class="sort-arrow"></span></th>
-          <th class="sortable" data-col="2">Plan <span class="sort-arrow"></span></th>
+          <th>Username</th>
+          <th>Name</th>
+          <th>Plan</th>
           <th style="text-align:center">App</th>
-          <th class="sortable" data-col="4">Status <span class="sort-arrow"></span></th>
-          <th class="sortable" data-col="5">Created <span class="sort-arrow"></span></th>
-          <th></th>
+          <th>Status</th>
+          <th>Last Authenticated</th>
         </tr>
       </thead>
       <tbody>
         {{range .Tenants}}
-        <tr id="row-{{.Username}}" data-username="{{.Username}}" data-name="{{.Name}}">
-          <td><a href="/score/{{.Username}}">{{.Username}}</a></td>
+        <tr>
+          <td><a href="/admin/tenant/{{.Username}}">{{.Username}}</a></td>
           <td>{{.Name}}</td>
-          <td>
-            <span class="view-{{.Username}}">{{.Plan}}</span>
-            <form class="edit-{{.Username}}" method="POST" action="/admin/tenant/{{.Username}}/plan" style="display:none">
-              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-              <select name="plan">
-                <option value="free" {{if eq .Plan "free"}}selected{{end}}>free</option>
-                <option value="starter" {{if eq .Plan "starter"}}selected{{end}}>starter</option>
-                <option value="pro" {{if eq .Plan "pro"}}selected{{end}}>pro</option>
-              </select>
-              <button type="submit" class="btn-action">Save</button>
-            </form>
-          </td>
+          <td>{{.Plan}}</td>
           <td style="text-align:center">{{if .HasInstall}}<span class="icon-ok" title="Installed">&#10003;</span>{{else if eq .Plan "free"}}<span class="icon-no" title="N/A">&mdash;</span>{{else}}<span class="icon-warn" title="Not installed">&#10007;</span>{{end}}</td>
-          <td>
-            <span class="view-{{.Username}}">{{if eq .Status "active"}}<span class="badge-active">active</span>{{else}}<span class="badge-suspended">{{.Status}}</span>{{end}}</span>
-            <form class="edit-{{.Username}}" method="POST" action="/admin/tenant/{{.Username}}/status" style="display:none">
-              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-              <select name="status">
-                <option value="active" {{if eq .Status "active"}}selected{{end}}>active</option>
-                <option value="suspended" {{if eq .Status "suspended"}}selected{{end}}>suspended</option>
-              </select>
-              <button type="submit" class="btn-action">Save</button>
-            </form>
-          </td>
-          <td>{{.CreatedAt.Format "2006-01-02"}}</td>
-          <td>
-            <span class="view-{{.Username}}">
-              <button class="btn-action" data-toggle-edit="{{.Username}}">Edit</button>
-            </span>
-            <span class="edit-{{.Username}}" style="display:none">
-              <button class="btn-action" data-toggle-edit="{{.Username}}">Cancel</button>
-              <form method="POST" action="/admin/tenant/{{.Username}}/delete" style="display:inline" data-confirm-delete="{{.Username}}">
-                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-                <button type="submit" class="btn-danger">Delete</button>
-              </form>
-            </span>
-          </td>
+          <td>{{if eq .Status "active"}}<span class="badge-active">active</span>{{else}}<span class="badge-suspended">{{.Status}}</span>{{end}}</td>
+          <td>{{if .LastSignIn}}{{.LastSignIn.Format "2006-01-02"}}{{else}}&mdash;{{end}}</td>
         </tr>
         {{end}}
       </tbody>
     </table>
-    <div id="tenant-pager" style="display:flex;align-items:center;justify-content:center;gap:0.75rem;margin-top:0.5rem;font-size:0.8rem;color:var(--text-secondary,#8b949e);">
-      <button id="pg-prev" class="btn btn-sm" data-page-dir="-1">Prev</button>
-      <span id="pg-info"></span>
-      <button id="pg-next" class="btn btn-sm" data-page-dir="1">Next</button>
+    <div style="display:flex;align-items:center;justify-content:center;gap:0.75rem;margin-top:0.5rem;font-size:0.8rem;color:var(--text-secondary,#8b949e);">
+      {{if .HasPrev}}<a href="/admin/tenants?q={{.Query}}&page={{.PrevPage}}" class="btn btn-sm">Prev</a>{{else}}<span class="btn btn-sm" style="opacity:0.4;pointer-events:none;">Prev</span>{{end}}
+      <span>Page {{.Page}} of {{.TotalPages}} ({{.Total}} tenants)</span>
+      {{if .HasNext}}<a href="/admin/tenants?q={{.Query}}&page={{.NextPage}}" class="btn btn-sm">Next</a>{{else}}<span class="btn btn-sm" style="opacity:0.4;pointer-events:none;">Next</span>{{end}}
     </div>
     {{else}}<p>No tenants found.</p>{{end}}
   </section>

@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 var ErrSessionInvalid = errors.New("session expired or not found")
@@ -70,6 +72,33 @@ func GetLastSignIn(ctx context.Context, db *sql.DB, tenantID string) *time.Time 
 		return nil
 	}
 	return &t.Time
+}
+
+// GetLastSignIns returns the most recent session creation time for each of the
+// given tenant IDs. Tenants with no sessions are omitted from the result.
+func GetLastSignIns(ctx context.Context, db *sql.DB, tenantIDs []string) (map[string]*time.Time, error) {
+	if len(tenantIDs) == 0 {
+		return nil, nil
+	}
+	const q = `SELECT tenant_id, MAX(created_at) FROM devtrace_session
+		WHERE tenant_id = ANY($1) GROUP BY tenant_id`
+	rows, err := db.QueryContext(ctx, q, pq.Array(tenantIDs))
+	if err != nil {
+		return nil, fmt.Errorf("get last sign-ins: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]*time.Time, len(tenantIDs))
+	for rows.Next() {
+		var id string
+		var t time.Time
+		if err := rows.Scan(&id, &t); err != nil {
+			return nil, fmt.Errorf("scan last sign-in: %w", err)
+		}
+		v := t
+		result[id] = &v
+	}
+	return result, rows.Err()
 }
 
 // HashToken returns the hex-encoded SHA-256 hash of a raw token.

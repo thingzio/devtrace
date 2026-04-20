@@ -121,6 +121,129 @@ func TestGetTenantByGitHubID(t *testing.T) {
 	}
 }
 
+func TestSearchTenants(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	// Use unique GitHub IDs for this test.
+	ids := []int64{99900010, 99900011, 99900012}
+	t.Cleanup(func() {
+		for _, id := range ids {
+			cleanup(t, db, id)
+		}
+	})
+
+	// Seed three tenants.
+	for i, tc := range []struct {
+		ghID     int64
+		username string
+		name     string
+	}{
+		{ids[0], "search-alpha", "Alpha User"},
+		{ids[1], "search-beta", "Beta User"},
+		{ids[2], "search-gamma", "Gamma Person"},
+	} {
+		_, err := tenant.UpsertTenant(ctx, db, tc.ghID, tc.username, tc.username+"@test.com", "", tc.name, "", "", "")
+		if err != nil {
+			t.Fatalf("upsert[%d]: %v", i, err)
+		}
+	}
+
+	tests := []struct {
+		name    string
+		query   string
+		limit   int
+		offset  int
+		wantMin int // at least this many results (other tenants may exist in DB)
+		wantHit string
+	}{
+		{"empty query returns all", "", 100, 0, 3, "search-alpha"},
+		{"search by username prefix", "search-beta", 100, 0, 1, "search-beta"},
+		{"search by name", "Gamma", 100, 0, 1, "search-gamma"},
+		{"case insensitive", "ALPHA", 100, 0, 1, "search-alpha"},
+		{"no match", "zzz-nonexistent-999", 100, 0, 0, ""},
+		{"pagination limit", "", 2, 0, 2, ""},
+		{"pagination offset past results", "search-alpha", 100, 100, 0, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results, total, err := tenant.SearchTenants(ctx, db, tt.query, tt.limit, tt.offset)
+			if err != nil {
+				t.Fatalf("SearchTenants(%q): %v", tt.query, err)
+			}
+			if len(results) < tt.wantMin {
+				t.Errorf("got %d results, want at least %d", len(results), tt.wantMin)
+			}
+			if tt.wantHit != "" {
+				found := false
+				for _, r := range results {
+					if r.Username == tt.wantHit {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected %q in results", tt.wantHit)
+				}
+			}
+			if tt.query == "" && tt.offset == 0 {
+				if total < 3 {
+					t.Errorf("total = %d, want at least 3", total)
+				}
+			}
+			if tt.query == "zzz-nonexistent-999" {
+				if total != 0 {
+					t.Errorf("total = %d, want 0 for non-match", total)
+				}
+			}
+		})
+	}
+}
+
+func TestSearchTenants_PaginationTotal(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	ids := []int64{99900020, 99900021, 99900022}
+	t.Cleanup(func() {
+		for _, id := range ids {
+			cleanup(t, db, id)
+		}
+	})
+
+	for i, id := range ids {
+		_, err := tenant.UpsertTenant(ctx, db, id, "pgtest-"+string(rune('a'+i)), "", "", "", "", "", "")
+		if err != nil {
+			t.Fatalf("upsert: %v", err)
+		}
+	}
+
+	// Fetch page 1 with limit=2, verify total reflects all matching.
+	results, total, err := tenant.SearchTenants(ctx, db, "pgtest-", 2, 0)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	if len(results) != 2 {
+		t.Errorf("page 1 results = %d, want 2", len(results))
+	}
+	if total != 3 {
+		t.Errorf("total = %d, want 3", total)
+	}
+
+	// Fetch page 2.
+	results2, total2, err := tenant.SearchTenants(ctx, db, "pgtest-", 2, 2)
+	if err != nil {
+		t.Fatalf("search page 2: %v", err)
+	}
+	if len(results2) != 1 {
+		t.Errorf("page 2 results = %d, want 1", len(results2))
+	}
+	if total2 != 3 {
+		t.Errorf("total page 2 = %d, want 3", total2)
+	}
+}
+
 func TestAcceptToS(t *testing.T) {
 	db := testDB(t)
 	const ghID int64 = 99900004

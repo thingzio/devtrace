@@ -22,18 +22,31 @@ const (
 	durationNever = "never"
 )
 
+const tenantsPageSize = 10
+
 type tenantRow struct {
 	*tenant.Tenant
 	HasInstall bool
+	LastSignIn *time.Time
 }
 
 func buildTenantRows(ctx context.Context, db *sql.DB, tenants []*tenant.Tenant) []tenantRow {
+	ids := make([]string, len(tenants))
+	for i, tn := range tenants {
+		ids[i] = tn.ID
+	}
+
+	signIns, _ := tenant.GetLastSignIns(ctx, db, ids)
+
 	rows := make([]tenantRow, len(tenants))
 	for i, tn := range tenants {
 		rows[i] = tenantRow{Tenant: tn}
 		installs, err := tenant.GetActiveInstallations(ctx, db, tn.ID)
 		if err == nil && len(installs) > 0 {
 			rows[i].HasInstall = true
+		}
+		if signIns != nil {
+			rows[i].LastSignIn = signIns[tn.ID]
 		}
 	}
 	return rows
@@ -200,6 +213,40 @@ func adminTenantsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 
 		auditLog("view_tenants", tn, r.URL.Path, r.RemoteAddr, "")
 
+		query := r.URL.Query().Get("q")
+		page := 1
+		if p := r.URL.Query().Get("page"); p != "" {
+			if v, err := strconv.Atoi(p); err == nil && v > 0 {
+				page = v
+			}
+		}
+		data["Query"] = query
+		data["Page"] = page
+
+		if store != nil {
+			loadTenantList(r.Context(), store, data, query, page)
+		}
+
+		renderTemplate(w, "admin_tenants.html", data)
+	}
+}
+
+func adminTenantDetailHandler(store *postgres.Store, opts Options) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		data, tn := adminBaseData(r, opts)
+		if tn == nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		username := r.PathValue("username")
+		if username == "" {
+			http.Redirect(w, r, "/admin/tenants", http.StatusFound)
+			return
+		}
+
+		auditLog("view_tenant_detail", tn, r.URL.Path, r.RemoteAddr, fmt.Sprintf("user=%s", username))
+
 		csrfToken, err := middleware.GenerateCSRFToken()
 		if err != nil {
 			slog.Error("admin: generate csrf token", "error", err)
@@ -209,11 +256,30 @@ func adminTenantsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 		middleware.SetCSRFCookie(w, csrfToken, "/")
 		data["CSRFToken"] = csrfToken
 
-		if store != nil {
-			loadTenantList(r.Context(), store, data)
+		db := store.DB()
+		target, err := tenant.GetTenantByUsername(r.Context(), db, username)
+		if err != nil {
+			http.Redirect(w, r, "/admin/tenants?msg=not_found&user="+url.QueryEscape(username), http.StatusFound)
+			return
 		}
+		data["Target"] = target
 
-		renderTemplate(w, "admin_tenants.html", data)
+		hasInstall := false
+		installs, iErr := tenant.GetActiveInstallations(r.Context(), db, target.ID)
+		if iErr == nil && len(installs) > 0 {
+			hasInstall = true
+		}
+		data["HasInstall"] = hasInstall
+
+		data["LastSignIn"] = tenant.GetLastSignIn(r.Context(), db, target.ID)
+
+		recent, rErr := tenant.GetRecentScored(r.Context(), db, target.ID, 10)
+		if rErr != nil {
+			slog.Error("admin: get recent scored", "username", username, "error", rErr)
+		}
+		data["RecentScored"] = recent
+
+		renderTemplate(w, "admin_tenant_detail.html", data)
 	}
 }
 
@@ -249,13 +315,25 @@ func loadPipelineMetrics(ctx context.Context, store *postgres.Store, data map[st
 	}
 }
 
-func loadTenantList(ctx context.Context, store *postgres.Store, data map[string]any) {
-	tenants, err := tenant.ListTenants(ctx, store.DB())
+func loadTenantList(ctx context.Context, store *postgres.Store, data map[string]any, query string, page int) {
+	offset := (page - 1) * tenantsPageSize
+	tenants, total, err := tenant.SearchTenants(ctx, store.DB(), query, tenantsPageSize, offset)
 	if err != nil {
-		slog.Error("admin: list tenants", "error", err)
+		slog.Error("admin: search tenants", "error", err)
 		return
 	}
+	totalPages := (total + tenantsPageSize - 1) / tenantsPageSize
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
 	data["Tenants"] = buildTenantRows(ctx, store.DB(), tenants)
+	data["Total"] = total
+	data["TotalPages"] = totalPages
+	data["HasPrev"] = page > 1
+	data["HasNext"] = page < totalPages
+	data["PrevPage"] = page - 1
+	data["NextPage"] = page + 1
 }
 
 func hourlyCountBars(hc []postgres.HourlyCount) []activityBar {
@@ -360,9 +438,11 @@ func adminUpdatePlanFormHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		detailURL := "/admin/tenant/" + url.PathEscape(username)
+
 		_, ok := plan.Get(newPlan)
 		if !ok {
-			http.Redirect(w, r, "/admin/tenants?msg=invalid_plan&user="+url.QueryEscape(username), http.StatusFound)
+			http.Redirect(w, r, detailURL+"?msg=invalid_plan", http.StatusFound)
 			return
 		}
 
@@ -375,12 +455,12 @@ func adminUpdatePlanFormHandler(db *sql.DB) http.HandlerFunc {
 		p, _ := plan.Get(newPlan)
 		if _, err := tenant.UpdateTenantPlan(r.Context(), db, target.ID, newPlan, p.MaxContributors); err != nil {
 			slog.Error("admin: update plan", "username", username, "error", err)
-			http.Redirect(w, r, "/admin/tenants?msg=error&user="+url.QueryEscape(username), http.StatusFound)
+			http.Redirect(w, r, detailURL+"?msg=error", http.StatusFound)
 			return
 		}
 
 		auditLog("update_plan", tn, r.URL.Path, r.RemoteAddr, fmt.Sprintf("user=%s plan=%s", username, newPlan))
-		http.Redirect(w, r, "/admin/tenants?msg=plan_updated&user="+url.QueryEscape(username), http.StatusFound)
+		http.Redirect(w, r, "/admin/tenant/"+url.PathEscape(username)+"?msg=plan_updated", http.StatusFound)
 	}
 }
 
@@ -397,8 +477,10 @@ func adminUpdateStatusFormHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
+		detailURL := "/admin/tenant/" + url.PathEscape(username)
+
 		if newStatus != tenant.StatusActive && newStatus != tenant.StatusSuspended {
-			http.Redirect(w, r, "/admin/tenants?msg=invalid_status&user="+url.QueryEscape(username), http.StatusFound)
+			http.Redirect(w, r, detailURL+"?msg=invalid_status", http.StatusFound)
 			return
 		}
 
@@ -410,12 +492,12 @@ func adminUpdateStatusFormHandler(db *sql.DB) http.HandlerFunc {
 
 		if _, err := tenant.UpdateTenantStatus(r.Context(), db, target.ID, newStatus); err != nil {
 			slog.Error("admin: update status", "username", username, "error", err)
-			http.Redirect(w, r, "/admin/tenants?msg=error&user="+url.QueryEscape(username), http.StatusFound)
+			http.Redirect(w, r, detailURL+"?msg=error", http.StatusFound)
 			return
 		}
 
 		auditLog("update_status", tn, r.URL.Path, r.RemoteAddr, fmt.Sprintf("user=%s status=%s", username, newStatus))
-		http.Redirect(w, r, "/admin/tenants?msg=status_updated&user="+url.QueryEscape(username), http.StatusFound)
+		http.Redirect(w, r, "/admin/tenant/"+url.PathEscape(username)+"?msg=status_updated", http.StatusFound)
 	}
 }
 

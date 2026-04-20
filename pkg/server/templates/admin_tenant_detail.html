@@ -1,0 +1,125 @@
+{{define "content"}}
+<main class="dashboard-main">
+<div class="settings admin-wide">
+  <a href="/admin/tenants" class="back-link">&larr; Tenants</a>
+  <h1>Admin</h1>
+
+  <nav style="display:flex;gap:16px;margin-bottom:24px;border-bottom:1px solid var(--border-color);padding-bottom:8px">
+    <a href="/admin">Pipeline</a>
+    <a href="/admin/tokens">Tokens</a>
+    <a href="/admin/tenants" style="font-weight:bold">Tenants</a>
+    <a href="/admin/metrics">Metrics</a>
+  </nav>
+
+  {{if .FlashMsg}}
+  <div class="flash-msg">{{.FlashMsg}}</div>
+  {{end}}
+
+  {{with .Target}}
+  <style>
+    .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem 1.5rem;margin-bottom:1.5rem;font-size:0.85rem;}
+    .detail-grid dt{color:var(--text-secondary,#8b949e);}
+    .detail-grid dd{margin:0;}
+    .badge-active{display:inline-block;padding:1px 8px;border-radius:10px;font-size:0.75rem;background:rgba(63,185,80,0.15);color:#3fb950;}
+    .badge-suspended{display:inline-block;padding:1px 8px;border-radius:10px;font-size:0.75rem;background:rgba(248,81,73,0.15);color:#f85149;}
+    .icon-ok{color:#3fb950;font-weight:bold;}
+    .icon-warn{color:#f85149;font-weight:bold;}
+    .btn-action{padding:3px 10px;border:1px solid #3fb950;border-radius:4px;background:transparent;color:#3fb950;font-size:0.78rem;cursor:pointer;}
+    .btn-action:hover{background:rgba(63,185,80,0.15);}
+    .btn-danger{padding:3px 10px;border:1px solid #f85149;border-radius:4px;background:transparent;color:#f85149;font-size:0.78rem;cursor:pointer;}
+    .btn-danger:hover{background:rgba(248,81,73,0.15);}
+    .admin-form-row{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;}
+    .admin-form-row label{min-width:60px;font-size:0.85rem;color:var(--text-secondary,#8b949e);}
+    .admin-form-row select{background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:3px;padding:0.15rem 0.3rem;font-size:0.8rem;}
+  </style>
+
+  <section class="settings-section">
+    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">
+      {{if .AvatarURL}}<img src="{{.AvatarURL}}" alt="{{.Username}}" style="width:64px;height:64px;border-radius:50%;">{{end}}
+      <div>
+        <h2 style="margin:0;">{{.Username}}</h2>
+        {{if .Name}}<div style="font-size:0.85rem;color:var(--text-secondary,#8b949e);margin-top:0.25rem;">{{.Name}}</div>{{end}}
+        {{if or .Company .Location}}<div style="font-size:0.85rem;color:var(--text-secondary,#8b949e);margin-top:0.25rem;">
+          {{if .Company}}<span>{{.Company}}</span>{{end}}
+          {{if and .Company .Location}}<span> &middot; </span>{{end}}
+          {{if .Location}}<span>{{.Location}}</span>{{end}}
+        </div>{{end}}
+        {{if .Bio}}<div style="font-size:0.8rem;color:var(--text-secondary,#8b949e);margin-top:0.25rem;">{{.Bio}}</div>{{end}}
+      </div>
+    </div>
+
+    <dl class="detail-grid">
+      <dt>Email</dt><dd>{{if .Email}}{{.Email}}{{else}}&mdash;{{end}}</dd>
+      <dt>GitHub ID</dt><dd>{{.GitHubID}}</dd>
+      <dt>Created</dt><dd>{{.CreatedAt.Format "2006-01-02 15:04"}}</dd>
+      <dt>Last Authenticated</dt><dd>{{if $.LastSignIn}}{{$.LastSignIn.Format "2006-01-02 15:04"}}{{else}}&mdash;{{end}}</dd>
+      <dt>App Installed</dt><dd>{{if $.HasInstall}}<span class="icon-ok">&#10003;</span>{{else}}<span class="icon-warn">&#10007;</span>{{end}}</dd>
+      <dt>Max Contributors</dt><dd>{{.MaxContributors}}</dd>
+    </dl>
+  </section>
+
+  <section class="settings-section">
+    <h3>Plan &amp; Status</h3>
+    <form method="POST" action="/admin/tenant/{{.Username}}/plan" class="admin-form-row">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+      <label>Plan</label>
+      <select name="plan">
+        <option value="free" {{if eq .Plan "free"}}selected{{end}}>free</option>
+        <option value="starter" {{if eq .Plan "starter"}}selected{{end}}>starter</option>
+        <option value="pro" {{if eq .Plan "pro"}}selected{{end}}>pro</option>
+      </select>
+      <button type="submit" class="btn-action">Save</button>
+    </form>
+    <form method="POST" action="/admin/tenant/{{.Username}}/status" class="admin-form-row">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+      <label>Status</label>
+      <select name="status">
+        <option value="active" {{if eq .Status "active"}}selected{{end}}>active</option>
+        <option value="suspended" {{if eq .Status "suspended"}}selected{{end}}>suspended</option>
+      </select>
+      <button type="submit" class="btn-action">Save</button>
+    </form>
+  </section>
+
+  <section class="settings-section">
+    <h3>Recently Scored</h3>
+    {{if $.RecentScored}}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Contributor</th>
+          <th>Repo</th>
+          <th>Source</th>
+          <th>Scope</th>
+          <th>Scored</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $.RecentScored}}
+        <tr>
+          <td><a href="/score/{{.Username}}{{if .Repo}}?repo={{.Repo}}{{end}}" title="View scorecard" style="text-decoration:none;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;opacity:0.5;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></td>
+          <td>{{.Username}}</td>
+          <td>{{if .Repo}}{{.Repo}}{{else}}&mdash;{{end}}</td>
+          <td>{{if eq .Source "ui"}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;opacity:0.5;" title="Dashboard"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>{{else}}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;opacity:0.5;" title="API"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>{{end}}</td>
+          <td>{{.Scope}}</td>
+          <td><time datetime="{{.ScoredAt.Format "2006-01-02T15:04:05Z"}}">{{.ScoredAt.Format "2006-01-02 15:04"}}</time></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}<p>No scored contributors yet.</p>{{end}}
+  </section>
+
+  <section class="settings-section" style="margin-top:2rem;">
+    <h3 style="color:#f85149;">Danger Zone</h3>
+    <form method="POST" action="/admin/tenant/{{.Username}}/delete" style="display:inline"
+      onsubmit="return confirm('Delete tenant {{.Username}}? This cannot be undone.');">
+      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+      <button type="submit" class="btn-danger">Delete Tenant</button>
+    </form>
+  </section>
+  {{end}}
+</div>
+</main>
+{{end}}
