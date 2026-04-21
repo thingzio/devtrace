@@ -417,6 +417,22 @@ func (s *Store) WatchlistManualCount(ctx context.Context, tenantID string) (int,
 	return count, nil
 }
 
+// LastDigestSentAt returns the most recent sent_at time for a tenant's digest events.
+// Returns nil if no digest has been sent yet.
+func (s *Store) LastDigestSentAt(ctx context.Context, tenantID string) (*time.Time, error) {
+	var t *time.Time
+	err := s.db.QueryRowContext(ctx,
+		`SELECT MAX(ne.sent_at)
+		 FROM devtrace_notification_event ne
+		 JOIN devtrace_watchlist w ON w.id = ne.watchlist_id
+		 WHERE w.tenant_id = $1 AND ne.sent_at IS NOT NULL`,
+		tenantID).Scan(&t)
+	if err != nil {
+		return nil, fmt.Errorf("last digest sent at: %w", err)
+	}
+	return t, nil
+}
+
 // UnsentEventCount returns the total number of unsent events for a tenant.
 func (s *Store) UnsentEventCount(ctx context.Context, tenantID string) (int, error) {
 	var count int

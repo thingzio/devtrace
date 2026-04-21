@@ -372,6 +372,10 @@ func adminTenantDetailHandler(store *postgres.Store, opts Options) http.HandlerF
 
 		data["LastSignIn"] = tenant.GetLastSignIn(r.Context(), db, target.ID)
 
+		if lastSent, lsErr := store.LastDigestSentAt(r.Context(), target.ID); lsErr == nil && lastSent != nil {
+			data["LastDigestSent"] = lastSent
+		}
+
 		recent, rErr := tenant.GetRecentScored(r.Context(), db, target.ID, 10)
 		if rErr != nil {
 			slog.Error("admin: get recent scored", "username", username, "error", rErr)

@@ -54,6 +54,7 @@
       <dt>Created</dt><dd>{{.CreatedAt.Format "2006-01-02 15:04"}}</dd>
       <dt>Last Authenticated</dt><dd>{{if $.LastSignIn}}{{$.LastSignIn.Format "2006-01-02 15:04"}}{{else}}&mdash;{{end}}</dd>
       <dt>App Installed</dt><dd>{{if $.HasInstall}}<span class="icon-ok">&#10003;</span>{{else}}<span class="icon-warn">&#10007;</span>{{end}}</dd>
+      <dt>Last Digest Sent</dt><dd>{{if $.LastDigestSent}}{{$.LastDigestSent.Format "2006-01-02 15:04"}}{{else}}&mdash;{{end}}</dd>
       <dt>Max Contributors</dt><dd>{{.MaxContributors}}</dd>
     </dl>
   </section>
