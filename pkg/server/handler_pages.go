@@ -250,6 +250,7 @@ func settingsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			"Version":           opts.Version,
 			"Commit":            opts.Commit,
 			"Date":              opts.Date,
+			"CSRFToken":         middleware.CSRFTokenFromContext(r.Context()),
 			"NavUser":           tn.Username,
 			"NavAvatar":         tn.AvatarURL,
 			"username":          tn.Username,

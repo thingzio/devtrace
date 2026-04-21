@@ -2442,6 +2442,14 @@ a.link {
 .settings-section .hint a {
   color: var(--accent);
 }
+.settings-section input[type="text"] {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--border-color, #e1e4e8);
+  border-radius: 6px;
+  background: var(--page-content-blockColor, #fff);
+  color: var(--page-content-txtColor, #24292e);
+}
 .flash-msg {
   padding: 0.5rem 0.75rem;
   margin-bottom: 1rem;

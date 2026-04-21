@@ -73,6 +73,7 @@
 
   <section style="margin-top:2rem;">
     <h2>Watchlist Activity</h2>
+    <p style="color:var(--text-secondary,#8b949e);font-size:0.85rem;margin-bottom:0.75rem;">Track new contributors and score changes in your watched GitHub orgs. <a href="/settings" style="color:var(--accent,#58a6ff);">Manage watchlists</a></p>
     {{if .events}}
     <table class="data-table">
       <thead>
@@ -104,7 +105,7 @@
     </div>
     {{end}}
     {{else}}
-    <p>No watchlist activity yet. Events will appear when new contributors are detected or scores change in your watched orgs.</p>
+    <p>No watchlist activity yet. <a href="/settings" style="color:var(--accent,#58a6ff);">Add a watchlist</a> to start monitoring.</p>
     {{end}}
   </section>
 </div>
