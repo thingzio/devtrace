@@ -10,7 +10,7 @@ import (
 
 func TestRenderDigestEmpty(t *testing.T) {
 	t.Parallel()
-	html, text := RenderDigest(nil, "https://example.com")
+	html, text := RenderDigest(nil, "https://example.com", "")
 	if !strings.Contains(html, "DevTrace Weekly Digest") {
 		t.Error("HTML should contain digest header")
 	}
@@ -38,7 +38,7 @@ func TestRenderDigestNewContributor(t *testing.T) {
 		},
 	}
 
-	html, text := RenderDigest(events, "https://devtrace.example.com")
+	html, text := RenderDigest(events, "https://devtrace.example.com", "")
 
 	if !strings.Contains(html, "alice") {
 		t.Error("HTML should contain username")
@@ -77,7 +77,7 @@ func TestRenderDigestScoreChange(t *testing.T) {
 		},
 	}
 
-	html, text := RenderDigest(events, "https://dt.io")
+	html, text := RenderDigest(events, "https://dt.io", "")
 
 	if !strings.Contains(html, "Grade") {
 		t.Error("HTML should contain 'Grade' badge for score_change")
@@ -98,7 +98,7 @@ func TestRenderDigestMultipleEvents(t *testing.T) {
 		{ID: 3, EventType: "new_contributor", Username: "carol", Target: "org1", Details: map[string]any{}, CreatedAt: time.Now()},
 	}
 
-	html, text := RenderDigest(events, "https://dt.io")
+	html, text := RenderDigest(events, "https://dt.io", "")
 
 	for _, name := range []string{"alice", "bob", "carol"} {
 		if !strings.Contains(html, name) {
@@ -194,6 +194,73 @@ func TestNumFromDetails(t *testing.T) {
 	})
 }
 
+func TestRenderDigestWithUnsubURL(t *testing.T) {
+	t.Parallel()
+	events := []postgres.NotificationEvent{
+		{ID: 1, EventType: "new_contributor", Username: "alice", Target: "org1",
+			Details: map[string]any{"prs_opened": float64(1)}, CreatedAt: time.Now()},
+	}
+
+	unsubURL := "https://dt.io/digest/unsubscribe?tenant=123&token=abc"
+	html, text := RenderDigest(events, "https://dt.io", unsubURL)
+
+	if !strings.Contains(html, unsubURL) {
+		t.Error("HTML should contain unsubscribe URL")
+	}
+	if !strings.Contains(html, "Unsubscribe") {
+		t.Error("HTML should contain Unsubscribe link text")
+	}
+	if strings.Contains(html, "/settings") {
+		t.Error("HTML should NOT contain settings link when unsubURL is provided")
+	}
+	if !strings.Contains(text, unsubURL) {
+		t.Error("text should contain unsubscribe URL")
+	}
+}
+
+func TestUnsubscribeToken(t *testing.T) {
+	t.Parallel()
+	token := UnsubscribeToken("my-secret", "tenant-123")
+	if token == "" {
+		t.Fatal("token should not be empty")
+	}
+	if len(token) != 64 { // SHA-256 hex = 64 chars
+		t.Errorf("token length = %d, want 64", len(token))
+	}
+}
+
+func TestValidateUnsubscribeToken(t *testing.T) {
+	t.Parallel()
+	secret := "test-secret"
+	tenantID := "tenant-456"
+	token := UnsubscribeToken(secret, tenantID)
+
+	if !ValidateUnsubscribeToken(secret, tenantID, token) {
+		t.Error("valid token should pass validation")
+	}
+	if ValidateUnsubscribeToken(secret, tenantID, "bad-token") {
+		t.Error("invalid token should fail validation")
+	}
+	if ValidateUnsubscribeToken("wrong-secret", tenantID, token) {
+		t.Error("wrong secret should fail validation")
+	}
+	if ValidateUnsubscribeToken(secret, "wrong-tenant", token) {
+		t.Error("wrong tenant should fail validation")
+	}
+}
+
+func TestHMACSecret(t *testing.T) {
+	t.Setenv("DIGEST_HMAC_SECRET", "test-hmac-key")
+	if got := HMACSecret(); got != "test-hmac-key" {
+		t.Errorf("HMACSecret = %q, want %q", got, "test-hmac-key")
+	}
+
+	t.Setenv("DIGEST_HMAC_SECRET", "")
+	if got := HMACSecret(); got != "" {
+		t.Errorf("HMACSecret = %q, want empty", got)
+	}
+}
+
 func TestRenderDigestHTMLEscaping(t *testing.T) {
 	t.Parallel()
 	events := []postgres.NotificationEvent{
@@ -207,7 +274,7 @@ func TestRenderDigestHTMLEscaping(t *testing.T) {
 		},
 	}
 
-	htmlBody, _ := RenderDigest(events, "https://dt.io")
+	htmlBody, _ := RenderDigest(events, "https://dt.io", "")
 
 	// The displayed username and target are HTML-escaped.
 	if !strings.Contains(htmlBody, "user&lt;script&gt;") {

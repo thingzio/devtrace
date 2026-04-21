@@ -12,24 +12,29 @@ const eventTypeScoreChange = "score_change"
 
 // RenderDigest produces HTML and plain-text bodies for a weekly digest email.
 // Events are pre-sorted by created_at DESC and capped at the caller's limit.
-func RenderDigest(events []postgres.NotificationEvent, baseURL string) (htmlBody, textBody string) {
+// unsubURL is the HMAC-signed one-click unsubscribe URL (may be empty if secret is not configured).
+func RenderDigest(events []postgres.NotificationEvent, baseURL, unsubURL string) (htmlBody, textBody string) {
 	var hb, tb strings.Builder
 
+	// Dark theme matching DevTrace UI: bg=#0c1017, text=#e6edf3, card=#171a22, border=#242836, accent=#4a9eff, muted=#8b949e
 	hb.WriteString(`<!DOCTYPE html><html><head><meta charset="utf-8"></head>`)
-	hb.WriteString(`<body style="font-family:-apple-system,BlinkMacSystemFont,`)
-	hb.WriteString(`'Segoe UI',Roboto,sans-serif;color:#24292f;max-width:600px;margin:0 auto;padding:20px;">`)
-	hb.WriteString(`<h2 style="margin:0 0 16px 0;font-size:20px;">DevTrace Weekly Digest</h2>`)
-	hb.WriteString(`<p style="color:#57606a;margin:0 0 16px 0;">Here's what happened in your watched organizations this week.</p>`)
+	hb.WriteString(`<body style="margin:0;padding:0;background:#0c1017;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">`)
+	hb.WriteString(`<div style="max-width:600px;margin:0 auto;padding:24px;">`)
+	hb.WriteString(`<div style="text-align:center;margin-bottom:24px;">`)
+	hb.WriteString(`<h1 style="color:#e6edf3;font-size:20px;margin:0;">DevTrace Weekly Digest</h1>`)
+	hb.WriteString(`<p style="color:#8b949e;font-size:13px;margin:4px 0 0;">Here's what happened in your watched organizations this week.</p>`)
+	hb.WriteString(`</div>`)
 
 	tb.WriteString("DevTrace Weekly Digest\n")
 	tb.WriteString("======================\n\n")
 
-	hb.WriteString(`<table style="width:100%;border-collapse:collapse;font-size:14px;">`)
-	hb.WriteString(`<tr style="border-bottom:2px solid #d0d7de;text-align:left;">`)
-	hb.WriteString(`<th style="padding:8px 12px;">Contributor</th>`)
-	hb.WriteString(`<th style="padding:8px 12px;">Org</th>`)
-	hb.WriteString(`<th style="padding:8px 12px;">Type</th>`)
-	hb.WriteString(`<th style="padding:8px 12px;">Activity</th>`)
+	hb.WriteString(`<div style="background:#171a22;border:1px solid #242836;border-radius:6px;padding:16px;">`)
+	hb.WriteString(`<table style="width:100%;border-collapse:collapse;font-size:13px;color:#e6edf3;">`)
+	hb.WriteString(`<tr style="border-bottom:1px solid #242836;text-align:left;">`)
+	hb.WriteString(`<th style="padding:8px 12px;color:#8b949e;font-size:12px;">Contributor</th>`)
+	hb.WriteString(`<th style="padding:8px 12px;color:#8b949e;font-size:12px;">Org</th>`)
+	hb.WriteString(`<th style="padding:8px 12px;color:#8b949e;font-size:12px;">Type</th>`)
+	hb.WriteString(`<th style="padding:8px 12px;color:#8b949e;font-size:12px;">Activity</th>`)
 	hb.WriteString(`</tr>`)
 
 	for _, ev := range events {
@@ -38,16 +43,16 @@ func RenderDigest(events []postgres.NotificationEvent, baseURL string) (htmlBody
 		escapedTarget := html.EscapeString(ev.Target)
 
 		typeBadge := "New"
-		typeColor := "#1a7f37"
+		typeColor := "#3fb950"
 		if ev.EventType == eventTypeScoreChange {
 			typeBadge = "Grade"
-			typeColor = "#9a6700"
+			typeColor = "#d29922"
 		}
 
 		detail := formatDetail(ev)
 
-		hb.WriteString(`<tr style="border-bottom:1px solid #d0d7de;">`)
-		fmt.Fprintf(&hb, `<td style="padding:8px 12px;"><a href="%s" style="color:#0969da;text-decoration:none;">%s</a></td>`, scoreURL, escapedUser)
+		hb.WriteString(`<tr style="border-bottom:1px solid #242836;">`)
+		fmt.Fprintf(&hb, `<td style="padding:8px 12px;"><a href="%s" style="color:#4a9eff;text-decoration:none;">%s</a></td>`, scoreURL, escapedUser)
 		fmt.Fprintf(&hb, `<td style="padding:8px 12px;">%s</td>`, escapedTarget)
 		fmt.Fprintf(&hb, `<td style="padding:8px 12px;"><span style="background:%s;color:#fff;padding:2px 8px;border-radius:12px;font-size:12px;">%s</span></td>`, typeColor, typeBadge)
 		fmt.Fprintf(&hb, `<td style="padding:8px 12px;">%s</td>`, html.EscapeString(detail))
@@ -56,26 +61,30 @@ func RenderDigest(events []postgres.NotificationEvent, baseURL string) (htmlBody
 		fmt.Fprintf(&tb, "- %s (%s) [%s] %s\n  %s\n\n", ev.Username, ev.Target, typeBadge, detail, scoreURL)
 	}
 
-	hb.WriteString(`</table>`)
+	hb.WriteString(`</table></div>`)
 
 	dashboardURL := baseURL + "/dashboard"
 	fmt.Fprintf(&hb,
-		`<p style="margin:20px 0;"><a href="%s" `+
-			`style="display:inline-block;background:#0969da;color:#fff;`+
-			`padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;">`+
-			`View all activity on your dashboard</a></p>`, dashboardURL)
+		`<div style="text-align:center;margin-top:24px;">`+
+			`<a href="%s" style="display:inline-block;background:#4a9eff;color:#fff;text-decoration:none;`+
+			`padding:10px 24px;border-radius:6px;font-size:14px;font-weight:600;">View all activity on your dashboard</a></div>`,
+		dashboardURL)
 	fmt.Fprintf(&tb, "View all activity: %s\n\n", dashboardURL)
 
-	settingsURL := baseURL + "/settings"
-	fmt.Fprintf(&hb,
-		`<hr style="border:none;border-top:1px solid #d0d7de;margin:24px 0;">`+
-			`<p style="color:#57606a;font-size:12px;">`+
-			`You're receiving this because you have active watchlists. `+
-			`<a href="%s" style="color:#0969da;">Manage watchlists</a></p>`,
-		settingsURL)
-	fmt.Fprintf(&tb, "---\nManage watchlists: %s\n", settingsURL)
+	hb.WriteString(`<div style="text-align:center;margin-top:32px;padding-top:16px;border-top:1px solid #242836;">`)
+	hb.WriteString(`<p style="color:#8b949e;font-size:11px;margin:0;">`)
+	hb.WriteString(`You're receiving this because you have active watchlists.<br>`)
+	if unsubURL != "" {
+		fmt.Fprintf(&hb, `<a href="%s" style="color:#8b949e;text-decoration:underline;">Unsubscribe</a>`, unsubURL)
+		fmt.Fprintf(&tb, "---\nUnsubscribe: %s\n", unsubURL)
+	} else {
+		settingsURL := baseURL + "/settings"
+		fmt.Fprintf(&hb, `<a href="%s" style="color:#8b949e;text-decoration:underline;">Manage watchlists</a>`, settingsURL)
+		fmt.Fprintf(&tb, "---\nManage watchlists: %s\n", settingsURL)
+	}
+	hb.WriteString(`</p></div>`)
 
-	hb.WriteString(`</body></html>`)
+	hb.WriteString(`</div></body></html>`)
 
 	return hb.String(), tb.String()
 }

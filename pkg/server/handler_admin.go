@@ -205,8 +205,8 @@ func adminSendTestDigestHandler(store *postgres.Store) http.HandlerFunc {
 			events = sampleDigestEvents()
 		}
 
-		htmlBody, textBody := watchlist.RenderDigest(events, baseURL)
-		unsubURL := baseURL + "/settings"
+		unsubURL := buildAdminUnsubscribeURL(baseURL, tn.ID)
+		htmlBody, textBody := watchlist.RenderDigest(events, baseURL, unsubURL)
 		if err := devnet.SendEmail(r.Context(), apiKey, "noreply@thingz.io", tn.Email,
 			"DevTrace Weekly Digest (Test)", htmlBody, textBody, "",
 			devnet.WithUnsubscribeURL(unsubURL)); err != nil {
@@ -245,6 +245,15 @@ func sampleDigestEvents() []postgres.NotificationEvent {
 			Details: map[string]any{"old_grade": "C", "new_grade": "B"},
 		},
 	}
+}
+
+func buildAdminUnsubscribeURL(baseURL, tenantID string) string {
+	secret := watchlist.HMACSecret()
+	if secret == "" {
+		return ""
+	}
+	token := watchlist.UnsubscribeToken(secret, tenantID)
+	return fmt.Sprintf("%s/digest/unsubscribe?tenant=%s&token=%s", baseURL, tenantID, token)
 }
 
 func adminTokensHandler(pool *ghclient.TokenPool, opts Options) http.HandlerFunc {

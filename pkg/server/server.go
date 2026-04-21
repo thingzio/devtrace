@@ -449,6 +449,9 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	mux.Handle("POST /settings/watchlist/{id}/delete", requireSession(middleware.ValidateCSRF(deleteWatchlistHandler(store))))
 	mux.Handle("POST /settings/watchlist/{id}/toggle-email", requireSession(middleware.ValidateCSRF(toggleWatchlistEmailHandler(store))))
 
+	// Digest unsubscribe — public, HMAC-validated (no auth required)
+	mux.HandleFunc("GET /digest/unsubscribe", digestUnsubscribeHandler(store))
+
 	// Score card page — accepts any auth, rate-limited (HTML 429)
 	mux.Handle("GET /score/{username}", requireAny(csrf(authAwareRateLimit(unauthRL, authRL, true, opts.Version)(scorecardHandler(store, scoreSvc, opts)))))
 

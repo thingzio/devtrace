@@ -87,6 +87,31 @@ resource "google_secret_manager_secret_version" "github_token" {
   secret_data = var.github_token
 }
 
+resource "google_secret_manager_secret" "digest_hmac_secret" {
+  count     = var.digest_hmac_secret != "" ? 1 : 0
+  secret_id = "${var.prefix}-digest-hmac-secret"
+  project   = var.project_id
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.default]
+}
+
+resource "google_secret_manager_secret_version" "digest_hmac_secret" {
+  count       = var.digest_hmac_secret != "" ? 1 : 0
+  secret      = google_secret_manager_secret.digest_hmac_secret[0].id
+  secret_data = var.digest_hmac_secret
+}
+
+resource "google_secret_manager_secret_iam_member" "run_digest_hmac" {
+  count     = var.digest_hmac_secret != "" ? 1 : 0
+  secret_id = google_secret_manager_secret.digest_hmac_secret[0].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.run.email}"
+}
+
 resource "google_secret_manager_secret_iam_member" "run_anthropic" {
   secret_id = google_secret_manager_secret.anthropic_api_key.id
   role      = "roles/secretmanager.secretAccessor"

@@ -3,6 +3,7 @@ package ingest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -456,8 +457,8 @@ func sendOneDigest(ctx context.Context, store ingestStore,
 		return false
 	}
 
-	htmlBody, textBody := watchlist.RenderDigest(events, baseURL)
-	unsubURL := baseURL + "/settings"
+	unsubURL := buildUnsubscribeURL(baseURL, t.TenantID)
+	htmlBody, textBody := watchlist.RenderDigest(events, baseURL, unsubURL)
 	if err := devnet.SendEmail(ctx, apiKey, "noreply@thingz.io", t.Email,
 		"DevTrace Weekly Digest", htmlBody, textBody, "",
 		devnet.WithUnsubscribeURL(unsubURL)); err != nil {
@@ -474,6 +475,15 @@ func sendOneDigest(ctx context.Context, store ingestStore,
 	}
 	slog.Info("digest sent", "tenant", t.Username, "events", len(events))
 	return true
+}
+
+func buildUnsubscribeURL(baseURL, tenantID string) string {
+	secret := watchlist.HMACSecret()
+	if secret == "" {
+		return ""
+	}
+	token := watchlist.UnsubscribeToken(secret, tenantID)
+	return fmt.Sprintf("%s/digest/unsubscribe?tenant=%s&token=%s", baseURL, tenantID, token)
 }
 
 func saveDigestState(ctx context.Context, store ingestStore) {

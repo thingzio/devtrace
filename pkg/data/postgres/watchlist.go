@@ -312,6 +312,18 @@ func (s *Store) ToggleWatchlistEmail(ctx context.Context, watchlistID, tenantID 
 	return nil
 }
 
+// DisableWatchlistEmails sets notify_email = false for all watchlists belonging to a tenant.
+// Used by the one-click unsubscribe handler.
+func (s *Store) DisableWatchlistEmails(ctx context.Context, tenantID string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE devtrace_watchlist SET notify_email = FALSE WHERE tenant_id = $1`,
+		tenantID)
+	if err != nil {
+		return fmt.Errorf("disable watchlist emails: %w", err)
+	}
+	return nil
+}
+
 // EnsureImplicitWatchlist creates an implicit watchlist entry for a GitHub App installation.
 // Idempotent: does nothing if the entry already exists.
 func (s *Store) EnsureImplicitWatchlist(ctx context.Context, tenantID, targetLogin string) error {
