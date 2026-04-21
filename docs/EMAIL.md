@@ -112,3 +112,15 @@ Deploy with this change. All tenants on Starter/Pro plans with email-enabled wat
 | Event scope: PRs | yes | yes | yes |
 | Event scope: PR reviews | no | yes | yes |
 | Event scope: Issues + comments | no | no | yes |
+
+---
+
+## Future: One-Click Unsubscribe
+
+Currently, users manage email preferences by signing in and toggling per-watchlist settings on `/settings`. A proper one-click unsubscribe (RFC 8058) is not yet implemented. When added, it should include:
+
+- HMAC-signed URL: `/watchlist/unsubscribe?id={watchlist_id}&sig={hmac}` — no sign-in required
+- New env var `DIGEST_UNSUBSCRIBE_SECRET` for the HMAC signing key (add to Terraform + Secret Manager)
+- Public handler that validates the signature and sets `notify_email = false`
+- `List-Unsubscribe` and `List-Unsubscribe-Post` headers on all digest emails
+- Replace the current "Manage watchlists" footer link with the signed unsubscribe URL
