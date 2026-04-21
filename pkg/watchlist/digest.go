@@ -71,7 +71,8 @@ func RenderDigest(events []postgres.NotificationEvent, baseURL string) (htmlBody
 		`<hr style="border:none;border-top:1px solid #d0d7de;margin:24px 0;">`+
 			`<p style="color:#57606a;font-size:12px;">`+
 			`You're receiving this because you have active watchlists. `+
-			`<a href="%s" style="color:#0969da;">Manage watchlists</a></p>`, settingsURL)
+			`<a href="%s" style="color:#0969da;">Manage watchlists</a></p>`,
+		settingsURL)
 	fmt.Fprintf(&tb, "---\nManage watchlists: %s\n", settingsURL)
 
 	hb.WriteString(`</body></html>`)

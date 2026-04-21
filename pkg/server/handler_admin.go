@@ -206,8 +206,10 @@ func adminSendTestDigestHandler(store *postgres.Store) http.HandlerFunc {
 		}
 
 		htmlBody, textBody := watchlist.RenderDigest(events, baseURL)
+		unsubURL := baseURL + "/settings"
 		if err := devnet.SendEmail(r.Context(), apiKey, "noreply@thingz.io", tn.Email,
-			"DevTrace Weekly Digest (Test)", htmlBody, textBody, ""); err != nil {
+			"DevTrace Weekly Digest (Test)", htmlBody, textBody, "",
+			devnet.WithUnsubscribeURL(unsubURL)); err != nil {
 			slog.Error("admin: send test digest", "tenant", tn.Username, "error", err)
 			http.Redirect(w, r, "/admin?msg=digest_error", http.StatusFound)
 			return

@@ -94,6 +94,39 @@ func TestSendEmailNoReplyTo(t *testing.T) {
 	}
 }
 
+func TestSendEmailWithUnsubscribeURL(t *testing.T) {
+	var body map[string]any
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(b, &body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	origClient := emailClient
+	defer func() { emailClient = origClient }()
+	emailClient = srv.Client()
+
+	err := sendEmailTo(context.Background(), srv.URL, "key",
+		"from@test.com", "to@test.com", "subj", "<p>hi</p>", "hi", "",
+		WithUnsubscribeURL("https://example.com/settings"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	hdrs, ok := body["headers"].(map[string]any)
+	if !ok {
+		t.Fatal("expected headers in payload")
+	}
+	if got := hdrs["List-Unsubscribe"]; got != "<https://example.com/settings>" {
+		t.Errorf("List-Unsubscribe: got %v, want %v", got, "<https://example.com/settings>")
+	}
+	if got := hdrs["List-Unsubscribe-Post"]; got != "List-Unsubscribe=One-Click" {
+		t.Errorf("List-Unsubscribe-Post: got %v, want %v", got, "List-Unsubscribe=One-Click")
+	}
+}
+
 func TestSendEmailAPIError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

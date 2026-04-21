@@ -457,8 +457,10 @@ func sendOneDigest(ctx context.Context, store ingestStore,
 	}
 
 	htmlBody, textBody := watchlist.RenderDigest(events, baseURL)
+	unsubURL := baseURL + "/settings"
 	if err := devnet.SendEmail(ctx, apiKey, "noreply@thingz.io", t.Email,
-		"DevTrace Weekly Digest", htmlBody, textBody, ""); err != nil {
+		"DevTrace Weekly Digest", htmlBody, textBody, "",
+		devnet.WithUnsubscribeURL(unsubURL)); err != nil {
 		slog.Error("send digest email", "tenant", t.Username, "error", err)
 		return false
 	}

@@ -20,13 +20,31 @@ var emailClient = &http.Client{Timeout: emailSendTimeout}
 // SendEmail sends an email via the Resend API. The apiKey is a Resend API key.
 // from and to are email addresses; subject, html, and text are the message content.
 // replyTo is optional — if non-empty, sets the Reply-To header on the email.
-func SendEmail(ctx context.Context, apiKey, from, to, subject, html, text, replyTo string) error {
-	return sendEmailTo(ctx, resendAPIURL, apiKey, from, to, subject, html, text, replyTo)
+// unsubURL is optional — if non-empty, adds List-Unsubscribe header for
+// email clients (e.g. Gmail) to show a native unsubscribe option.
+func SendEmail(ctx context.Context, apiKey, from, to, subject, html, text, replyTo string, opts ...EmailOption) error {
+	return sendEmailTo(ctx, resendAPIURL, apiKey, from, to, subject, html, text, replyTo, opts...)
+}
+
+// EmailOption configures optional email parameters.
+type EmailOption func(payload map[string]any)
+
+// WithUnsubscribeURL adds a List-Unsubscribe header to the email.
+func WithUnsubscribeURL(url string) EmailOption {
+	return func(payload map[string]any) {
+		if url == "" {
+			return
+		}
+		payload["headers"] = map[string]string{
+			"List-Unsubscribe":      "<" + url + ">",
+			"List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+		}
+	}
 }
 
 // sendEmailTo is the inner implementation that accepts a target URL.
 // Extracted so tests can point at an httptest server.
-func sendEmailTo(ctx context.Context, apiURL, apiKey, from, to, subject, html, text, replyTo string) error {
+func sendEmailTo(ctx context.Context, apiURL, apiKey, from, to, subject, html, text, replyTo string, opts ...EmailOption) error {
 	payload := map[string]any{
 		"from":    from,
 		"to":      []string{to},
@@ -36,6 +54,9 @@ func sendEmailTo(ctx context.Context, apiURL, apiKey, from, to, subject, html, t
 	}
 	if replyTo != "" {
 		payload["reply_to"] = replyTo
+	}
+	for _, opt := range opts {
+		opt(payload)
 	}
 
 	body, err := json.Marshal(payload)
