@@ -21,6 +21,9 @@ type Plan struct {
 	HistoryDays       int // score history window in days
 	MaxAPIKeys        int
 	ComplianceReports bool
+	MaxWatchlists     int    // extra watchlists beyond implicit (0, 1, 3)
+	DigestEmail       bool   // whether plan includes email digest
+	WatchlistScope    string // "pr", "pr_review", "pr_review_issue"
 	RiskSummary       string // display value for plans table
 	AISensingLabel    string
 	APIKeysLabel      string
@@ -47,10 +50,13 @@ var plans = map[string]Plan{
 		RateLimitPerHour: 60,
 		HistoryDays:      30,
 		MaxAPIKeys:       1,
+		MaxWatchlists:    0,
+		DigestEmail:      false,
+		WatchlistScope:   "pr",
 		RiskSummary:      "Metrics-based",
 		AISensingLabel:   "Metadata",
 		APIKeysLabel:     "1",
-		AlertsLabel:      valDash,
+		AlertsLabel:      "Dashboard only",
 		ComplianceLabel:  valDash,
 	},
 	"starter": {
@@ -62,10 +68,13 @@ var plans = map[string]Plan{
 		AISensing:        true,
 		HistoryDays:      90,
 		MaxAPIKeys:       1,
+		MaxWatchlists:    1,
+		DigestEmail:      true,
+		WatchlistScope:   "pr_review",
 		RiskSummary:      "AI-powered",
 		AISensingLabel:   "Metadata + PR authenticity",
 		APIKeysLabel:     "1",
-		AlertsLabel:      valSoon,
+		AlertsLabel:      "Weekly email + dashboard",
 		ComplianceLabel:  valDash,
 	},
 	"pro": {
@@ -81,10 +90,13 @@ var plans = map[string]Plan{
 		ComplianceReports: true,
 		HistoryDays:       365,
 		MaxAPIKeys:        10,
+		MaxWatchlists:     3,
+		DigestEmail:       true,
+		WatchlistScope:    "pr_review_issue",
 		RiskSummary:       "AI-powered",
 		AISensingLabel:    "Full Context",
 		APIKeysLabel:      "10",
-		AlertsLabel:       valSoon,
+		AlertsLabel:       "Weekly email + dashboard",
 		ComplianceLabel:   "SSDF + EU CRA",
 	},
 }

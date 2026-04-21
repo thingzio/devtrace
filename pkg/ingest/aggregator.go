@@ -6,6 +6,11 @@ import (
 	"github.com/thingzio/devtrace/pkg/bot"
 )
 
+const (
+	actionOpened = "opened"
+	actionClosed = "closed"
+)
+
 // Summary is the per-contributor hourly aggregation result.
 type Summary struct {
 	Username      string
@@ -14,6 +19,8 @@ type Summary struct {
 	PRsClosed     int
 	ReviewsGiven  int
 	IssueComments int
+	IssuesOpened  int
+	IssuesClosed  int
 	Repos         map[string]bool
 }
 
@@ -53,9 +60,9 @@ func (a *Aggregator) Add(ev Event) {
 		// intentionally ignored because it does not represent a new PR; counting
 		// it would inflate the contributor's PR velocity and distort scoring.
 		switch ev.Action {
-		case "opened":
+		case actionOpened:
 			s.PRsOpened++
-		case "closed":
+		case actionClosed:
 			if ev.Merged {
 				s.PRsMerged++
 			} else {
@@ -66,6 +73,13 @@ func (a *Aggregator) Add(ev Event) {
 		s.ReviewsGiven++
 	case EventIssueComment:
 		s.IssueComments++
+	case EventIssues:
+		switch ev.Action {
+		case actionOpened:
+			s.IssuesOpened++
+		case actionClosed:
+			s.IssuesClosed++
+		}
 	}
 }
 

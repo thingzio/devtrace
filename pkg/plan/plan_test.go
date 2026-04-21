@@ -11,10 +11,13 @@ func TestGetPlan(t *testing.T) {
 		wantKeys        int
 		wantHistory     int
 		wantCompliance  bool
+		wantWatchlists  int
+		wantDigest      bool
+		wantScope       string
 	}{
-		{"free", 50, 60, false, 1, 30, false},
-		{"starter", 200, 300, false, 1, 90, false},
-		{"pro", 2000, 1000, true, 10, 365, true},
+		{"free", 50, 60, false, 1, 30, false, 0, false, "pr"},
+		{"starter", 200, 300, false, 1, 90, false, 1, true, "pr_review"},
+		{"pro", 2000, 1000, true, 10, 365, true, 3, true, "pr_review_issue"},
 	}
 
 	for _, tc := range cases {
@@ -40,6 +43,15 @@ func TestGetPlan(t *testing.T) {
 			}
 			if p.ComplianceReports != tc.wantCompliance {
 				t.Errorf("ComplianceReports = %v, want %v", p.ComplianceReports, tc.wantCompliance)
+			}
+			if p.MaxWatchlists != tc.wantWatchlists {
+				t.Errorf("MaxWatchlists = %d, want %d", p.MaxWatchlists, tc.wantWatchlists)
+			}
+			if p.DigestEmail != tc.wantDigest {
+				t.Errorf("DigestEmail = %v, want %v", p.DigestEmail, tc.wantDigest)
+			}
+			if p.WatchlistScope != tc.wantScope {
+				t.Errorf("WatchlistScope = %q, want %q", p.WatchlistScope, tc.wantScope)
 			}
 		})
 	}
@@ -132,7 +144,7 @@ func TestDisplayFeatures(t *testing.T) {
 		{"feature-api-keys", "API Keys", []string{"1", "1", "10"}, false},
 		{"feature-batch", "Batch API", []string{dash, dash, soon}, false},
 		{"feature-webhooks", "Webhooks", []string{dash, dash, soon}, false},
-		{"feature-alerts", "Risk Alerts", []string{dash, soon, soon}, false},
+		{"feature-alerts", "Risk Alerts", []string{"Dashboard only", "Weekly email + dashboard", "Weekly email + dashboard"}, false},
 		{"feature-compliance", "Compliance Reports", []string{dash, dash, "SSDF + EU CRA"}, false},
 	}
 

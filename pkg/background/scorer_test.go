@@ -31,6 +31,18 @@ type mockScorerStore struct {
 	saveHistoryErr error
 	updateRepErr   error
 	queueDepth     int
+
+	// Grade change tracking
+	grades        map[string]string // "user:provider" -> grade
+	watchlists    []postgres.WatchlistEntry
+	notifications []mockNotif
+}
+
+type mockNotif struct {
+	watchlistID string
+	eventType   string
+	username    string
+	details     map[string]any
 }
 
 func (m *mockScorerStore) DequeueForScoring(_ context.Context, limit int) ([]postgres.QueueEntry, error) {
@@ -88,6 +100,24 @@ func (m *mockScorerStore) UpdateReputation(_ context.Context, username, _ string
 
 func (m *mockScorerStore) QueueDepth(_ context.Context) (int, error) {
 	return m.queueDepth, nil
+}
+
+func (m *mockScorerStore) GetCurrentGrade(_ context.Context, username, provider string) (string, error) {
+	if m.grades == nil {
+		return "", nil
+	}
+	return m.grades[username+":"+provider], nil
+}
+
+func (m *mockScorerStore) GetWatchlistsForContributor(_ context.Context, _, _ string) ([]postgres.WatchlistEntry, error) {
+	return m.watchlists, nil
+}
+
+func (m *mockScorerStore) InsertNotificationEvent(_ context.Context, watchlistID, eventType, username string, details map[string]any) error {
+	m.mu.Lock()
+	m.notifications = append(m.notifications, mockNotif{watchlistID, eventType, username, details})
+	m.mu.Unlock()
+	return nil
 }
 
 // --- mock GitHub client ---
@@ -459,5 +489,100 @@ func TestDrainQueueTerminalErrorSkipped(t *testing.T) {
 	// Queue should be empty after atomic dequeue (entries already removed).
 	if len(store.queue) != 0 {
 		t.Errorf("queue length = %d, want 0", len(store.queue))
+	}
+}
+
+func TestScoreContributorGradeChange(t *testing.T) {
+	t.Parallel()
+	store := &mockScorerStore{
+		grades: map[string]string{"alice:github": "D"},
+		watchlists: []postgres.WatchlistEntry{
+			{ID: "wl-1", TenantID: "t-1", Target: "org", Plan: "starter"},
+		},
+	}
+	// Signals that produce a decent score (should be above D).
+	gh := &mockGHClient{signals: &score.InputSignals{
+		AgeDays: 1000, PRsMerged: 50, Followers: 100, PublicRepos: 20,
+	}}
+
+	err := scoreContributor(context.Background(), store, gh, "alice", "github", testVersion)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should have recorded a notification event for the grade change.
+	if len(store.notifications) == 0 {
+		t.Fatal("expected at least 1 notification for grade change")
+	}
+	n := store.notifications[0]
+	if n.eventType != "score_change" {
+		t.Errorf("eventType = %q, want %q", n.eventType, "score_change")
+	}
+	if n.watchlistID != "wl-1" {
+		t.Errorf("watchlistID = %q, want %q", n.watchlistID, "wl-1")
+	}
+	if n.details["old_grade"] != "D" {
+		t.Errorf("old_grade = %v, want D", n.details["old_grade"])
+	}
+}
+
+func TestScoreContributorNoGradeChange(t *testing.T) {
+	t.Parallel()
+	store := &mockScorerStore{
+		// No previous grade → no change event expected.
+		grades: map[string]string{},
+	}
+	gh := &mockGHClient{signals: &score.InputSignals{
+		AgeDays: 500, PRsMerged: 10, Followers: 20, PublicRepos: 5,
+	}}
+
+	err := scoreContributor(context.Background(), store, gh, "bob", "github", testVersion)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(store.notifications) != 0 {
+		t.Errorf("got %d notifications, want 0 (no previous grade)", len(store.notifications))
+	}
+}
+
+func TestNotifyGradeChange(t *testing.T) {
+	t.Parallel()
+	store := &mockScorerStore{
+		watchlists: []postgres.WatchlistEntry{
+			{ID: "wl-1", TenantID: "t-1", Target: "org1"},
+			{ID: "wl-2", TenantID: "t-2", Target: "org2"},
+		},
+	}
+
+	notifyGradeChange(context.Background(), store, "alice", "github", "C", "B")
+
+	if len(store.notifications) != 2 {
+		t.Fatalf("got %d notifications, want 2", len(store.notifications))
+	}
+	for _, n := range store.notifications {
+		if n.eventType != "score_change" {
+			t.Errorf("eventType = %q, want score_change", n.eventType)
+		}
+		if n.details["old_grade"] != "C" {
+			t.Errorf("old_grade = %v, want C", n.details["old_grade"])
+		}
+		if n.details["new_grade"] != "B" {
+			t.Errorf("new_grade = %v, want B", n.details["new_grade"])
+		}
+	}
+}
+
+func TestNotifyGradeChangeNoWatchlists(t *testing.T) {
+	t.Parallel()
+	store := &mockScorerStore{
+		watchlists: nil,
+	}
+
+	// Should not panic or error with no matching watchlists.
+	notifyGradeChange(context.Background(), store, "alice", "github", "D", "C")
+
+	if len(store.notifications) != 0 {
+		t.Errorf("got %d notifications, want 0", len(store.notifications))
 	}
 }

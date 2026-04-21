@@ -444,6 +444,11 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	mux.Handle("GET /tos", requireAny(csrf(tosPageHandler(db, opts))))
 	mux.Handle("POST /tos/accept", requireSession(middleware.ValidateCSRF(tosAcceptHandler(store))))
 
+	// Watchlist management — requires session
+	mux.Handle("POST /settings/watchlist", requireSession(middleware.ValidateCSRF(addWatchlistHandler(store))))
+	mux.Handle("POST /settings/watchlist/{id}/delete", requireSession(middleware.ValidateCSRF(deleteWatchlistHandler(store))))
+	mux.Handle("POST /settings/watchlist/{id}/toggle-email", requireSession(middleware.ValidateCSRF(toggleWatchlistEmailHandler(store))))
+
 	// Score card page — accepts any auth, rate-limited (HTML 429)
 	mux.Handle("GET /score/{username}", requireAny(csrf(authAwareRateLimit(unauthRL, authRL, true, opts.Version)(scorecardHandler(store, scoreSvc, opts)))))
 
@@ -464,7 +469,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	// GitHub App webhook
 	webhookSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
 	if webhookSecret != "" {
-		mux.HandleFunc("POST /webhook/github", webhookHandler(db, webhookSecret, installNotify))
+		mux.HandleFunc("POST /webhook/github", webhookHandler(db, store, webhookSecret, installNotify))
 	}
 
 	// Admin — session auth + admin user list, returns 404 for non-admins

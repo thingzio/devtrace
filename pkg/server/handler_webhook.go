@@ -13,10 +13,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/thingzio/devtrace/pkg/data/postgres"
 	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
-func webhookHandler(db *sql.DB, secret string, installNotify chan<- struct{}) http.HandlerFunc {
+func webhookHandler(db *sql.DB, store *postgres.Store, secret string, installNotify chan<- struct{}) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const maxWebhookBytes = 1 << 20 // 1MB
 		body, err := io.ReadAll(io.LimitReader(r.Body, maxWebhookBytes))
@@ -33,7 +34,7 @@ func webhookHandler(db *sql.DB, secret string, installNotify chan<- struct{}) ht
 		event := r.Header.Get("X-GitHub-Event")
 		switch event {
 		case "installation":
-			if err := handleInstallationEvent(r.Context(), db, body); err != nil {
+			if err := handleInstallationEvent(r.Context(), db, store, body); err != nil {
 				slog.Error("installation event", "error", err)
 				http.Error(w, "processing failed", http.StatusInternalServerError)
 				return
@@ -60,7 +61,7 @@ func verifySignature(payload []byte, signature, secret string) bool {
 	return hmac.Equal(sig, mac.Sum(nil))
 }
 
-func handleInstallationEvent(ctx context.Context, db *sql.DB, body []byte) error {
+func handleInstallationEvent(ctx context.Context, db *sql.DB, store *postgres.Store, body []byte) error {
 	var event struct {
 		Action       string `json:"action"`
 		Installation struct {
@@ -90,11 +91,20 @@ func handleInstallationEvent(ctx context.Context, db *sql.DB, body []byte) error
 		if err != nil {
 			return fmt.Errorf("finding tenant for sender %d: %w", event.Sender.ID, err)
 		}
-		return tenant.SaveInstallation(ctx, db, tn.ID,
+		if err := tenant.SaveInstallation(ctx, db, tn.ID,
 			event.Installation.ID,
 			event.Installation.AppID,
 			event.Installation.Account.Type,
-			event.Installation.Account.Login)
+			event.Installation.Account.Login); err != nil {
+			return err
+		}
+		// Auto-create implicit watchlist for the installed org.
+		if store != nil {
+			if wlErr := store.EnsureImplicitWatchlist(ctx, tn.ID, event.Installation.Account.Login); wlErr != nil {
+				slog.Error("auto-create watchlist", "tenant", tn.ID, "login", event.Installation.Account.Login, "error", wlErr)
+			}
+		}
+		return nil
 
 	case "deleted", "suspend":
 		return tenant.SuspendInstallation(ctx, db, event.Installation.ID)

@@ -96,6 +96,12 @@ variable "notification_email" {
   default     = "devtrace@thingz.io"
 }
 
+variable "digest_dry_run" {
+  description = "When true, weekly digest emails are only sent to admin users. Set to false to enable for all eligible tenants."
+  type        = bool
+  default     = true
+}
+
 variable "github_token" {
   description = "GitHub PAT fallback for API calls (optional, used during bootstrap)"
   type        = string

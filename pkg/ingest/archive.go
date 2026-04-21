@@ -21,6 +21,7 @@ const (
 	EventPullRequest       = "PullRequestEvent"
 	EventPullRequestReview = "PullRequestReviewEvent"
 	EventIssueComment      = "IssueCommentEvent"
+	EventIssues            = "IssuesEvent"
 )
 
 type Event struct {
@@ -108,7 +109,7 @@ func parseEvent(line []byte) (Event, bool) {
 		return Event{}, false
 	}
 	switch raw.Type {
-	case EventPullRequest, EventPullRequestReview, EventIssueComment:
+	case EventPullRequest, EventPullRequestReview, EventIssueComment, EventIssues:
 	default:
 		return Event{}, false
 	}

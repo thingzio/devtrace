@@ -127,6 +127,33 @@ func TestAggregatorSkipsBots(t *testing.T) {
 	}
 }
 
+func TestAggregatorIssuesEvent(t *testing.T) {
+	a := NewAggregator(time.Now())
+
+	events := []Event{
+		{Type: "IssuesEvent", Action: "opened", Actor: "alice", Repo: "org/repo1"},
+		{Type: "IssuesEvent", Action: "opened", Actor: "alice", Repo: "org/repo1"},
+		{Type: "IssuesEvent", Action: "closed", Actor: "alice", Repo: "org/repo1"},
+		{Type: "IssuesEvent", Action: "reopened", Actor: "alice", Repo: "org/repo1"}, // ignored
+	}
+	for _, ev := range events {
+		a.Add(ev)
+	}
+
+	results := a.Results()
+	if len(results) != 1 {
+		t.Fatalf("Results len = %d, want 1", len(results))
+	}
+
+	s := results[0]
+	if s.IssuesOpened != 2 {
+		t.Errorf("IssuesOpened = %d, want 2", s.IssuesOpened)
+	}
+	if s.IssuesClosed != 1 {
+		t.Errorf("IssuesClosed = %d, want 1", s.IssuesClosed)
+	}
+}
+
 func TestAggregatorHourTruncation(t *testing.T) {
 	input := time.Date(2026, 3, 15, 8, 30, 45, 0, time.UTC)
 	a := NewAggregator(input)

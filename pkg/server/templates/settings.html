@@ -37,6 +37,58 @@
     <p class="hint">Plan self-service is not available yet. <a href="/help#help-contact">Request a complimentary upgrade</a>.</p>
   </section>
 
+  {{if .flash_msg}}<div class="flash-msg">{{.flash_msg}}</div>{{end}}
+
+  <section class="settings-section">
+    <h2>Watchlists</h2>
+    <p class="hint" style="margin-bottom:0.75rem;">Monitor GitHub orgs or repos for new contributors and score changes.</p>
+    {{if .watchlists}}
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Target</th>
+          <th>Source</th>
+          <th>Email</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .watchlists}}
+        <tr>
+          <td>{{.Target}}</td>
+          <td>{{if eq .Source "implicit"}}<span class="badge-source badge-auto">auto</span>{{else}}<span class="badge-source badge-manual">manual</span>{{end}}</td>
+          <td>
+            <form method="POST" action="/settings/watchlist/{{.ID}}/toggle-email" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit" class="btn btn-sm{{if .NotifyEmail}} btn-toggle-on{{else}} btn-toggle-off{{end}}" title="{{if .NotifyEmail}}Email on{{else}}Email off{{end}}"{{if not $.digest_email}} disabled title="Upgrade plan for email digests"{{end}}>{{if .NotifyEmail}}On{{else}}Off{{end}}</button>
+            </form>
+          </td>
+          <td>
+            {{if eq .Source "manual"}}
+            <form method="POST" action="/settings/watchlist/{{.ID}}/delete" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+            </form>
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p>No watchlists yet.{{if not .has_install}} <a href="{{.app_install_url}}">Install the GitHub App</a> to auto-create one.{{end}}</p>
+    {{end}}
+
+    {{if .can_add_watchlist}}
+    <form method="POST" action="/settings/watchlist" style="margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center;">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <input type="text" name="target" placeholder="org or org/repo" required autocomplete="off" style="max-width:250px;">
+      <button type="submit" class="btn btn-primary btn-sm">+ Add Watchlist</button>
+    </form>
+    {{end}}
+    <p class="hint">{{if .can_add_watchlist}}You can add up to {{.max_watchlists}} manual watchlist{{if gt .max_watchlists 1}}s{{end}}.{{else}}{{if eq .max_watchlists 0}}<a href="/help#help-contact">Upgrade</a> to add custom watchlists.{{else}}Manual watchlist limit reached.{{end}}{{end}}</p>
+  </section>
+
   <section class="settings-section">
     <h2>API Tokens</h2>
     <table class="data-table" id="token-table" {{if not .tokens}}style="display:none"{{end}}>

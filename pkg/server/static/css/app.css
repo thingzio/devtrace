@@ -2442,6 +2442,39 @@ a.link {
 .settings-section .hint a {
   color: var(--accent);
 }
+.flash-msg {
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  background: var(--accent-green, rgba(46, 160, 67, 0.15));
+  color: var(--fg, #c9d1d9);
+  border: 1px solid var(--accent-green, rgba(46, 160, 67, 0.4));
+}
+.badge-source {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-pill, 100px);
+  font-size: var(--fs-xs, 0.65rem);
+  font-weight: var(--fw-medium, 500);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.badge-auto { color: var(--fgColor-muted, #8b949e); background: var(--bg-muted, rgba(136, 136, 136, 0.18)); }
+.badge-manual { color: var(--accent, #58a6ff); background: rgba(88, 166, 255, 0.12); }
+.btn-toggle-on { color: #3fb950; border-color: rgba(63, 185, 80, 0.4); }
+.btn-toggle-off { color: var(--fgColor-muted, #8b949e); border-color: var(--borderColor-default, #30363d); }
+.badge-event {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-pill, 100px);
+  font-size: var(--fs-xs, 0.65rem);
+  font-weight: var(--fw-medium, 500);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.badge-new-contributor { color: #58a6ff; background: rgba(88, 166, 255, 0.12); }
+.badge-score-change { color: #d29922; background: rgba(210, 153, 34, 0.15); }
 .theme-toggle {
   display: flex;
   gap: 0.5rem;

@@ -197,6 +197,8 @@ func processBackfillHour(ctx context.Context, store ingestStore, reader *Archive
 			PRsClosed:     s.PRsClosed,
 			ReviewsGiven:  s.ReviewsGiven,
 			IssueComments: s.IssueComments,
+			IssuesOpened:  s.IssuesOpened,
+			IssuesClosed:  s.IssuesClosed,
 			DistinctRepos: len(repos),
 			Repos:         repos,
 		})
@@ -208,7 +210,7 @@ func processBackfillHour(ctx context.Context, store ingestStore, reader *Archive
 		return
 	}
 
-	queued := queueContributors(ctx, store, results, tenantRepos)
+	queued := queueContributors(ctx, store, results, tenantRepos, nil)
 	slog.Debug("backfill hour done",
 		"hour", hour.Format("2006-01-02-15"),
 		"events", eventCount,

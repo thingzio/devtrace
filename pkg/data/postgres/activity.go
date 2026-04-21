@@ -78,6 +78,8 @@ type HourlySummary struct {
 	PRsClosed     int
 	ReviewsGiven  int
 	IssueComments int
+	IssuesOpened  int
+	IssuesClosed  int
 	DistinctRepos int
 	Repos         []string
 }
@@ -93,14 +95,16 @@ type BehavioralSignals = model.Behavior
 // on error the entire batch is rolled back and count 0 is returned.
 func (s *Store) BatchUpsertActivity(ctx context.Context, summaries []HourlySummary) (int, error) {
 	const query = `INSERT INTO devtrace_contributor_activity (username, provider, hour, prs_opened, prs_merged, prs_closed,
-		reviews_given, issue_comments, distinct_repos, repos)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
+		reviews_given, issue_comments, issues_opened, issues_closed, distinct_repos, repos)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)
 	ON CONFLICT (username, provider, hour) DO UPDATE SET
 		prs_opened = devtrace_contributor_activity.prs_opened + EXCLUDED.prs_opened,
 		prs_merged = devtrace_contributor_activity.prs_merged + EXCLUDED.prs_merged,
 		prs_closed = devtrace_contributor_activity.prs_closed + EXCLUDED.prs_closed,
 		reviews_given = devtrace_contributor_activity.reviews_given + EXCLUDED.reviews_given,
 		issue_comments = devtrace_contributor_activity.issue_comments + EXCLUDED.issue_comments,
+		issues_opened = devtrace_contributor_activity.issues_opened + EXCLUDED.issues_opened,
+		issues_closed = devtrace_contributor_activity.issues_closed + EXCLUDED.issues_closed,
 		distinct_repos = EXCLUDED.distinct_repos,
 		repos = EXCLUDED.repos`
 
@@ -119,8 +123,9 @@ func (s *Store) BatchUpsertActivity(ctx context.Context, summaries []HourlySumma
 		_, err = tx.ExecContext(ctx, query,
 			h.Username, h.Provider, h.Hour,
 			h.PRsOpened, h.PRsMerged, h.PRsClosed,
-			h.ReviewsGiven, h.IssueComments, h.DistinctRepos,
-			reposJSON)
+			h.ReviewsGiven, h.IssueComments,
+			h.IssuesOpened, h.IssuesClosed,
+			h.DistinctRepos, reposJSON)
 		if err != nil {
 			return 0, fmt.Errorf("upsert activity row %d: %w", count, err)
 		}
@@ -269,12 +274,13 @@ func (s *Store) CompactActivity(ctx context.Context, olderThan time.Duration) (i
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO devtrace_contributor_activity
 			(username, provider, hour, prs_opened, prs_merged, prs_closed,
-			 reviews_given, issue_comments, distinct_repos, repos)
+			 reviews_given, issue_comments, issues_opened, issues_closed, distinct_repos, repos)
 		SELECT
 			username, provider,
 			date_trunc('week', hour) AS week_hour,
 			SUM(prs_opened), SUM(prs_merged), SUM(prs_closed),
 			SUM(reviews_given), SUM(issue_comments),
+			SUM(issues_opened), SUM(issues_closed),
 			0,
 			'[]'::jsonb
 		FROM devtrace_contributor_activity
@@ -287,6 +293,8 @@ func (s *Store) CompactActivity(ctx context.Context, olderThan time.Duration) (i
 			prs_closed = devtrace_contributor_activity.prs_closed + EXCLUDED.prs_closed,
 			reviews_given = devtrace_contributor_activity.reviews_given + EXCLUDED.reviews_given,
 			issue_comments = devtrace_contributor_activity.issue_comments + EXCLUDED.issue_comments,
+			issues_opened = devtrace_contributor_activity.issues_opened + EXCLUDED.issues_opened,
+			issues_closed = devtrace_contributor_activity.issues_closed + EXCLUDED.issues_closed,
 			distinct_repos = 0,
 			repos = '[]'::jsonb`, cutoff)
 	if err != nil {

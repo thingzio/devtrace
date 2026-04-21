@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/thingzio/devtrace/pkg/compliance"
 	"github.com/thingzio/devtrace/pkg/data/postgres"
@@ -164,24 +165,47 @@ func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			}
 		}
 
+		const eventsPerPage = 10
+		eventsPage := 1
+		if p, perr := strconv.Atoi(r.URL.Query().Get("events_page")); perr == nil && p > 0 {
+			eventsPage = p
+		}
+		eventsOffset := (eventsPage - 1) * eventsPerPage
+		events, eventsTotal, eerr := store.GetNotificationEvents(r.Context(), tn.ID, eventsPerPage, eventsOffset)
+		if eerr != nil {
+			slog.Error("dashboard: get notification events", "tenant", tn.ID, "error", eerr)
+		}
+		eventsTotalPages := (eventsTotal + eventsPerPage - 1) / eventsPerPage
+		if eventsTotalPages < 1 {
+			eventsTotalPages = 1
+		}
+
 		t := pageTemplates["home.html"]
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := t.ExecuteTemplate(w, "home", map[string]any{
-			"username":    tn.Username,
-			"name":        tn.Name,
-			"company":     tn.Company,
-			"location":    tn.Location,
-			"bio":         tn.Bio,
-			"avatar_url":  tn.AvatarURL,
-			"plan":        tn.Plan,
-			"quota_used":  used,
-			"quota_limit": maxContribs,
-			"quota_pct":   pct,
-			"tokens":      tokens,
-			"recent":      recent,
-			"version":     opts.Version,
-			"commit":      opts.Commit,
-			"date":        opts.Date,
+			"username":           tn.Username,
+			"name":               tn.Name,
+			"company":            tn.Company,
+			"location":           tn.Location,
+			"bio":                tn.Bio,
+			"avatar_url":         tn.AvatarURL,
+			"plan":               tn.Plan,
+			"quota_used":         used,
+			"quota_limit":        maxContribs,
+			"quota_pct":          pct,
+			"tokens":             tokens,
+			"recent":             recent,
+			"events":             events,
+			"events_page":        eventsPage,
+			"events_total":       eventsTotal,
+			"events_total_pages": eventsTotalPages,
+			"events_has_prev":    eventsPage > 1,
+			"events_has_next":    eventsPage < eventsTotalPages,
+			"events_prev_page":   eventsPage - 1,
+			"events_next_page":   eventsPage + 1,
+			"version":            opts.Version,
+			"commit":             opts.Commit,
+			"date":               opts.Date,
 		}); err != nil {
 			slog.Error("render dashboard", "error", err)
 		}
@@ -214,29 +238,40 @@ func settingsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 
 		appInstallURL := "https://github.com/apps/DevTraceThingz/installations/new"
 
+		watchlists, wlErr := store.ListWatchlists(r.Context(), tn.ID)
+		if wlErr != nil {
+			slog.Error("settings: list watchlists", "tenant", tn.ID, "error", wlErr)
+		}
+		manualCount, _ := store.WatchlistManualCount(r.Context(), tn.ID)
+		canAddWatchlist := manualCount < limits.MaxWatchlists
+
 		renderTemplate(w, "settings.html", map[string]any{
-			"Title":            "Settings",
-			"Version":          opts.Version,
-			"Commit":           opts.Commit,
-			"Date":             opts.Date,
-			"NavUser":          tn.Username,
-			"NavAvatar":        tn.AvatarURL,
-			"username":         tn.Username,
-			"name":             tn.Name,
-			"email":            tn.Email,
-			"company":          tn.Company,
-			"location":         tn.Location,
-			"bio":              tn.Bio,
-			"avatar_url":       tn.AvatarURL,
-			"plan":             tn.Plan,
-			"max_contributors": limits.MaxContributors,
-			"rate_limit":       limits.RateLimitPerHour,
-			"created_at":       tn.CreatedAt.Format("2006-01-02"),
-			"last_login":       lastLogin,
-			"tokens":           tokens,
-			"has_install":      hasInstall,
-			"app_install_url":  appInstallURL,
-			"flash_msg":        r.URL.Query().Get("msg"),
+			"Title":             "Settings",
+			"Version":           opts.Version,
+			"Commit":            opts.Commit,
+			"Date":              opts.Date,
+			"NavUser":           tn.Username,
+			"NavAvatar":         tn.AvatarURL,
+			"username":          tn.Username,
+			"name":              tn.Name,
+			"email":             tn.Email,
+			"company":           tn.Company,
+			"location":          tn.Location,
+			"bio":               tn.Bio,
+			"avatar_url":        tn.AvatarURL,
+			"plan":              tn.Plan,
+			"max_contributors":  limits.MaxContributors,
+			"rate_limit":        limits.RateLimitPerHour,
+			"created_at":        tn.CreatedAt.Format("2006-01-02"),
+			"last_login":        lastLogin,
+			"tokens":            tokens,
+			"has_install":       hasInstall,
+			"app_install_url":   appInstallURL,
+			"flash_msg":         r.URL.Query().Get("msg"),
+			"watchlists":        watchlists,
+			"can_add_watchlist": canAddWatchlist,
+			"max_watchlists":    limits.MaxWatchlists,
+			"digest_email":      limits.DigestEmail,
 		})
 	}
 }

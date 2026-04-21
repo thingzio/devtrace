@@ -117,6 +117,11 @@ resource "google_cloud_run_v2_service" "serve" {
         value = "devtrace@thingz.io"
       }
 
+      env {
+        name  = "DIGEST_DRY_RUN"
+        value = var.digest_dry_run ? "true" : "false"
+      }
+
       dynamic "env" {
         for_each = var.github_token != "" ? [1] : []
         content {

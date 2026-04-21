@@ -68,6 +68,9 @@ type scorerStore interface {
 	SaveScoreHistory(ctx context.Context, username, provider string, value float64, grade string, deep bool) error
 	UpdateReputation(ctx context.Context, username, provider string, value float64, grade, version string, deep bool, signals *score.InputSignals) error
 	QueueDepth(ctx context.Context) (int, error)
+	GetCurrentGrade(ctx context.Context, username, provider string) (string, error)
+	GetWatchlistsForContributor(ctx context.Context, username, provider string) ([]postgres.WatchlistEntry, error)
+	InsertNotificationEvent(ctx context.Context, watchlistID, eventType, username string, details map[string]any) error
 }
 
 // quotaChecker abstracts quota checking for testing.
@@ -308,8 +311,12 @@ func isTerminalError(err error) bool {
 }
 
 // scoreContributor fetches signals, computes a score, and persists the result.
+// After scoring, detects grade changes and writes watchlist notification events.
 func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client,
 	username, provider, version string) error {
+	// Capture old grade before scoring for change detection.
+	oldGrade, _ := store.GetCurrentGrade(ctx, username, provider)
+
 	var behavior *model.Behavior
 	var hints *ghclient.ArchiveHints
 	if beh, err := store.GetBehavioralSignals(ctx, username, provider); err == nil && beh != nil {
@@ -355,7 +362,38 @@ func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client
 		slog.Warn("save history", "username", username, "error", err)
 	}
 
-	return store.UpdateReputation(ctx, username, provider, value, grade, version, true, signals)
+	if err := store.UpdateReputation(ctx, username, provider, value, grade, version, true, signals); err != nil {
+		return err
+	}
+
+	// Detect grade change and notify matching watchlists.
+	if oldGrade != "" && oldGrade != grade {
+		notifyGradeChange(ctx, store, username, provider, oldGrade, grade)
+	}
+
+	return nil
+}
+
+// notifyGradeChange writes score_change notification events for all watchlists
+// that match the contributor's recent activity repos.
+func notifyGradeChange(ctx context.Context, store scorerStore, username, provider, oldGrade, newGrade string) {
+	watchlists, err := store.GetWatchlistsForContributor(ctx, username, provider)
+	if err != nil {
+		slog.Debug("get watchlists for grade change", "username", username, "error", err)
+		return
+	}
+	details := map[string]any{
+		"old_grade": oldGrade,
+		"new_grade": newGrade,
+	}
+	for _, wl := range watchlists {
+		if err := store.InsertNotificationEvent(ctx, wl.ID, "score_change", username, details); err != nil {
+			slog.Debug("write grade change event", "username", username, "watchlist", wl.ID, "error", err)
+		}
+	}
+	if len(watchlists) > 0 {
+		slog.Info("grade change notified", "username", username, "old", oldGrade, "new", newGrade, "watchlists", len(watchlists))
+	}
 }
 
 func jitter() time.Duration {
