@@ -123,8 +123,10 @@ func (m *mockIngestStore) GetUnsentEventsForDigest(_ context.Context, _ string, 
 	return m.unsentEvents, nil
 }
 
-func (m *mockIngestStore) MarkEventsSent(_ context.Context, ids []int64) error {
-	m.markedSent = append(m.markedSent, ids...)
+func (m *mockIngestStore) MarkAllEventsSent(_ context.Context, _ string) error {
+	for _, ev := range m.unsentEvents {
+		m.markedSent = append(m.markedSent, ev.ID)
+	}
 	return nil
 }
 

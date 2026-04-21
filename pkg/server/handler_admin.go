@@ -216,11 +216,7 @@ func adminSendTestDigestHandler(store *postgres.Store) http.HandlerFunc {
 		}
 
 		if usedReal {
-			ids := make([]int64, len(events))
-			for i, ev := range events {
-				ids[i] = ev.ID
-			}
-			if merr := store.MarkEventsSent(r.Context(), ids); merr != nil {
+			if merr := store.MarkAllEventsSent(r.Context(), tn.ID); merr != nil {
 				slog.Error("admin: mark events sent", "tenant", tn.ID, "error", merr)
 			}
 		}

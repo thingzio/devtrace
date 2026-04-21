@@ -47,7 +47,7 @@ type ingestStore interface {
 	InsertNotificationEvent(ctx context.Context, watchlistID, eventType, username string, details map[string]any) error
 	GetTenantsWithUnsentEvents(ctx context.Context) ([]postgres.DigestTarget, error)
 	GetUnsentEventsForDigest(ctx context.Context, tenantID string, limit int) ([]postgres.NotificationEvent, error)
-	MarkEventsSent(ctx context.Context, eventIDs []int64) error
+	MarkAllEventsSent(ctx context.Context, tenantID string) error
 }
 
 // Run processes one or more hourly GH Archive dumps.
@@ -482,11 +482,7 @@ func sendOneDigest(ctx context.Context, store ingestStore,
 		return false
 	}
 
-	ids := make([]int64, len(events))
-	for i, ev := range events {
-		ids[i] = ev.ID
-	}
-	if err := store.MarkEventsSent(ctx, ids); err != nil {
+	if err := store.MarkAllEventsSent(ctx, t.TenantID); err != nil {
 		slog.Error("mark events sent", "tenant", t.TenantID, "error", err)
 	}
 	slog.Info("digest sent", "tenant", t.Username, "events", len(events))

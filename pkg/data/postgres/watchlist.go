@@ -217,17 +217,17 @@ func (s *Store) GetUnsentEventsForDigest(ctx context.Context, tenantID string, l
 	return events, rows.Err()
 }
 
-// MarkEventsSent marks the given notification events as sent.
-func (s *Store) MarkEventsSent(ctx context.Context, eventIDs []int64) error {
-	if len(eventIDs) == 0 {
-		return nil
-	}
-	// Use ANY($1::bigint[]) for a single-parameter array bind.
+// MarkAllEventsSent marks all unsent notification events for a tenant as sent.
+// Called after a digest email is sent — the email contains the top N events but
+// all pending events are cleared so they don't queue up for the next digest.
+func (s *Store) MarkAllEventsSent(ctx context.Context, tenantID string) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE devtrace_notification_event SET sent_at = NOW() WHERE id = ANY($1::bigint[])`,
-		pqInt64Array(eventIDs))
+		`UPDATE devtrace_notification_event SET sent_at = NOW()
+		 WHERE sent_at IS NULL
+		   AND watchlist_id IN (SELECT id FROM devtrace_watchlist WHERE tenant_id = $1)`,
+		tenantID)
 	if err != nil {
-		return fmt.Errorf("mark events sent: %w", err)
+		return fmt.Errorf("mark all events sent: %w", err)
 	}
 	return nil
 }
