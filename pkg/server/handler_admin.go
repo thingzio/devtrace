@@ -10,11 +10,16 @@ import (
 	"strconv"
 	"time"
 
+	"os"
+
+	"github.com/thingzio/devtrace/pkg/config"
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/middleware"
+	devnet "github.com/thingzio/devtrace/pkg/net"
 	"github.com/thingzio/devtrace/pkg/plan"
 	"github.com/thingzio/devtrace/pkg/tenant"
+	"github.com/thingzio/devtrace/pkg/watchlist"
 )
 
 const (
@@ -149,11 +154,94 @@ func adminDashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc
 
 		auditLog("view_dashboard", tn, r.URL.Path, r.RemoteAddr, "")
 
+		csrfToken, err := middleware.GenerateCSRFToken()
+		if err != nil {
+			slog.Error("admin: generate csrf token", "error", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		middleware.SetCSRFCookie(w, csrfToken, "/")
+		data["CSRFToken"] = csrfToken
+
 		if store != nil {
 			loadPipelineMetrics(r.Context(), store, data)
 		}
 
 		renderTemplate(w, "admin.html", data)
+	}
+}
+
+func adminSendTestDigestHandler(store *postgres.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 4096)
+		tn := middleware.TenantFromContext(r.Context())
+		if tn == nil {
+			http.NotFound(w, r)
+			return
+		}
+
+		apiKey := os.Getenv("SEND_API_KEY")
+		if apiKey == "" {
+			http.Redirect(w, r, "/admin?msg=no_email_key", http.StatusFound)
+			return
+		}
+
+		if tn.Email == "" {
+			http.Redirect(w, r, "/admin?msg=no_email", http.StatusFound)
+			return
+		}
+
+		baseURL := config.GetEnv("BASE_URL", "http://localhost:8080")
+
+		events, err := store.GetUnsentEventsForDigest(r.Context(), tn.ID, 10)
+		if err != nil {
+			slog.Error("admin: get digest events", "tenant", tn.ID, "error", err)
+			http.Redirect(w, r, "/admin?msg=digest_error", http.StatusFound)
+			return
+		}
+
+		usedReal := len(events) > 0
+		if !usedReal {
+			events = sampleDigestEvents()
+		}
+
+		htmlBody, textBody := watchlist.RenderDigest(events, baseURL)
+		if err := devnet.SendEmail(r.Context(), apiKey, "noreply@thingz.io", tn.Email,
+			"DevTrace Weekly Digest (Test)", htmlBody, textBody, ""); err != nil {
+			slog.Error("admin: send test digest", "tenant", tn.Username, "error", err)
+			http.Redirect(w, r, "/admin?msg=digest_error", http.StatusFound)
+			return
+		}
+
+		if usedReal {
+			ids := make([]int64, len(events))
+			for i, ev := range events {
+				ids[i] = ev.ID
+			}
+			if merr := store.MarkEventsSent(r.Context(), ids); merr != nil {
+				slog.Error("admin: mark events sent", "tenant", tn.ID, "error", merr)
+			}
+		}
+
+		auditLog("send_test_digest", tn, r.URL.Path, r.RemoteAddr,
+			fmt.Sprintf("events=%d real=%v", len(events), usedReal))
+		http.Redirect(w, r, "/admin?msg=digest_sent", http.StatusFound)
+	}
+}
+
+func sampleDigestEvents() []postgres.NotificationEvent {
+	now := time.Now().UTC()
+	return []postgres.NotificationEvent{
+		{
+			ID: 0, EventType: "new_contributor", Username: "sample-dev",
+			Target: "example-org", CreatedAt: now.Add(-2 * time.Hour),
+			Details: map[string]any{"prs_opened": float64(3), "prs_merged": float64(1)},
+		},
+		{
+			ID: 0, EventType: "score_change", Username: "another-dev",
+			Target: "example-org/repo", CreatedAt: now.Add(-1 * time.Hour),
+			Details: map[string]any{"old_grade": "C", "new_grade": "B"},
+		},
 	}
 }
 

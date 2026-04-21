@@ -484,6 +484,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	mux.Handle("GET /admin/tenant/{username}", requireAdmin(adminTenantDetailHandler(store, opts)))
 	mcfg := newAdminMetricsConfig()
 	mux.Handle("GET /admin/metrics", requireAdmin(adminMetricsHandler(store, mcfg, opts)))
+	mux.Handle("POST /admin/digest/test", requireAdmin(middleware.ValidateCSRF(adminSendTestDigestHandler(store))))
 	mux.Handle("POST /admin/tenant/{username}/plan", requireAdmin(middleware.ValidateCSRF(adminUpdatePlanFormHandler(db))))
 	mux.Handle("POST /admin/tenant/{username}/status", requireAdmin(middleware.ValidateCSRF(adminUpdateStatusFormHandler(db))))
 	mux.Handle("POST /admin/tenant/{username}/delete", requireAdmin(middleware.ValidateCSRF(adminDeleteTenantHandler(db))))
