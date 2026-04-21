@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"os"
 	"strings"
@@ -21,7 +22,7 @@ const (
 	compactStateKey  = "activity_compacted"
 	digestStateKey   = "digest_email_sweep"
 	compactInterval  = 24 * time.Hour
-	digestInterval   = 7 * 24 * time.Hour  // weekly digest
+	digestInterval   = 24 * time.Hour      // sweep daily; per-tenant day assignment ensures weekly delivery
 	compactOlderThan = 30 * 24 * time.Hour // aggregate rows older than 30 days
 
 	pruneActivityRetention = 120 * 24 * time.Hour // delete activity older than 120 days
@@ -421,9 +422,19 @@ func buildAdminSet() map[string]bool {
 	return adminSet
 }
 
+// digestDay returns a deterministic day-of-week (0=Sunday..6=Saturday)
+// for a tenant, distributing digest sends evenly across the week.
+func digestDay(tenantID string) int {
+	h := fnv.New32a()
+	h.Write([]byte(tenantID))
+	return int(h.Sum32() % 7)
+}
+
 func sendDigests(ctx context.Context, store ingestStore,
 	targets []postgres.DigestTarget, apiKey, baseURL string,
 	dryRun bool, adminSet map[string]bool) (sent, skipped int) {
+	today := int(time.Now().UTC().Weekday())
+
 	for _, t := range targets {
 		p, ok := plan.Get(t.Plan)
 		if !ok {
@@ -436,6 +447,11 @@ func sendDigests(ctx context.Context, store ingestStore,
 		if dryRun && !adminSet[t.Username] {
 			slog.Info("digest dry run, skipping", "tenant", t.Username)
 			skipped++
+			continue
+		}
+
+		// Each tenant is assigned a fixed day of the week; skip if not their day.
+		if digestDay(t.TenantID) != today {
 			continue
 		}
 
