@@ -363,7 +363,7 @@ func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client
 	}
 
 	if err := store.UpdateReputation(ctx, username, provider, value, grade, version, true, signals); err != nil {
-		return err
+		return fmt.Errorf("update reputation: %w", err)
 	}
 
 	// Detect grade change and notify matching watchlists.
@@ -401,8 +401,10 @@ func jitter() time.Duration {
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) {
+	t := time.NewTimer(d)
+	defer t.Stop()
 	select {
 	case <-ctx.Done():
-	case <-time.After(d):
+	case <-t.C:
 	}
 }

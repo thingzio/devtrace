@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -28,6 +29,7 @@ type mockIngestStore struct {
 	pruneActivityAge time.Duration
 	prunedHistory    bool
 	pruneHistoryAge  time.Duration
+	batchUpsertErr   error
 
 	// Watchlist support
 	watchlistTargets map[string][]postgres.WatchlistEntry
@@ -71,6 +73,9 @@ func (m *mockIngestStore) GetTenantRepos(_ context.Context) (map[string]bool, er
 }
 
 func (m *mockIngestStore) BatchUpsertActivity(_ context.Context, summaries []postgres.HourlySummary) (int, error) {
+	if m.batchUpsertErr != nil {
+		return 0, m.batchUpsertErr
+	}
 	m.upserted = append(m.upserted, summaries...)
 	return len(summaries), nil
 }
@@ -617,5 +622,53 @@ func TestBuildUnsubscribeURLNoSecret(t *testing.T) {
 	url := buildUnsubscribeURL("https://example.com", "tenant-123")
 	if url != "" {
 		t.Errorf("expected empty URL when no secret, got %q", url)
+	}
+}
+
+func TestProcessHourStreamError(t *testing.T) {
+	t.Parallel()
+
+	// Server that returns 404 → triggers ErrArchiveNotFound.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	store := newMockIngestStore()
+	reader := NewArchiveReader(srv.URL)
+	hour := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	err := processHour(context.Background(), store, reader, hour, nil, nil)
+	if err == nil {
+		t.Fatal("expected error from stream")
+	}
+	// Verify error is wrapped with hour context.
+	if !strings.Contains(err.Error(), "stream archive 2026-01-01-0") {
+		t.Errorf("error should contain stream context, got: %v", err)
+	}
+	if !errors.Is(err, ErrArchiveNotFound) {
+		t.Errorf("error should wrap ErrArchiveNotFound, got: %v", err)
+	}
+}
+
+func TestProcessHourBatchUpsertError(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestArchiveServer(t, []string{
+		`{"type":"PullRequestEvent","actor":{"login":"alice"},"repo":{"name":"org/repo1"},"payload":{"action":"opened"},"created_at":"2026-01-01T00:00:00Z"}`,
+	})
+	defer srv.Close()
+
+	store := newMockIngestStore()
+	store.batchUpsertErr = errors.New("db connection lost")
+	reader := NewArchiveReader(srv.URL)
+	hour := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	err := processHour(context.Background(), store, reader, hour, nil, nil)
+	if err == nil {
+		t.Fatal("expected error from batch upsert")
+	}
+	if !strings.Contains(err.Error(), "batch upsert activity 2026-01-01-0") {
+		t.Errorf("error should contain upsert context, got: %v", err)
 	}
 }

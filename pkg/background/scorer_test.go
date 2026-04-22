@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -584,5 +585,50 @@ func TestNotifyGradeChangeNoWatchlists(t *testing.T) {
 
 	if len(store.notifications) != 0 {
 		t.Errorf("got %d notifications, want 0", len(store.notifications))
+	}
+}
+
+func TestScoreContributorUpdateReputationError(t *testing.T) {
+	t.Parallel()
+	store := &mockScorerStore{
+		updateRepErr: errors.New("db unavailable"),
+	}
+	gh := &mockGHClient{signals: &score.InputSignals{
+		AgeDays: 500, PRsMerged: 10, Followers: 20, PublicRepos: 5,
+	}}
+
+	err := scoreContributor(context.Background(), store, gh, "alice", "github", testVersion)
+	if err == nil {
+		t.Fatal("expected error from UpdateReputation")
+	}
+	if !strings.Contains(err.Error(), "update reputation") {
+		t.Errorf("error should contain 'update reputation' context, got: %v", err)
+	}
+	// Original error should be wrapped.
+	if !strings.Contains(err.Error(), "db unavailable") {
+		t.Errorf("error should contain wrapped cause, got: %v", err)
+	}
+}
+
+func TestSleepCtxNormalExpiry(t *testing.T) {
+	t.Parallel()
+	start := time.Now()
+	sleepCtx(context.Background(), 50*time.Millisecond)
+	elapsed := time.Since(start)
+	if elapsed < 40*time.Millisecond {
+		t.Errorf("sleepCtx returned too early: %v", elapsed)
+	}
+	if elapsed > time.Second {
+		t.Errorf("sleepCtx took too long: %v", elapsed)
+	}
+}
+
+func TestJitterRange(t *testing.T) {
+	t.Parallel()
+	for range 100 {
+		d := jitter()
+		if d < 0 || d >= resetJitter {
+			t.Errorf("jitter() = %v, want [0, %v)", d, resetJitter)
+		}
 	}
 }

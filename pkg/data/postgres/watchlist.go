@@ -232,22 +232,6 @@ func (s *Store) MarkAllEventsSent(ctx context.Context, tenantID string) error {
 	return nil
 }
 
-// pqInt64Array converts a []int64 to a PostgreSQL array literal.
-func pqInt64Array(ids []int64) string {
-	if len(ids) == 0 {
-		return "{}"
-	}
-	s := "{"
-	for i, id := range ids {
-		if i > 0 {
-			s += ","
-		}
-		s += fmt.Sprintf("%d", id)
-	}
-	s += "}"
-	return s
-}
-
 // ListWatchlists returns all watchlists for a tenant.
 func (s *Store) ListWatchlists(ctx context.Context, tenantID string) ([]Watchlist, error) {
 	rows, err := s.db.QueryContext(ctx,

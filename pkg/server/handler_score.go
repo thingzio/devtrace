@@ -66,7 +66,7 @@ func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) 
 			}
 		}
 
-		persistScore(store, username, resp.Score.Value, resp.Score.Grade, resp.Version)
+		persistScore(store, username, resp.Score.Value, resp.Score.Grade, resp.Version, r.Context())
 		slog.Info("score request", "source", "api", "username", username)
 
 		w.Header().Set("Content-Type", "application/json")
@@ -121,12 +121,13 @@ func checkQuota(ctx context.Context, w http.ResponseWriter, db *sql.DB, tn *tena
 
 // persistScore saves score data to the contributor and reputation tables in a
 // fire-and-forget goroutine. Used by both the API and scorecard handlers.
-func persistScore(store *postgres.Store, username string, value float64, grade, version string) {
+// Uses WithoutCancel so the write outlives the HTTP request without losing trace baggage.
+func persistScore(store *postgres.Store, username string, value float64, grade, version string, reqCtx context.Context) {
 	if store == nil {
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(reqCtx), 10*time.Second)
 		defer cancel()
 		if err := store.UpsertContributor(ctx, username, "github"); err != nil {
 			slog.Error("upsert contributor", "username", username, "error", err)

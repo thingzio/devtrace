@@ -2,27 +2,6 @@ package postgres
 
 import "testing"
 
-func TestPqInt64Array(t *testing.T) {
-	t.Parallel()
-	cases := []struct {
-		name string
-		ids  []int64
-		want string
-	}{
-		{"empty", nil, "{}"},
-		{"single", []int64{42}, "{42}"},
-		{"multiple", []int64{1, 2, 3}, "{1,2,3}"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := pqInt64Array(tc.ids)
-			if got != tc.want {
-				t.Errorf("pqInt64Array(%v) = %q, want %q", tc.ids, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestNotificationEventDetailSummary(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

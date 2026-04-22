@@ -187,7 +187,7 @@ func processHour(ctx context.Context, store ingestStore, reader *ArchiveReader,
 		eventCount++
 	})
 	if err != nil {
-		return err
+		return fmt.Errorf("stream archive %s: %w", hour.Format("2006-01-02-15"), err)
 	}
 
 	results := agg.Results()
@@ -216,7 +216,7 @@ func processHour(ctx context.Context, store ingestStore, reader *ArchiveReader,
 
 	stored, err := store.BatchUpsertActivity(ctx, pgSummaries)
 	if err != nil {
-		return err
+		return fmt.Errorf("batch upsert activity %s: %w", hour.Format("2006-01-02-15"), err)
 	}
 
 	queued := queueContributors(ctx, store, results, tenantRepos, watchlistTargets)

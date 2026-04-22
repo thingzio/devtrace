@@ -96,7 +96,7 @@ func handleInstallationEvent(ctx context.Context, db *sql.DB, store *postgres.St
 			event.Installation.AppID,
 			event.Installation.Account.Type,
 			event.Installation.Account.Login); err != nil {
-			return err
+			return fmt.Errorf("saving installation for tenant %s: %w", tn.ID, err)
 		}
 		// Auto-create implicit watchlist for the installed org.
 		if store != nil {
