@@ -219,7 +219,7 @@ func processHour(ctx context.Context, store ingestStore, reader *ArchiveReader,
 		return fmt.Errorf("batch upsert activity %s: %w", hour.Format("2006-01-02-15"), err)
 	}
 
-	queued := queueContributors(ctx, store, results, tenantRepos, watchlistTargets)
+	qr := queueContributors(ctx, store, results, tenantRepos, watchlistTargets)
 
 	slog.Info("archive hour complete",
 		"hour", hour.Format("2006-01-02-15"),
@@ -227,16 +227,22 @@ func processHour(ctx context.Context, store ingestStore, reader *ArchiveReader,
 		"events", eventCount,
 		"contributors", len(results),
 		"stored", stored,
-		"queued", queued,
+		"queued", qr.queued,
+		"skipped_non_tenant", qr.skippedNonTenant,
 		"duration_sec", time.Since(start).Seconds(),
 	)
 
 	return nil
 }
 
+type queueResult struct {
+	queued           int
+	skippedNonTenant int
+}
+
 func queueContributors(ctx context.Context, store ingestStore,
-	summaries []Summary, tenantRepos map[string]bool, watchlistTargets map[string][]postgres.WatchlistEntry) int {
-	var count int
+	summaries []Summary, tenantRepos map[string]bool, watchlistTargets map[string][]postgres.WatchlistEntry) queueResult {
+	var qr queueResult
 	for _, s := range summaries {
 		exists, _ := store.ContributorExists(ctx, s.Username, "github")
 
@@ -258,7 +264,8 @@ func queueContributors(ctx context.Context, store ingestStore,
 		}
 
 		if !touchesTenant {
-			continue // only queue contributors active in tenant repos
+			qr.skippedNonTenant++
+			continue
 		}
 
 		var priority int
@@ -273,9 +280,9 @@ func queueContributors(ctx context.Context, store ingestStore,
 			slog.Debug("enqueue", "username", s.Username, "error", err)
 			continue
 		}
-		count++
+		qr.queued++
 	}
-	return count
+	return qr
 }
 
 // notifyWatchlists writes notification events for any watchlist targets matching

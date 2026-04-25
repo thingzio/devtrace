@@ -71,6 +71,7 @@ type scorerStore interface {
 	GetCurrentGrade(ctx context.Context, username, provider string) (string, error)
 	GetWatchlistsForContributor(ctx context.Context, username, provider string) ([]postgres.WatchlistEntry, error)
 	InsertNotificationEvent(ctx context.Context, watchlistID, eventType, username string, details map[string]any) error
+	BumpScoredAt(ctx context.Context, username, provider string) error
 }
 
 // quotaChecker abstracts quota checking for testing.
@@ -255,7 +256,7 @@ func rescoreStale(ctx context.Context, store scorerStore, gh ghclient.Client,
 	}
 
 	start := time.Now()
-	var scored, errCount atomic.Int32
+	var scored, errCount, tombstoned atomic.Int32
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 
@@ -270,6 +271,14 @@ func rescoreStale(ctx context.Context, store scorerStore, gh ghclient.Client,
 			defer func() { <-sem }()
 
 			if serr := scoreContributor(ctx, store, gh, c.Username, c.Provider, version); serr != nil {
+				if isTerminalError(serr) {
+					if berr := store.BumpScoredAt(ctx, c.Username, c.Provider); berr != nil {
+						slog.Warn("bump scored_at", "username", c.Username, "error", berr)
+					}
+					tombstoned.Add(1)
+					slog.Info("stale contributor tombstoned", "username", c.Username, "error", serr)
+					return
+				}
 				slog.Warn("score stale", "username", c.Username, "error", serr)
 				errCount.Add(1)
 				return
@@ -279,13 +288,14 @@ func rescoreStale(ctx context.Context, store scorerStore, gh ghclient.Client,
 	}
 	wg.Wait()
 
-	s, e := int(scored.Load()), int(errCount.Load())
+	s, e, tb := int(scored.Load()), int(errCount.Load()), int(tombstoned.Load())
 	if stats != nil {
 		stats.record(s, e, 0)
 	}
 	slog.Info("stale rescoring complete",
 		"scored", s,
 		"errors", e,
+		"tombstoned", tb,
 		"total", len(stale),
 		"elapsed", time.Since(start).Round(time.Millisecond),
 	)

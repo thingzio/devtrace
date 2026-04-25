@@ -37,6 +37,7 @@ type mockScorerStore struct {
 	grades        map[string]string // "user:provider" -> grade
 	watchlists    []postgres.WatchlistEntry
 	notifications []mockNotif
+	bumped        []string
 }
 
 type mockNotif struct {
@@ -117,6 +118,13 @@ func (m *mockScorerStore) GetWatchlistsForContributor(_ context.Context, _, _ st
 func (m *mockScorerStore) InsertNotificationEvent(_ context.Context, watchlistID, eventType, username string, details map[string]any) error {
 	m.mu.Lock()
 	m.notifications = append(m.notifications, mockNotif{watchlistID, eventType, username, details})
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *mockScorerStore) BumpScoredAt(_ context.Context, username, _ string) error {
+	m.mu.Lock()
+	m.bumped = append(m.bumped, username)
 	m.mu.Unlock()
 	return nil
 }
@@ -490,6 +498,52 @@ func TestDrainQueueTerminalErrorSkipped(t *testing.T) {
 	// Queue should be empty after atomic dequeue (entries already removed).
 	if len(store.queue) != 0 {
 		t.Errorf("queue length = %d, want 0", len(store.queue))
+	}
+}
+
+func TestRescoreStaleTerminalTombstoned(t *testing.T) {
+	t.Parallel()
+	store := &mockScorerStore{
+		stale: []postgres.StaleContributor{
+			{Username: "deleted-user", Provider: "github"},
+			{Username: "good-user", Provider: "github"},
+		},
+	}
+	// Client returns 404 for all users.
+	gh := &mockGHClient{err: fmt.Errorf("fetch: %w", ghError(http.StatusNotFound))}
+	stats := &scorerStats{}
+
+	scored := rescoreStale(context.Background(), store, gh, stats, testVersion, 100, 1)
+	if scored != 0 {
+		t.Errorf("scored = %d, want 0 (all terminal)", scored)
+	}
+	if len(store.bumped) != 2 {
+		t.Errorf("bumped = %d, want 2", len(store.bumped))
+	}
+	if stats.totalErrors.Load() != 0 {
+		t.Errorf("totalErrors = %d, want 0 (terminal errors are not retryable)", stats.totalErrors.Load())
+	}
+}
+
+func TestRescoreStalePartialTerminal(t *testing.T) {
+	t.Parallel()
+	store := &mockScorerStore{
+		stale: []postgres.StaleContributor{
+			{Username: "deleted-user", Provider: "github"},
+		},
+	}
+	gh := &mockGHClient{err: fmt.Errorf("fetch: %w", ghError(http.StatusNotFound))}
+	stats := &scorerStats{}
+
+	scored := rescoreStale(context.Background(), store, gh, stats, testVersion, 100, 1)
+	if scored != 0 {
+		t.Errorf("scored = %d, want 0", scored)
+	}
+	if len(store.bumped) != 1 {
+		t.Errorf("bumped = %v, want [deleted-user]", store.bumped)
+	}
+	if store.bumped[0] != "deleted-user" {
+		t.Errorf("bumped[0] = %q, want %q", store.bumped[0], "deleted-user")
 	}
 }
 

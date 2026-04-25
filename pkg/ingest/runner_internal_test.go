@@ -177,9 +177,12 @@ func TestQueueContributorsPriority(t *testing.T) {
 	// Mark existing-other as existing too.
 	store.existing["existing-other"] = true
 
-	count := queueContributors(context.Background(), store, summaries, store.tenantOrgs, nil)
-	if count != 2 {
-		t.Fatalf("queued %d, want 2 (only tenant-related contributors)", count)
+	qr := queueContributors(context.Background(), store, summaries, store.tenantOrgs, nil)
+	if qr.queued != 2 {
+		t.Fatalf("queued %d, want 2 (only tenant-related contributors)", qr.queued)
+	}
+	if qr.skippedNonTenant != 2 {
+		t.Errorf("skippedNonTenant %d, want 2", qr.skippedNonTenant)
 	}
 
 	// Verify priorities.
@@ -483,9 +486,12 @@ func TestQueueContributorsWithWatchlist(t *testing.T) {
 		{Username: "new-watched-user", Repos: map[string]bool{"watchedorg/repo": true}, PRsOpened: 2},
 	}
 
-	count := queueContributors(context.Background(), store, summaries, store.tenantOrgs, watchTargets)
-	if count != 1 {
-		t.Errorf("queued %d, want 1 (only tenant contributor)", count)
+	qr := queueContributors(context.Background(), store, summaries, store.tenantOrgs, watchTargets)
+	if qr.queued != 1 {
+		t.Errorf("queued %d, want 1 (only tenant contributor)", qr.queued)
+	}
+	if qr.skippedNonTenant != 1 {
+		t.Errorf("skippedNonTenant %d, want 1", qr.skippedNonTenant)
 	}
 
 	// Watched org contributor should generate a notification.

@@ -59,6 +59,19 @@ func (s *Store) StaleCount(ctx context.Context, lowDays, highDays int) (int, err
 	return count, nil
 }
 
+// BumpScoredAt advances a contributor's scored_at timestamp without changing
+// their score. Used to move permanently-failing contributors (404, 451) out
+// of the stale pool so they aren't retried every 30 seconds.
+func (s *Store) BumpScoredAt(ctx context.Context, username, provider string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE devtrace_reputation SET scored_at = NOW() WHERE username = $1 AND provider = $2`,
+		username, provider)
+	if err != nil {
+		return fmt.Errorf("bump scored_at: %w", err)
+	}
+	return nil
+}
+
 // GetCachedSignals returns the previously stored signals for a contributor.
 // Returns (nil, nil) when no reputation record exists.
 func (s *Store) GetCachedSignals(ctx context.Context, username, provider string) (*score.InputSignals, error) {
