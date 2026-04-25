@@ -2261,6 +2261,13 @@ a.link {
   font-size: 1.1rem;
   text-decoration: none;
   color: var(--page-header-txtColor);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.nav-logo img {
+  height: 1.4rem;
+  width: auto;
 }
 .nav-link {
   color: var(--gray);
