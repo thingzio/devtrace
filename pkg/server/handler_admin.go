@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"sync"
 	"time"
 
 	"os"
@@ -42,12 +43,12 @@ func buildTenantRows(ctx context.Context, db *sql.DB, tenants []*tenant.Tenant) 
 	}
 
 	signIns, _ := tenant.GetLastSignIns(ctx, db, ids)
+	hasInstall, _ := tenant.HasActiveInstallations(ctx, db, ids)
 
 	rows := make([]tenantRow, len(tenants))
 	for i, tn := range tenants {
 		rows[i] = tenantRow{Tenant: tn}
-		installs, err := tenant.GetActiveInstallations(ctx, db, tn.ID)
-		if err == nil && len(installs) > 0 {
+		if hasInstall[tn.ID] {
 			rows[i].HasInstall = true
 		}
 		if signIns != nil {
@@ -383,35 +384,71 @@ func adminTenantDetailHandler(store *postgres.Store, opts Options) http.HandlerF
 }
 
 func loadPipelineMetrics(ctx context.Context, store *postgres.Store, data map[string]any) {
-	if sc, err := store.HourlyScoringCounts(ctx, 24); err == nil {
-		data["ScoringBars"] = hourlyCountBars24(sc)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	set := func(k string, v any) {
+		mu.Lock()
+		data[k] = v
+		mu.Unlock()
 	}
 
-	if depth, err := store.QueueDepth(ctx); err == nil {
-		data["QueueDepth"] = depth
-	}
+	wg.Add(7)
 
-	if stale, err := store.StaleCount(ctx, 7, 30); err == nil {
-		data["StaleCount"] = stale
-	}
+	go func() {
+		defer wg.Done()
+		if sc, err := store.HourlyScoringCounts(ctx, 24); err == nil {
+			set("ScoringBars", hourlyCountBars24(sc))
+		}
+	}()
 
-	if tc, err := store.ContributorCount(ctx); err == nil {
-		data["ContributorCount"] = tc
-	}
+	go func() {
+		defer wg.Done()
+		if depth, err := store.QueueDepth(ctx); err == nil {
+			set("QueueDepth", depth)
+		}
+	}()
 
-	if sc, err := store.ScoredCount(ctx); err == nil {
-		data["ScoredCount"] = sc
-	}
+	go func() {
+		defer wg.Done()
+		if stale, err := store.StaleCount(ctx, 7, 30); err == nil {
+			set("StaleCount", stale)
+		}
+	}()
 
-	if ps, err := store.PipelineStats(ctx); err == nil {
-		data["PipelineStats"] = ps
-		data["IngestAge"] = timeSince(ps.LastIngest)
-		data["ScorerAge"] = timeSince(ps.LastScored)
-	}
+	go func() {
+		defer wg.Done()
+		if tc, err := store.ContributorCount(ctx); err == nil {
+			set("ContributorCount", tc)
+		}
+	}()
 
-	if ac, err := store.HourlyActivityCounts(ctx, 24); err == nil {
-		data["ActivityBars"] = hourlyCountBars(ac)
-	}
+	go func() {
+		defer wg.Done()
+		if sc, err := store.ScoredCount(ctx); err == nil {
+			set("ScoredCount", sc)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if ps, err := store.PipelineStats(ctx); err == nil {
+			mu.Lock()
+			data["PipelineStats"] = ps
+			data["IngestAge"] = timeSince(ps.LastIngest)
+			data["ScorerAge"] = timeSince(ps.LastScored)
+			mu.Unlock()
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if ac, err := store.HourlyActivityCounts(ctx, 24); err == nil {
+			set("ActivityBars", hourlyCountBars(ac))
+		}
+	}()
+
+	wg.Wait()
 }
 
 func loadTenantList(ctx context.Context, store *postgres.Store, data map[string]any, query string, page int) {

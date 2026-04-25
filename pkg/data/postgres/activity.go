@@ -24,12 +24,19 @@ func (s *Store) PipelineStats(ctx context.Context) (*PipelineStats, error) {
 	var lastIngest sql.NullTime
 
 	err := s.db.QueryRowContext(ctx,
-		`SELECT MAX(hour), COUNT(*) FROM devtrace_contributor_activity`).Scan(&lastIngest, &ps.TotalActivities)
+		`SELECT MAX(hour) FROM devtrace_contributor_activity`).Scan(&lastIngest)
 	if err != nil {
-		return nil, fmt.Errorf("pipeline stats activity: %w", err)
+		return nil, fmt.Errorf("pipeline stats activity max: %w", err)
 	}
 	if lastIngest.Valid {
 		ps.LastIngest = lastIngest.Time
+	}
+
+	err = s.db.QueryRowContext(ctx,
+		`SELECT COALESCE(n_live_tup, 0) FROM pg_stat_user_tables
+		 WHERE relname = 'devtrace_contributor_activity'`).Scan(&ps.TotalActivities)
+	if err != nil {
+		return nil, fmt.Errorf("pipeline stats activity count: %w", err)
 	}
 
 	var lastScored sql.NullTime

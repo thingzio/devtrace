@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 // Installation represents a GitHub App installation linked to a tenant.
@@ -126,6 +128,31 @@ func ListTenantsWithoutInstall(ctx context.Context, db *sql.DB) ([]TenantWithout
 		return nil, fmt.Errorf("iterating tenants without install: %w", err)
 	}
 	return out, nil
+}
+
+// HasActiveInstallations returns a map of tenant IDs that have at least one
+// non-suspended installation. Tenants with no installation are omitted.
+func HasActiveInstallations(ctx context.Context, db *sql.DB, tenantIDs []string) (map[string]bool, error) {
+	if len(tenantIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := db.QueryContext(ctx,
+		`SELECT DISTINCT tenant_id FROM devtrace_app_installation
+		 WHERE tenant_id = ANY($1) AND suspended_at IS NULL`, pq.Array(tenantIDs))
+	if err != nil {
+		return nil, fmt.Errorf("has active installations: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]bool, len(tenantIDs))
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan active installation tenant: %w", err)
+		}
+		result[id] = true
+	}
+	return result, rows.Err()
 }
 
 func queryActiveInstallations(ctx context.Context, db *sql.DB, query string, args ...any) ([]ActiveInstallation, error) {

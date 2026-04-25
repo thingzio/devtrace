@@ -66,38 +66,26 @@ func (r RecentScored) Scope() string {
 // GetRecentScored returns the most recently scored contributors for a tenant.
 func GetRecentScored(ctx context.Context, db *sql.DB, tenantID string, limit int) ([]RecentScored, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT DISTINCT ON (username_scored) username_scored, provider, source, deep, repo, scored_at
-		 FROM devtrace_usage_record WHERE tenant_id = $1
-		 ORDER BY username_scored, scored_at DESC`,
-		tenantID)
+		`SELECT username_scored, provider, source, deep, repo, scored_at FROM (
+			SELECT DISTINCT ON (username_scored) username_scored, provider, source, deep, repo, scored_at
+			FROM devtrace_usage_record WHERE tenant_id = $1
+			ORDER BY username_scored, scored_at DESC
+		 ) sub ORDER BY scored_at DESC LIMIT $2`,
+		tenantID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("get recent scored: %w", err)
 	}
 	defer rows.Close()
 
-	var all []RecentScored
+	var result []RecentScored
 	for rows.Next() {
 		var r RecentScored
 		if err := rows.Scan(&r.Username, &r.Provider, &r.Source, &r.Deep, &r.Repo, &r.ScoredAt); err != nil {
 			return nil, fmt.Errorf("scan recent: %w", err)
 		}
-		all = append(all, r)
+		result = append(result, r)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	// Sort by scored_at DESC and apply limit in Go since DISTINCT ON
-	// requires matching ORDER BY on the first key.
-	for i := 1; i < len(all); i++ {
-		for j := i; j > 0 && all[j].ScoredAt.After(all[j-1].ScoredAt); j-- {
-			all[j], all[j-1] = all[j-1], all[j]
-		}
-	}
-	if limit > 0 && len(all) > limit {
-		all = all[:limit]
-	}
-	return all, nil
+	return result, rows.Err()
 }
 
 // NextBillingPeriodStart returns the start of the next monthly billing period.
