@@ -412,6 +412,10 @@ WHAT TO IGNORE (STRICT)
   scoping (only contributors active in tenant repos get scored). A large gap is by design.
   NEVER flag this as a coverage issue.
 - Queue depth 0 with no stale count: scorer is caught up. This is healthy.
+- Ingest/scorer timestamp gap: Last Ingest can be hours or days ahead of Last Scored because
+  the ingest pipeline processes all GH Archive contributors but only enqueues those active in
+  tenant repos for scoring. A wide gap means ingested contributors didn't touch tenant repos,
+  which is normal — not a stall. Only flag if scoring throughput is 0 AND queue depth is > 0.
 - Low weekend/off-hours traffic: normal usage pattern.
 - Token quota near 0% used: means scoring is idle or caught up, not a problem.
 
