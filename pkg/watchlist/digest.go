@@ -8,7 +8,10 @@ import (
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 )
 
-const eventTypeScoreChange = "score_change"
+const (
+	eventTypeScoreChange = "score_change"
+	detailGradeChanged   = "Grade changed"
+)
 
 // RenderDigest produces HTML and plain-text bodies for a weekly digest email.
 // Events are pre-sorted by created_at DESC and capped at the caller's limit.
@@ -97,7 +100,7 @@ func formatDetail(ev postgres.NotificationEvent) string {
 		if oldGrade != "" && newGrade != "" {
 			return fmt.Sprintf("%s → %s", oldGrade, newGrade)
 		}
-		return "Grade changed"
+		return detailGradeChanged
 	}
 
 	var parts []string
