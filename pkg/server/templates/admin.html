@@ -100,7 +100,7 @@
     <p style="color:var(--text-secondary,#8b949e);font-size:0.85rem;margin-bottom:0.75rem;">Send a test digest email to your account. Uses real unsent watchlist events if available, otherwise sends sample data.</p>
     <form method="POST" action="/admin/digest/test" style="display:inline;">
       <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-      <button type="submit" class="btn btn-sm">Send Test Digest</button>
+      <button type="submit" class="btn-action">Send Test Digest</button>
     </form>
   </section>
 </div>
