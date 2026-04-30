@@ -5,51 +5,61 @@ import "testing"
 func TestNotificationEventDetailSummary(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
-		name  string
-		event NotificationEvent
-		want  string
+		name string
+		ev   NotificationEvent
+		want string
 	}{
 		{
-			"score_change",
+			"score_change with grades",
 			NotificationEvent{EventType: "score_change", Details: map[string]any{"old_grade": "C", "new_grade": "B"}},
-			"C \u2192 B",
+			"grade C → B",
 		},
 		{
-			"score_change_empty",
+			"score_change missing grades",
 			NotificationEvent{EventType: "score_change", Details: map[string]any{}},
-			"",
+			"grade changed",
 		},
 		{
-			"new_contributor_prs",
-			NotificationEvent{EventType: "new_contributor", Details: map[string]any{"prs_opened": float64(3), "prs_merged": float64(1)}},
-			"3 PRs opened, 1 PRs merged",
+			"new_contributor opened single PR",
+			NotificationEvent{EventType: "new_contributor", Details: map[string]any{"prs_opened": float64(1)}},
+			"opened 1 PR",
 		},
 		{
-			"new_contributor_reviews",
-			NotificationEvent{EventType: "new_contributor", Details: map[string]any{"reviews": float64(5)}},
-			"5 reviews",
+			"new_contributor opened multiple PRs",
+			NotificationEvent{EventType: "new_contributor", Details: map[string]any{"prs_opened": float64(3)}},
+			"opened 3 PRs",
 		},
 		{
-			"new_contributor_empty",
+			"new_contributor PRs and reviews",
+			NotificationEvent{EventType: "new_contributor", Details: map[string]any{"prs_opened": float64(2), "reviews_given": float64(5)}},
+			"opened 2 PRs, 5 reviews",
+		},
+		{
+			"new_contributor merged PRs only",
+			NotificationEvent{EventType: "new_contributor", Details: map[string]any{"prs_merged": float64(1)}},
+			"merged 1 PR",
+		},
+		{
+			"new_contributor empty details",
 			NotificationEvent{EventType: "new_contributor", Details: map[string]any{}},
-			"",
+			"first activity",
 		},
 		{
-			"nil_details",
-			NotificationEvent{EventType: "new_contributor"},
-			"",
+			"new_contributor only repos in details",
+			NotificationEvent{EventType: "new_contributor", Details: map[string]any{"repos": []any{"NVIDIA/cuda-samples"}}},
+			"first activity",
 		},
 		{
-			"unknown_type",
-			NotificationEvent{EventType: "unknown", Details: map[string]any{"foo": "bar"}},
-			"",
+			"unknown event type",
+			NotificationEvent{EventType: "weird", Details: map[string]any{"foo": "bar"}},
+			"weird",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := tc.event.DetailSummary()
+			got := tc.ev.DetailSummary()
 			if got != tc.want {
-				t.Errorf("DetailSummary() = %q, want %q", got, tc.want)
+				t.Errorf("DetailSummary = %q, want %q", got, tc.want)
 			}
 		})
 	}

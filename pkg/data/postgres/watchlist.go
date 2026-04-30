@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -39,38 +40,51 @@ type NotificationEvent struct {
 	SentAt    *time.Time
 }
 
-// DetailSummary returns a human-readable summary of the event details.
+// DetailSummary returns a human-readable verb phrase. Never returns "" for
+// known event types; falls back to "first activity" when no counts are present.
 func (e NotificationEvent) DetailSummary() string {
-	if len(e.Details) == 0 {
-		return ""
-	}
 	switch e.EventType {
 	case "score_change":
 		old, _ := e.Details["old_grade"].(string)
-		new, _ := e.Details["new_grade"].(string)
-		if old != "" && new != "" {
-			return old + " \u2192 " + new
+		newG, _ := e.Details["new_grade"].(string)
+		if old != "" && newG != "" {
+			return "grade " + old + " → " + newG
 		}
+		return "grade changed"
 	case "new_contributor":
-		parts := make([]string, 0, 3)
+		var phrases []string
 		if n := intDetail(e.Details, "prs_opened"); n > 0 {
-			parts = append(parts, fmt.Sprintf("%d PRs opened", n))
+			phrases = append(phrases, fmt.Sprintf("opened %d %s", n, plural(n, "PR", "PRs")))
 		}
 		if n := intDetail(e.Details, "prs_merged"); n > 0 {
-			parts = append(parts, fmt.Sprintf("%d PRs merged", n))
+			phrases = append(phrases, fmt.Sprintf("merged %d %s", n, plural(n, "PR", "PRs")))
 		}
-		if n := intDetail(e.Details, "reviews"); n > 0 {
-			parts = append(parts, fmt.Sprintf("%d reviews", n))
+		if n := intDetail(e.Details, "reviews_given"); n > 0 {
+			phrases = append(phrases, fmt.Sprintf("%d %s", n, plural(n, "review", "reviews")))
 		}
-		if len(parts) > 0 {
-			s := parts[0]
-			for _, p := range parts[1:] {
-				s += ", " + p
-			}
-			return s
+		if n := intDetail(e.Details, "issues_opened"); n > 0 {
+			phrases = append(phrases, fmt.Sprintf("opened %d %s", n, plural(n, "issue", "issues")))
 		}
+		if n := intDetail(e.Details, "issue_comments"); n > 0 {
+			phrases = append(phrases, fmt.Sprintf("%d %s", n, plural(n, "comment", "comments")))
+		}
+		if len(phrases) == 0 {
+			return "first activity"
+		}
+		// Cap at 2 phrases to keep the cell compact.
+		if len(phrases) > 2 {
+			phrases = phrases[:2]
+		}
+		return strings.Join(phrases, ", ")
 	}
-	return ""
+	return e.EventType
+}
+
+func plural(n int, singular, plur string) string {
+	if n == 1 {
+		return singular
+	}
+	return plur
 }
 
 func intDetail(d map[string]any, key string) int {
