@@ -65,6 +65,62 @@ func TestNotificationEventDetailSummary(t *testing.T) {
 	}
 }
 
+func TestNotificationEventRepoSummary(t *testing.T) {
+	cases := []struct {
+		name        string
+		ev          NotificationEvent
+		wantSummary string
+		wantTooltip string
+	}{
+		{
+			"no details",
+			NotificationEvent{Target: "NVIDIA"},
+			"",
+			"",
+		},
+		{
+			"empty repos array",
+			NotificationEvent{Target: "NVIDIA", Details: map[string]any{"repos": []any{}}},
+			"",
+			"",
+		},
+		{
+			"single repo strips org prefix",
+			NotificationEvent{Target: "NVIDIA", Details: map[string]any{"repos": []any{"NVIDIA/cuda-samples"}}},
+			"cuda-samples",
+			"NVIDIA/cuda-samples",
+		},
+		{
+			"single repo no prefix",
+			NotificationEvent{Target: "NVIDIA", Details: map[string]any{"repos": []any{"cuda-samples"}}},
+			"cuda-samples",
+			"cuda-samples",
+		},
+		{
+			"single repo target is org/repo",
+			NotificationEvent{Target: "NVIDIA/cuda-samples", Details: map[string]any{"repos": []any{"NVIDIA/cuda-samples"}}},
+			"cuda-samples",
+			"NVIDIA/cuda-samples",
+		},
+		{
+			"multiple repos shows first plus count",
+			NotificationEvent{Target: "NVIDIA", Details: map[string]any{"repos": []any{"NVIDIA/cuda-samples", "NVIDIA/cccl", "NVIDIA/TensorRT"}}},
+			"cuda-samples +2",
+			"NVIDIA/cuda-samples, NVIDIA/cccl, NVIDIA/TensorRT",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.ev.RepoSummary(); got != tc.wantSummary {
+				t.Errorf("RepoSummary = %q, want %q", got, tc.wantSummary)
+			}
+			if got := tc.ev.RepoTooltip(); got != tc.wantTooltip {
+				t.Errorf("RepoTooltip = %q, want %q", got, tc.wantTooltip)
+			}
+		})
+	}
+}
+
 func TestIntDetail(t *testing.T) {
 	t.Parallel()
 	d := map[string]any{

@@ -87,6 +87,57 @@ func plural(n int, singular, plur string) string {
 	return plur
 }
 
+// RepoSummary returns the Repo column display string. Empty when no repos
+// are recorded. For a single repo, returns the bare repo name (org prefix
+// stripped). For multiple repos, returns "first +N" where N is the count of
+// remaining repos.
+func (e NotificationEvent) RepoSummary() string {
+	repos := repoStrings(e.Details)
+	if len(repos) == 0 {
+		return ""
+	}
+	first := stripOrgPrefix(repos[0])
+	if len(repos) == 1 {
+		return first
+	}
+	return fmt.Sprintf("%s +%d", first, len(repos)-1)
+}
+
+// RepoTooltip returns the full comma-joined list of repos for the HTML
+// title attribute. Returns "" when no repos are recorded.
+func (e NotificationEvent) RepoTooltip() string {
+	repos := repoStrings(e.Details)
+	if len(repos) == 0 {
+		return ""
+	}
+	return strings.Join(repos, ", ")
+}
+
+func repoStrings(d map[string]any) []string {
+	raw, ok := d["repos"]
+	if !ok {
+		return nil
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(arr))
+	for _, v := range arr {
+		if s, ok := v.(string); ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func stripOrgPrefix(repo string) string {
+	if idx := strings.Index(repo, "/"); idx > 0 {
+		return repo[idx+1:]
+	}
+	return repo
+}
+
 func intDetail(d map[string]any, key string) int {
 	v, ok := d[key]
 	if !ok {
