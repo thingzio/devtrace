@@ -496,6 +496,47 @@ func (s *Store) LastDigestSentAt(ctx context.Context, tenantID string) (*time.Ti
 	return t, nil
 }
 
+// PruneNotificationEvents deletes notification events for a tenant in two
+// passes: first by age (events older than retentionDays), then by cap
+// (keep newest maxEvents). retentionDays <= 0 skips the age pass.
+// maxEvents <= 0 skips the cap pass. Returns total rows deleted.
+func (s *Store) PruneNotificationEvents(ctx context.Context, tenantID string, retentionDays, maxEvents int) (int, error) {
+	var deleted int
+
+	if retentionDays > 0 {
+		res, err := s.db.ExecContext(ctx,
+			`DELETE FROM devtrace_notification_event
+			 WHERE watchlist_id IN (SELECT id FROM devtrace_watchlist WHERE tenant_id = $1)
+			   AND created_at < NOW() - $2 * INTERVAL '1 day'`,
+			tenantID, retentionDays)
+		if err != nil {
+			return deleted, fmt.Errorf("prune by age: %w", err)
+		}
+		n, _ := res.RowsAffected()
+		deleted += int(n)
+	}
+
+	if maxEvents > 0 {
+		res, err := s.db.ExecContext(ctx,
+			`DELETE FROM devtrace_notification_event
+			 WHERE id IN (
+			   SELECT ne.id FROM devtrace_notification_event ne
+			   JOIN devtrace_watchlist w ON w.id = ne.watchlist_id
+			   WHERE w.tenant_id = $1
+			   ORDER BY ne.created_at DESC
+			   OFFSET $2
+			 )`,
+			tenantID, maxEvents)
+		if err != nil {
+			return deleted, fmt.Errorf("prune by cap: %w", err)
+		}
+		n, _ := res.RowsAffected()
+		deleted += int(n)
+	}
+
+	return deleted, nil
+}
+
 // UnsentEventCount returns the total number of unsent events for a tenant.
 func (s *Store) UnsentEventCount(ctx context.Context, tenantID string) (int, error) {
 	var count int

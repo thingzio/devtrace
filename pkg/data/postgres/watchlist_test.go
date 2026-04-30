@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -236,6 +237,93 @@ func seedTestWatchlist(t *testing.T, store *Store, tenantID, target string) stri
 	}
 	// Tenant cascade will clean up watchlist + events.
 	return id
+}
+
+func TestPruneNotificationEventsAge(t *testing.T) {
+	store := testStoreInternal(t)
+	ctx := context.Background()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	tenantID := seedTestTenant(t, store, "prune-age-tenant")
+	wlID := seedTestWatchlist(t, store, tenantID, "NVIDIA")
+
+	insertAt := func(username string, ageDays int) {
+		t.Helper()
+		_, err := store.DB().ExecContext(ctx,
+			`INSERT INTO devtrace_notification_event (watchlist_id, event_type, username, details, created_at)
+			 VALUES ($1, 'new_contributor', $2, '{}'::jsonb, NOW() - $3 * INTERVAL '1 day')`,
+			wlID, username, ageDays)
+		if err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+	insertAt("recent", 1)
+	insertAt("medium", 10)
+	insertAt("old", 100)
+
+	// Starter retention: 30 days. Should delete only "old".
+	deleted, err := store.PruneNotificationEvents(ctx, tenantID, 30, 0)
+	if err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("deleted = %d, want 1", deleted)
+	}
+
+	_, total, err := store.GetNotificationEvents(ctx, tenantID, "", 100, 0)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if total != 2 {
+		t.Errorf("remaining = %d, want 2", total)
+	}
+}
+
+func TestPruneNotificationEventsCap(t *testing.T) {
+	store := testStoreInternal(t)
+	ctx := context.Background()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	tenantID := seedTestTenant(t, store, "prune-cap-tenant")
+	wlID := seedTestWatchlist(t, store, tenantID, "NVIDIA")
+
+	for i := 0; i < 15; i++ {
+		_, err := store.DB().ExecContext(ctx,
+			`INSERT INTO devtrace_notification_event (watchlist_id, event_type, username, details, created_at)
+			 VALUES ($1, 'new_contributor', $2, '{}'::jsonb, NOW() - $3 * INTERVAL '1 minute')`,
+			wlID, fmt.Sprintf("user%02d", i), 15-i)
+		if err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+
+	// Cap at 10. Retention high (1000) so age pass is a no-op.
+	deleted, err := store.PruneNotificationEvents(ctx, tenantID, 1000, 10)
+	if err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	if deleted != 5 {
+		t.Errorf("deleted = %d, want 5", deleted)
+	}
+
+	events, total, err := store.GetNotificationEvents(ctx, tenantID, "", 100, 0)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if total != 10 {
+		t.Errorf("remaining = %d, want 10", total)
+	}
+	// Newest 10 should be user14..user05 (descending by created_at).
+	if events[0].Username != "user14" {
+		t.Errorf("newest survivor = %s, want user14", events[0].Username)
+	}
+	if events[9].Username != "user05" {
+		t.Errorf("oldest survivor = %s, want user05", events[9].Username)
+	}
 }
 
 func TestIntDetail(t *testing.T) {
