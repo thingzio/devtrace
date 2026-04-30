@@ -162,6 +162,31 @@ type DigestTarget struct {
 	Plan     string
 }
 
+// ActiveTenant is a minimal tenant projection used by background jobs.
+type ActiveTenant struct {
+	ID   string
+	Plan string
+}
+
+// ListActiveTenants returns all tenants with status = 'active'.
+func (s *Store) ListActiveTenants(ctx context.Context) ([]ActiveTenant, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, plan FROM devtrace_tenant WHERE status = 'active'`)
+	if err != nil {
+		return nil, fmt.Errorf("list active tenants: %w", err)
+	}
+	defer rows.Close()
+	var out []ActiveTenant
+	for rows.Next() {
+		var t ActiveTenant
+		if err := rows.Scan(&t.ID, &t.Plan); err != nil {
+			return nil, fmt.Errorf("scan tenant: %w", err)
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 // GetAllWatchlistTargets returns all active watchlist targets grouped by target.
 // Each target maps to a slice of watchlist entries so the ingest pipeline
 // can match contributor repos against watchlists.

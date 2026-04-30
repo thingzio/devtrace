@@ -28,6 +28,9 @@ const (
 	pruneActivityRetention = 120 * 24 * time.Hour // delete activity older than 120 days
 	pruneHistoryRetention  = 400 * 24 * time.Hour // delete score history older than 400 days
 
+	notificationPruneStateKey = "notification_prune_state"
+	notificationPruneInterval = 24 * time.Hour
+
 	digestMaxEventsPerEmail = 10
 )
 
@@ -48,6 +51,8 @@ type ingestStore interface {
 	GetTenantsWithUnsentEvents(ctx context.Context) ([]postgres.DigestTarget, error)
 	GetUnsentEventsForDigest(ctx context.Context, tenantID string, limit int) ([]postgres.NotificationEvent, error)
 	MarkAllEventsSent(ctx context.Context, tenantID string) error
+	PruneNotificationEvents(ctx context.Context, tenantID string, retentionDays, maxEvents int) (int, error)
+	ListActiveTenants(ctx context.Context) ([]postgres.ActiveTenant, error)
 }
 
 // Run processes one or more hourly GH Archive dumps.
@@ -101,6 +106,9 @@ func Run(ctx context.Context, store *postgres.Store) error {
 
 	// Digest: send weekly notification emails.
 	maybeSendDigests(ctx, store)
+
+	// Prune: walk active tenants and prune notification events per plan limits.
+	maybePruneNotifications(ctx, store)
 
 	return nil
 }
@@ -416,6 +424,44 @@ func maybeSendDigests(ctx context.Context, store ingestStore) {
 	}
 
 	saveDigestState(ctx, store)
+}
+
+// maybePruneNotifications walks all active tenants and prunes their watchlist
+// notification events according to per-plan retention and cap limits.
+// Runs once per notificationPruneInterval (independent of digest cadence).
+func maybePruneNotifications(ctx context.Context, store ingestStore) {
+	last, err := store.GetSyncState(ctx, notificationPruneStateKey)
+	if err != nil {
+		slog.Warn("get prune state failed", "error", err)
+	}
+	if !last.IsZero() && time.Since(last) < notificationPruneInterval {
+		return
+	}
+
+	tenants, err := store.ListActiveTenants(ctx)
+	if err != nil {
+		slog.Error("prune: list tenants", "error", err)
+		return
+	}
+
+	for _, tn := range tenants {
+		p, ok := plan.Get(tn.Plan)
+		if !ok {
+			p = plan.Free()
+		}
+		deleted, err := store.PruneNotificationEvents(ctx, tn.ID, p.EventRetentionDays, p.MaxEventsPerTenant)
+		if err != nil {
+			slog.Error("prune notifications", "tenant", tn.ID, "error", err)
+			continue
+		}
+		if deleted > 0 {
+			slog.Info("watchlist prune", "tenant", tn.ID, "plan", tn.Plan, "deleted", deleted)
+		}
+	}
+
+	if err := store.SaveSyncState(ctx, notificationPruneStateKey, time.Now().UTC()); err != nil {
+		slog.Warn("save prune state failed", "error", err)
+	}
 }
 
 func buildAdminSet() map[string]bool {

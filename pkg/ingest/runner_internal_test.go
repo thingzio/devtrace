@@ -37,6 +37,17 @@ type mockIngestStore struct {
 	digestTargets    []postgres.DigestTarget
 	unsentEvents     []postgres.NotificationEvent
 	markedSent       []int64
+
+	// Prune scheduler support
+	activeTenants  []postgres.ActiveTenant
+	pruneCalls     []pruneCall
+	pruneCallCount int
+}
+
+type pruneCall struct {
+	tenantID      string
+	retentionDays int
+	maxEvents     int
 }
 
 type notifEntry struct {
@@ -133,6 +144,20 @@ func (m *mockIngestStore) MarkAllEventsSent(_ context.Context, _ string) error {
 		m.markedSent = append(m.markedSent, ev.ID)
 	}
 	return nil
+}
+
+func (m *mockIngestStore) PruneNotificationEvents(_ context.Context, tenantID string, retentionDays, maxEvents int) (int, error) {
+	m.pruneCallCount++
+	m.pruneCalls = append(m.pruneCalls, pruneCall{
+		tenantID:      tenantID,
+		retentionDays: retentionDays,
+		maxEvents:     maxEvents,
+	})
+	return 0, nil
+}
+
+func (m *mockIngestStore) ListActiveTenants(_ context.Context) ([]postgres.ActiveTenant, error) {
+	return m.activeTenants, nil
 }
 
 // newTestArchiveServer returns an httptest server that serves gzipped NDJSON
@@ -655,6 +680,96 @@ func TestProcessHourStreamError(t *testing.T) {
 	if !errors.Is(err, ErrArchiveNotFound) {
 		t.Errorf("error should wrap ErrArchiveNotFound, got: %v", err)
 	}
+}
+
+func TestMaybePruneNotifications(t *testing.T) {
+	t.Parallel()
+
+	t.Run("skips when recent", func(t *testing.T) {
+		t.Parallel()
+		m := newMockIngestStore()
+		m.syncStates[notificationPruneStateKey] = time.Now().Add(-1 * time.Hour)
+		m.activeTenants = []postgres.ActiveTenant{
+			{ID: "t1", Plan: "free"},
+		}
+
+		maybePruneNotifications(context.Background(), m)
+
+		if m.pruneCallCount != 0 {
+			t.Errorf("prune called when last run was recent: %d", m.pruneCallCount)
+		}
+	})
+
+	t.Run("runs when interval elapsed", func(t *testing.T) {
+		t.Parallel()
+		m := newMockIngestStore()
+		m.syncStates[notificationPruneStateKey] = time.Now().Add(-48 * time.Hour)
+		m.activeTenants = []postgres.ActiveTenant{
+			{ID: "t1", Plan: "free"},
+			{ID: "t2", Plan: "pro"},
+		}
+
+		maybePruneNotifications(context.Background(), m)
+
+		if m.pruneCallCount != 2 {
+			t.Errorf("prune call count = %d, want 2", m.pruneCallCount)
+		}
+
+		// Per-plan limits passed correctly.
+		// free: EventRetentionDays=7, MaxEventsPerTenant=100
+		if m.pruneCalls[0].tenantID != "t1" ||
+			m.pruneCalls[0].retentionDays != 7 ||
+			m.pruneCalls[0].maxEvents != 100 {
+			t.Errorf("free tenant got %+v, want {t1 7 100}", m.pruneCalls[0])
+		}
+		// pro: EventRetentionDays=90, MaxEventsPerTenant=10000
+		if m.pruneCalls[1].tenantID != "t2" ||
+			m.pruneCalls[1].retentionDays != 90 ||
+			m.pruneCalls[1].maxEvents != 10000 {
+			t.Errorf("pro tenant got %+v, want {t2 90 10000}", m.pruneCalls[1])
+		}
+
+		// State should be saved after run.
+		if m.syncStates[notificationPruneStateKey].IsZero() {
+			t.Error("prune state should be saved after run")
+		}
+	})
+
+	t.Run("unknown plan falls back to free", func(t *testing.T) {
+		t.Parallel()
+		m := newMockIngestStore()
+		m.activeTenants = []postgres.ActiveTenant{
+			{ID: "tx", Plan: "mystery"},
+		}
+
+		maybePruneNotifications(context.Background(), m)
+
+		if m.pruneCallCount != 1 {
+			t.Fatalf("prune call count = %d, want 1", m.pruneCallCount)
+		}
+		if m.pruneCalls[0].retentionDays != 7 || m.pruneCalls[0].maxEvents != 100 {
+			t.Errorf("unknown plan got %+v, want free fallback {tx 7 100}", m.pruneCalls[0])
+		}
+	})
+
+	t.Run("first run with no prior state runs prune", func(t *testing.T) {
+		t.Parallel()
+		m := newMockIngestStore()
+		// No syncStates entry -> last is zero time -> should run.
+		m.activeTenants = []postgres.ActiveTenant{
+			{ID: "t1", Plan: "starter"},
+		}
+
+		maybePruneNotifications(context.Background(), m)
+
+		if m.pruneCallCount != 1 {
+			t.Errorf("prune call count = %d, want 1 on first run", m.pruneCallCount)
+		}
+		// starter: EventRetentionDays=30, MaxEventsPerTenant=1000
+		if m.pruneCalls[0].retentionDays != 30 || m.pruneCalls[0].maxEvents != 1000 {
+			t.Errorf("starter tenant got %+v, want 30/1000", m.pruneCalls[0])
+		}
+	})
 }
 
 func TestProcessHourBatchUpsertError(t *testing.T) {
