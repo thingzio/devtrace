@@ -57,6 +57,32 @@ func TestGetPlan(t *testing.T) {
 	}
 }
 
+func TestPlanWatchlistRetention(t *testing.T) {
+	cases := []struct {
+		plan          string
+		retentionDays int
+		maxEvents     int
+	}{
+		{"free", 7, 100},
+		{"starter", 30, 1000},
+		{"pro", 90, 10000},
+	}
+	for _, tc := range cases {
+		t.Run(tc.plan, func(t *testing.T) {
+			p, ok := Get(tc.plan)
+			if !ok {
+				t.Fatalf("plan %q not found", tc.plan)
+			}
+			if p.EventRetentionDays != tc.retentionDays {
+				t.Errorf("EventRetentionDays = %d, want %d", p.EventRetentionDays, tc.retentionDays)
+			}
+			if p.MaxEventsPerTenant != tc.maxEvents {
+				t.Errorf("MaxEventsPerTenant = %d, want %d", p.MaxEventsPerTenant, tc.maxEvents)
+			}
+		})
+	}
+}
+
 func TestGetPlanUnknown(t *testing.T) {
 	_, ok := Get("nonexistent")
 	if ok {

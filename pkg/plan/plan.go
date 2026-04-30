@@ -9,26 +9,28 @@ const (
 
 // Plan defines the capabilities and limits for a billing tier.
 type Plan struct {
-	Name              string
-	DisplayName       string
-	PriceLabel        string // e.g. "$0/mo*", empty for free
-	MaxContributors   int    // per billing period, 0 = unlimited
-	RateLimitPerHour  int
-	DeepScoring       bool
-	AISensing         bool
-	BatchAPI          bool
-	Webhooks          bool
-	HistoryDays       int // score history window in days
-	MaxAPIKeys        int
-	ComplianceReports bool
-	MaxWatchlists     int    // extra watchlists beyond implicit (0, 1, 3)
-	DigestEmail       bool   // whether plan includes email digest
-	WatchlistScope    string // "pr", "pr_review", "pr_review_issue"
-	RiskSummary       string // display value for plans table
-	AISensingLabel    string
-	APIKeysLabel      string
-	AlertsLabel       string
-	ComplianceLabel   string
+	Name               string
+	DisplayName        string
+	PriceLabel         string // e.g. "$0/mo*", empty for free
+	MaxContributors    int    // per billing period, 0 = unlimited
+	RateLimitPerHour   int
+	DeepScoring        bool
+	AISensing          bool
+	BatchAPI           bool
+	Webhooks           bool
+	HistoryDays        int // score history window in days
+	MaxAPIKeys         int
+	ComplianceReports  bool
+	MaxWatchlists      int    // extra watchlists beyond implicit (0, 1, 3)
+	DigestEmail        bool   // whether plan includes email digest
+	WatchlistScope     string // "pr", "pr_review", "pr_review_issue"
+	EventRetentionDays int    // notification event retention in days
+	MaxEventsPerTenant int    // hard cap on stored events per tenant; oldest pruned first
+	RiskSummary        string // display value for plans table
+	AISensingLabel     string
+	APIKeysLabel       string
+	AlertsLabel        string
+	ComplianceLabel    string
 }
 
 // Feature describes one row in the plans comparison table.
@@ -44,60 +46,66 @@ var planOrder = []string{"free", "starter", "pro"}
 
 var plans = map[string]Plan{
 	"free": {
-		Name:             "free",
-		DisplayName:      "Free",
-		MaxContributors:  50,
-		RateLimitPerHour: 60,
-		HistoryDays:      30,
-		MaxAPIKeys:       1,
-		MaxWatchlists:    0,
-		DigestEmail:      false,
-		WatchlistScope:   "pr",
-		RiskSummary:      "Metrics-based",
-		AISensingLabel:   "Metadata",
-		APIKeysLabel:     "1",
-		AlertsLabel:      "Dashboard only",
-		ComplianceLabel:  valDash,
+		Name:               "free",
+		DisplayName:        "Free",
+		MaxContributors:    50,
+		RateLimitPerHour:   60,
+		HistoryDays:        30,
+		MaxAPIKeys:         1,
+		MaxWatchlists:      0,
+		DigestEmail:        false,
+		WatchlistScope:     "pr",
+		EventRetentionDays: 7,
+		MaxEventsPerTenant: 100,
+		RiskSummary:        "Metrics-based",
+		AISensingLabel:     "Metadata",
+		APIKeysLabel:       "1",
+		AlertsLabel:        "Dashboard only",
+		ComplianceLabel:    valDash,
 	},
 	"starter": {
-		Name:             "starter",
-		DisplayName:      "Starter",
-		PriceLabel:       "$0/mo*",
-		MaxContributors:  200,
-		RateLimitPerHour: 300,
-		AISensing:        true,
-		HistoryDays:      90,
-		MaxAPIKeys:       1,
-		MaxWatchlists:    1,
-		DigestEmail:      true,
-		WatchlistScope:   "pr_review",
-		RiskSummary:      "AI-powered",
-		AISensingLabel:   "Metadata + PR authenticity",
-		APIKeysLabel:     "1",
-		AlertsLabel:      "Weekly email + dashboard",
-		ComplianceLabel:  valDash,
+		Name:               "starter",
+		DisplayName:        "Starter",
+		PriceLabel:         "$0/mo*",
+		MaxContributors:    200,
+		RateLimitPerHour:   300,
+		AISensing:          true,
+		HistoryDays:        90,
+		MaxAPIKeys:         1,
+		MaxWatchlists:      1,
+		DigestEmail:        true,
+		WatchlistScope:     "pr_review",
+		EventRetentionDays: 30,
+		MaxEventsPerTenant: 1000,
+		RiskSummary:        "AI-powered",
+		AISensingLabel:     "Metadata + PR authenticity",
+		APIKeysLabel:       "1",
+		AlertsLabel:        "Weekly email + dashboard",
+		ComplianceLabel:    valDash,
 	},
 	"pro": {
-		Name:              "pro",
-		DisplayName:       "Pro",
-		PriceLabel:        "$0/mo*",
-		MaxContributors:   2000,
-		RateLimitPerHour:  1000,
-		DeepScoring:       true,
-		AISensing:         true,
-		BatchAPI:          true,
-		Webhooks:          true,
-		ComplianceReports: true,
-		HistoryDays:       365,
-		MaxAPIKeys:        10,
-		MaxWatchlists:     3,
-		DigestEmail:       true,
-		WatchlistScope:    "pr_review_issue",
-		RiskSummary:       "AI-powered",
-		AISensingLabel:    "Full Context",
-		APIKeysLabel:      "10",
-		AlertsLabel:       "Weekly email + dashboard",
-		ComplianceLabel:   "SSDF + EU CRA",
+		Name:               "pro",
+		DisplayName:        "Pro",
+		PriceLabel:         "$0/mo*",
+		MaxContributors:    2000,
+		RateLimitPerHour:   1000,
+		DeepScoring:        true,
+		AISensing:          true,
+		BatchAPI:           true,
+		Webhooks:           true,
+		ComplianceReports:  true,
+		HistoryDays:        365,
+		MaxAPIKeys:         10,
+		MaxWatchlists:      3,
+		DigestEmail:        true,
+		WatchlistScope:     "pr_review_issue",
+		EventRetentionDays: 90,
+		MaxEventsPerTenant: 10000,
+		RiskSummary:        "AI-powered",
+		AISensingLabel:     "Full Context",
+		APIKeysLabel:       "10",
+		AlertsLabel:        "Weekly email + dashboard",
+		ComplianceLabel:    "SSDF + EU CRA",
 	},
 }
 
