@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/thingzio/devtrace/pkg/compliance"
 	"github.com/thingzio/devtrace/pkg/data/postgres"
@@ -170,8 +171,13 @@ func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 		if p, perr := strconv.Atoi(r.URL.Query().Get("events_page")); perr == nil && p > 0 {
 			eventsPage = p
 		}
+		q := strings.TrimSpace(r.URL.Query().Get("q"))
+		if len(q) > 64 {
+			q = q[:64]
+		}
+		qLower := strings.ToLower(q)
 		eventsOffset := (eventsPage - 1) * eventsPerPage
-		events, eventsTotal, eerr := store.GetNotificationEvents(r.Context(), tn.ID, "", eventsPerPage, eventsOffset)
+		events, eventsTotal, eerr := store.GetNotificationEvents(r.Context(), tn.ID, qLower, eventsPerPage, eventsOffset)
 		if eerr != nil {
 			slog.Error("dashboard: get notification events", "tenant", tn.ID, "error", eerr)
 		}
@@ -196,6 +202,7 @@ func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			"tokens":             tokens,
 			"recent":             recent,
 			"events":             events,
+			"events_q":           q,
 			"events_page":        eventsPage,
 			"events_total":       eventsTotal,
 			"events_total_pages": eventsTotalPages,
