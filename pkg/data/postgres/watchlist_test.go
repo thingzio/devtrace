@@ -1,6 +1,11 @@
 package postgres
 
-import "testing"
+import (
+	"context"
+	"os"
+	"testing"
+	"time"
+)
 
 func TestNotificationEventDetailSummary(t *testing.T) {
 	t.Parallel()
@@ -119,6 +124,118 @@ func TestNotificationEventRepoSummary(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetNotificationEventsSearch(t *testing.T) {
+	store := testStoreInternal(t)
+	ctx := context.Background()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	tenantID := seedTestTenant(t, store, "search-tenant")
+	wlID := seedTestWatchlist(t, store, tenantID, "NVIDIA")
+
+	insert := func(username string, repos []string) {
+		t.Helper()
+		details := map[string]any{}
+		if len(repos) > 0 {
+			anys := make([]any, len(repos))
+			for i, r := range repos {
+				anys[i] = r
+			}
+			details["repos"] = anys
+		}
+		if err := store.InsertNotificationEvent(ctx, wlID, "new_contributor", username, details); err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+
+	insert("alice", []string{"NVIDIA/cuda-samples"})
+	insert("bob", []string{"NVIDIA/TensorRT"})
+	insert("CarolUpper", []string{"NVIDIA/cccl"})
+
+	cases := []struct {
+		name  string
+		query string
+		want  int
+	}{
+		{"empty query returns all", "", 3},
+		{"username substring", "ali", 1},
+		{"username case-insensitive", "carolupper", 1},
+		{"target substring", "nvidia", 3},
+		{"repo in details", "tensorrt", 1},
+		{"no matches", "zzznomatch", 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			events, total, err := store.GetNotificationEvents(ctx, tenantID, tc.query, 100, 0)
+			if err != nil {
+				t.Fatalf("get events: %v", err)
+			}
+			if total != tc.want {
+				t.Errorf("total = %d, want %d", total, tc.want)
+			}
+			if len(events) != tc.want {
+				t.Errorf("events = %d, want %d", len(events), tc.want)
+			}
+		})
+	}
+}
+
+// testStoreInternal mirrors the postgres_test.testStore helper for tests
+// that need access to unexported package symbols.
+func testStoreInternal(t *testing.T) *Store {
+	t.Helper()
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres://devtrace:devtrace@localhost:5432/devtrace?sslmode=disable"
+	}
+	store, err := New(context.Background(), dsn, DefaultPoolConfig())
+	if err != nil {
+		t.Skipf("skipping integration test: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
+	return store
+}
+
+// seedTestTenant inserts a tenant with a unique github_id so parallel/repeat
+// runs don't collide on the UNIQUE constraint. Cleanup cascades to watchlists
+// and notification events via ON DELETE CASCADE.
+func seedTestTenant(t *testing.T, store *Store, username string) string {
+	t.Helper()
+	ctx := context.Background()
+	githubID := time.Now().UnixNano()
+	var id string
+	err := store.DB().QueryRowContext(ctx,
+		`INSERT INTO devtrace_tenant (github_id, username, plan, status)
+		 VALUES ($1, $2, 'free', 'active')
+		 RETURNING id`,
+		githubID, username).Scan(&id)
+	if err != nil {
+		t.Fatalf("seed tenant: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = store.DB().ExecContext(context.Background(),
+			`DELETE FROM devtrace_tenant WHERE id = $1`, id)
+	})
+	return id
+}
+
+func seedTestWatchlist(t *testing.T, store *Store, tenantID, target string) string {
+	t.Helper()
+	ctx := context.Background()
+	var id string
+	err := store.DB().QueryRowContext(ctx,
+		`INSERT INTO devtrace_watchlist (tenant_id, target, source)
+		 VALUES ($1, $2, 'manual')
+		 RETURNING id`,
+		tenantID, target).Scan(&id)
+	if err != nil {
+		t.Fatalf("seed watchlist: %v", err)
+	}
+	// Tenant cascade will clean up watchlist + events.
+	return id
 }
 
 func TestIntDetail(t *testing.T) {

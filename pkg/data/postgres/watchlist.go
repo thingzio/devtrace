@@ -207,14 +207,29 @@ func (s *Store) InsertNotificationEvent(ctx context.Context, watchlistID, eventT
 	return nil
 }
 
-// GetNotificationEvents returns paginated notification events for a tenant.
-// Events are ordered by created_at DESC. Returns the events and total count.
-func (s *Store) GetNotificationEvents(ctx context.Context, tenantID string, limit, offset int) ([]NotificationEvent, int, error) {
+// GetNotificationEvents returns paginated notification events for a tenant,
+// optionally filtered by a query string matching username, target, or any
+// repo in details->'repos'. The query is matched case-insensitively as a
+// substring. An empty query returns all events. Events are ordered by
+// created_at DESC. Returns the events and the total count of the filtered set.
+func (s *Store) GetNotificationEvents(ctx context.Context, tenantID, query string, limit, offset int) ([]NotificationEvent, int, error) {
+	const filterClause = `
+		WHERE w.tenant_id = $1
+		  AND ($2 = ''
+		       OR LOWER(ne.username) LIKE '%' || $2 || '%'
+		       OR LOWER(w.target)    LIKE '%' || $2 || '%'
+		       OR EXISTS (
+		            SELECT 1 FROM jsonb_array_elements_text(ne.details->'repos') r
+		            WHERE LOWER(r) LIKE '%' || $2 || '%'
+		       ))`
+
+	q := strings.ToLower(query)
+
 	var total int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM devtrace_notification_event ne
-		 JOIN devtrace_watchlist w ON w.id = ne.watchlist_id
-		 WHERE w.tenant_id = $1`, tenantID).Scan(&total)
+		 JOIN devtrace_watchlist w ON w.id = ne.watchlist_id`+filterClause,
+		tenantID, q).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count notification events: %w", err)
 	}
@@ -225,10 +240,9 @@ func (s *Store) GetNotificationEvents(ctx context.Context, tenantID string, limi
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT ne.id, ne.event_type, ne.username, w.target, ne.details, ne.created_at, ne.sent_at
 		 FROM devtrace_notification_event ne
-		 JOIN devtrace_watchlist w ON w.id = ne.watchlist_id
-		 WHERE w.tenant_id = $1
+		 JOIN devtrace_watchlist w ON w.id = ne.watchlist_id`+filterClause+`
 		 ORDER BY ne.created_at DESC
-		 LIMIT $2 OFFSET $3`, tenantID, limit, offset)
+		 LIMIT $3 OFFSET $4`, tenantID, q, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query notification events: %w", err)
 	}

@@ -171,7 +171,7 @@ func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			eventsPage = p
 		}
 		eventsOffset := (eventsPage - 1) * eventsPerPage
-		events, eventsTotal, eerr := store.GetNotificationEvents(r.Context(), tn.ID, eventsPerPage, eventsOffset)
+		events, eventsTotal, eerr := store.GetNotificationEvents(r.Context(), tn.ID, "", eventsPerPage, eventsOffset)
 		if eerr != nil {
 			slog.Error("dashboard: get notification events", "tenant", tn.ID, "error", eerr)
 		}
