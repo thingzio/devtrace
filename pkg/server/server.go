@@ -438,6 +438,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 
 	// Dashboard — requires session
 	mux.Handle("GET /dashboard", requireSession(csrf(dashboardHandler(store, opts))))
+	mux.Handle("GET /dashboard/events.json", requireSession(dashboardEventsHandler(store)))
 
 	// Settings + ToS — requires session
 	mux.Handle("GET /settings", requireSession(csrf(settingsHandler(store, opts))))

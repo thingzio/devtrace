@@ -39,6 +39,90 @@
     </div>
   </div>
 
+  <section id="watchlist-activity" style="margin-top:2rem;"
+           data-initial-page="{{.events_page}}"
+           data-initial-total="{{.events_total}}"
+           data-initial-total-pages="{{.events_total_pages}}"
+           data-initial-contributor="{{.events_filter_user}}"
+           data-initial-org="{{.events_filter_org}}"
+           data-initial-repo="{{.events_filter_repo}}">
+    <h2>Watchlist Activity</h2>
+    {{if .has_watchlists}}
+    <p style="color:var(--text-secondary,#8b949e);font-size:0.85rem;margin-bottom:0.5rem;">
+      Track new contributors and score changes in your watched GitHub orgs.
+      <a href="/settings" style="color:var(--accent,#58a6ff);">Manage watchlists</a>
+    </p>
+    <p style="color:var(--text-secondary,#8b949e);font-size:0.78rem;margin-bottom:0.75rem;">
+      <strong>NEW</strong> &mdash; first time a contributor was seen in a watched org/repo.
+      <strong>score</strong> &mdash; a watched contributor's grade changed on re-score.
+      Score-change events appear once a contributor has been graded at least twice.
+    </p>
+    {{else}}
+    <p style="color:var(--text-secondary,#8b949e);font-size:0.85rem;margin-bottom:0.75rem;">
+      You don't have any watchlists yet.
+      <a href="/settings" style="color:var(--accent,#58a6ff);">Add a watchlist</a>
+      to start tracking new contributors and score changes in the GitHub orgs and repos you care about.
+    </p>
+    {{end}}
+
+    {{if .has_watchlists}}
+    <table class="data-table" id="events-table">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Contributor</th>
+          <th>Org</th>
+          <th>Repo</th>
+          <th>Details</th>
+          <th>Detected</th>
+        </tr>
+        <tr class="filters-row">
+          <th></th>
+          <th><input type="search" data-events-filter="contributor"
+                     value="{{.events_filter_user}}"
+                     placeholder="filter…" maxlength="64" autocomplete="off"
+                     class="events-filter-input"></th>
+          <th><input type="search" data-events-filter="org"
+                     value="{{.events_filter_org}}"
+                     placeholder="filter…" maxlength="64" autocomplete="off"
+                     class="events-filter-input"></th>
+          <th><input type="search" data-events-filter="repo"
+                     value="{{.events_filter_repo}}"
+                     placeholder="filter…" maxlength="64" autocomplete="off"
+                     class="events-filter-input"></th>
+          <th></th>
+          <th><input type="date" data-events-filter="since"
+                     class="events-filter-input"
+                     title="Show events on or after this date"></th>
+        </tr>
+      </thead>
+      <tbody id="events-tbody">
+        {{range .events}}
+        <tr>
+          <td>{{if eq .EventType "new_contributor"}}<span class="badge-event badge-new-contributor">new</span>{{else if eq .EventType "score_change"}}<span class="badge-event badge-score-change">score</span>{{else}}<span class="badge-event">{{.EventType}}</span>{{end}}</td>
+          <td><a href="/score/{{.Username}}">{{.Username}}</a></td>
+          <td>{{.Target}}</td>
+          <td title="{{.RepoTooltip}}">{{with .RepoSummary}}{{.}}{{else}}&mdash;{{end}}</td>
+          <td class="muted" style="font-size:0.8rem;">{{.DetailSummary}}</td>
+          <td><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z"}}">{{.CreatedAt.Format "2006-01-02 15:04"}}</time></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    <p id="events-empty"
+       data-default-msg="No activity yet — scores and new contributors will show up here as they're detected."
+       style="color:var(--text-secondary,#8b949e);font-size:0.85rem;{{if .events}}display:none;{{end}}">
+      No activity yet — scores and new contributors will show up here as they're detected.
+    </p>
+    <div id="events-pager"
+         style="display:none;align-items:center;justify-content:center;gap:0.75rem;margin-top:0.5rem;font-size:0.8rem;color:var(--text-secondary,#8b949e);">
+      <button type="button" class="btn btn-sm" id="events-prev">Prev</button>
+      <span id="events-pager-label"></span>
+      <button type="button" class="btn btn-sm" id="events-next">Next</button>
+    </div>
+    {{end}}
+  </section>
+
   <section style="margin-top:2rem;">
     <h2>Recently Scored</h2>
     {{if .recent}}
@@ -68,68 +152,6 @@
     </table>
     {{else}}
     <p>No contributors scored yet. Use the search bar to score your first contributor.</p>
-    {{end}}
-  </section>
-
-  <section style="margin-top:2rem;">
-    <h2>Watchlist Activity</h2>
-    <p style="color:var(--text-secondary,#8b949e);font-size:0.85rem;margin-bottom:0.5rem;">
-      Track new contributors and score changes in your watched GitHub orgs.
-      <a href="/settings" style="color:var(--accent,#58a6ff);">Manage watchlists</a>
-    </p>
-    <p style="color:var(--text-secondary,#8b949e);font-size:0.78rem;margin-bottom:0.75rem;">
-      <strong>NEW</strong> &mdash; first time a contributor was seen in a watched org/repo.
-      <strong>score</strong> &mdash; a watched contributor's grade changed on re-score.
-      Score-change events appear once a contributor has been graded at least twice.
-    </p>
-
-    <form method="get" action="/dashboard"
-          style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
-      <input type="search" name="q" value="{{.events_q}}"
-             placeholder="Search by contributor or org/repo"
-             maxlength="64" autocomplete="off"
-             style="flex:1;max-width:320px;padding:0.35rem 0.6rem;font-size:0.85rem;
-                    background:var(--bg-secondary,#161b22);color:var(--text-primary,#f0f6fc);
-                    border:1px solid var(--border,#30363d);border-radius:4px;">
-      {{if .events_q}}<a href="/dashboard" class="btn btn-sm">Clear</a>{{end}}
-    </form>
-
-    {{if .events}}
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Contributor</th>
-          <th>Org</th>
-          <th>Repo</th>
-          <th>Details</th>
-          <th>Detected</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{range .events}}
-        <tr>
-          <td>{{if eq .EventType "new_contributor"}}<span class="badge-event badge-new-contributor">new</span>{{else if eq .EventType "score_change"}}<span class="badge-event badge-score-change">score</span>{{else}}<span class="badge-event">{{.EventType}}</span>{{end}}</td>
-          <td><a href="/score/{{.Username}}">{{.Username}}</a></td>
-          <td>{{.Target}}</td>
-          <td title="{{.RepoTooltip}}">{{with .RepoSummary}}{{.}}{{else}}&mdash;{{end}}</td>
-          <td class="muted" style="font-size:0.8rem;">{{.DetailSummary}}</td>
-          <td><time datetime="{{.CreatedAt.Format "2006-01-02T15:04:05Z"}}">{{.CreatedAt.Format "2006-01-02 15:04"}}</time></td>
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
-    {{if gt .events_total_pages 1}}
-    <div style="display:flex;align-items:center;justify-content:center;gap:0.75rem;margin-top:0.5rem;font-size:0.8rem;color:var(--text-secondary,#8b949e);">
-      {{if .events_has_prev}}<a href="/dashboard?events_page={{.events_prev_page}}{{if .events_q}}&q={{.events_q}}{{end}}" class="btn btn-sm">Prev</a>{{else}}<span class="btn btn-sm" style="opacity:0.4;pointer-events:none;">Prev</span>{{end}}
-      <span>Page {{.events_page}} of {{.events_total_pages}} ({{.events_total}} events)</span>
-      {{if .events_has_next}}<a href="/dashboard?events_page={{.events_next_page}}{{if .events_q}}&q={{.events_q}}{{end}}" class="btn btn-sm">Next</a>{{else}}<span class="btn btn-sm" style="opacity:0.4;pointer-events:none;">Next</span>{{end}}
-    </div>
-    {{end}}
-    {{else}}
-    <p style="color:var(--text-secondary,#8b949e);font-size:0.85rem;">
-      {{if .events_q}}No events match "{{.events_q}}".{{else}}No watchlist activity yet.{{end}}
-    </p>
     {{end}}
   </section>
 </div>

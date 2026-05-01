@@ -135,7 +135,7 @@ func TestGetNotificationEventsSearch(t *testing.T) {
 	}
 
 	tenantID := seedTestTenant(t, store, "search-tenant")
-	wlID := seedTestWatchlist(t, store, tenantID, "NVIDIA")
+	wlID := seedTestWatchlist(t, store, tenantID)
 
 	insert := func(username string, repos []string) {
 		t.Helper()
@@ -157,20 +157,23 @@ func TestGetNotificationEventsSearch(t *testing.T) {
 	insert("CarolUpper", []string{"NVIDIA/cccl"})
 
 	cases := []struct {
-		name  string
-		query string
-		want  int
+		name   string
+		filter NotificationEventFilter
+		want   int
 	}{
-		{"empty query returns all", "", 3},
-		{"username substring", "ali", 1},
-		{"username case-insensitive", "carolupper", 1},
-		{"target substring", "nvidia", 3},
-		{"repo in details", "tensorrt", 1},
-		{"no matches", "zzznomatch", 0},
+		{"empty filter returns all", NotificationEventFilter{}, 3},
+		{"contributor substring", NotificationEventFilter{Contributor: "ali"}, 1},
+		{"contributor case-insensitive", NotificationEventFilter{Contributor: "carolupper"}, 1},
+		{"org target substring", NotificationEventFilter{Org: "nvidia"}, 3},
+		{"repo in details only", NotificationEventFilter{Repo: "tensorrt"}, 1},
+		{"repo matches org-prefixed repo names", NotificationEventFilter{Repo: "nvidia"}, 3},
+		{"contributor + repo combine (AND)", NotificationEventFilter{Contributor: "ali", Repo: "tensorrt"}, 0},
+		{"org + repo combine (AND)", NotificationEventFilter{Org: "nvidia", Repo: "cccl"}, 1},
+		{"no matches", NotificationEventFilter{Contributor: "zzznomatch"}, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			events, total, err := store.GetNotificationEvents(ctx, tenantID, tc.query, 100, 0)
+			events, total, err := store.GetNotificationEvents(ctx, tenantID, tc.filter, 100, 0)
 			if err != nil {
 				t.Fatalf("get events: %v", err)
 			}
@@ -181,6 +184,41 @@ func TestGetNotificationEventsSearch(t *testing.T) {
 				t.Errorf("events = %d, want %d", len(events), tc.want)
 			}
 		})
+	}
+}
+
+func TestGetNotificationEventsSince(t *testing.T) {
+	store := testStoreInternal(t)
+	ctx := context.Background()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	tenantID := seedTestTenant(t, store, "since-tenant")
+	wlID := seedTestWatchlist(t, store, tenantID)
+
+	insertAt := func(username string, ageDays int) {
+		t.Helper()
+		_, err := store.DB().ExecContext(ctx,
+			`INSERT INTO devtrace_notification_event (watchlist_id, event_type, username, details, created_at)
+			 VALUES ($1, 'new_contributor', $2, '{}'::jsonb, NOW() - $3 * INTERVAL '1 day')`,
+			wlID, username, ageDays)
+		if err != nil {
+			t.Fatalf("insert: %v", err)
+		}
+	}
+	insertAt("today", 0)
+	insertAt("recent", 2)
+	insertAt("week_ago", 7)
+	insertAt("old", 30)
+
+	cutoff := time.Now().Add(-3 * 24 * time.Hour)
+	_, total, err := store.GetNotificationEvents(ctx, tenantID, NotificationEventFilter{Since: cutoff}, 100, 0)
+	if err != nil {
+		t.Fatalf("get events: %v", err)
+	}
+	if total != 2 {
+		t.Errorf("total with since=%s = %d, want 2", cutoff.Format(time.RFC3339), total)
 	}
 }
 
@@ -223,15 +261,15 @@ func seedTestTenant(t *testing.T, store *Store, username string) string {
 	return id
 }
 
-func seedTestWatchlist(t *testing.T, store *Store, tenantID, target string) string {
+func seedTestWatchlist(t *testing.T, store *Store, tenantID string) string {
 	t.Helper()
 	ctx := context.Background()
 	var id string
 	err := store.DB().QueryRowContext(ctx,
 		`INSERT INTO devtrace_watchlist (tenant_id, target, source)
-		 VALUES ($1, $2, 'manual')
+		 VALUES ($1, 'NVIDIA', 'manual')
 		 RETURNING id`,
-		tenantID, target).Scan(&id)
+		tenantID).Scan(&id)
 	if err != nil {
 		t.Fatalf("seed watchlist: %v", err)
 	}
@@ -247,7 +285,7 @@ func TestPruneNotificationEventsAge(t *testing.T) {
 	}
 
 	tenantID := seedTestTenant(t, store, "prune-age-tenant")
-	wlID := seedTestWatchlist(t, store, tenantID, "NVIDIA")
+	wlID := seedTestWatchlist(t, store, tenantID)
 
 	insertAt := func(username string, ageDays int) {
 		t.Helper()
@@ -272,7 +310,7 @@ func TestPruneNotificationEventsAge(t *testing.T) {
 		t.Errorf("deleted = %d, want 1", deleted)
 	}
 
-	_, total, err := store.GetNotificationEvents(ctx, tenantID, "", 100, 0)
+	_, total, err := store.GetNotificationEvents(ctx, tenantID, NotificationEventFilter{}, 100, 0)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -289,7 +327,7 @@ func TestPruneNotificationEventsCap(t *testing.T) {
 	}
 
 	tenantID := seedTestTenant(t, store, "prune-cap-tenant")
-	wlID := seedTestWatchlist(t, store, tenantID, "NVIDIA")
+	wlID := seedTestWatchlist(t, store, tenantID)
 
 	for i := 0; i < 15; i++ {
 		_, err := store.DB().ExecContext(ctx,
@@ -310,7 +348,7 @@ func TestPruneNotificationEventsCap(t *testing.T) {
 		t.Errorf("deleted = %d, want 5", deleted)
 	}
 
-	events, total, err := store.GetNotificationEvents(ctx, tenantID, "", 100, 0)
+	events, total, err := store.GetNotificationEvents(ctx, tenantID, NotificationEventFilter{}, 100, 0)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}

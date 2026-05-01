@@ -232,29 +232,45 @@ func (s *Store) InsertNotificationEvent(ctx context.Context, watchlistID, eventT
 	return nil
 }
 
+// NotificationEventFilter narrows GetNotificationEvents results by column.
+// Empty fields are ignored. Contributor matches ne.username (substring,
+// case-insensitive). Org matches w.target (the watched org/repo target).
+// Repo matches any repo in ne.details->'repos'. Since restricts to events
+// with created_at >= the given time.
+type NotificationEventFilter struct {
+	Contributor string
+	Org         string
+	Repo        string
+	Since       time.Time
+}
+
 // GetNotificationEvents returns paginated notification events for a tenant,
-// optionally filtered by a query string matching username, target, or any
-// repo in details->'repos'. The query is matched case-insensitively as a
-// substring. An empty query returns all events. Events are ordered by
+// optionally filtered by per-column predicates. Events are ordered by
 // created_at DESC. Returns the events and the total count of the filtered set.
-func (s *Store) GetNotificationEvents(ctx context.Context, tenantID, query string, limit, offset int) ([]NotificationEvent, int, error) {
+func (s *Store) GetNotificationEvents(ctx context.Context, tenantID string, f NotificationEventFilter, limit, offset int) ([]NotificationEvent, int, error) {
 	const filterClause = `
 		WHERE w.tenant_id = $1
-		  AND ($2 = ''
-		       OR LOWER(ne.username) LIKE '%' || $2 || '%'
-		       OR LOWER(w.target)    LIKE '%' || $2 || '%'
-		       OR EXISTS (
+		  AND ($2 = '' OR LOWER(ne.username) LIKE '%' || $2 || '%')
+		  AND ($3 = '' OR LOWER(w.target) LIKE '%' || $3 || '%')
+		  AND ($4 = '' OR EXISTS (
 		            SELECT 1 FROM jsonb_array_elements_text(ne.details->'repos') r
-		            WHERE LOWER(r) LIKE '%' || $2 || '%'
-		       ))`
+		            WHERE LOWER(r) LIKE '%' || $4 || '%'
+		       ))
+		  AND ($5::timestamptz IS NULL OR ne.created_at >= $5::timestamptz)`
 
-	q := strings.ToLower(query)
+	contributor := strings.ToLower(strings.TrimSpace(f.Contributor))
+	org := strings.ToLower(strings.TrimSpace(f.Org))
+	repo := strings.ToLower(strings.TrimSpace(f.Repo))
+	var since interface{}
+	if !f.Since.IsZero() {
+		since = f.Since.UTC()
+	}
 
 	var total int
 	err := s.db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM devtrace_notification_event ne
 		 JOIN devtrace_watchlist w ON w.id = ne.watchlist_id`+filterClause,
-		tenantID, q).Scan(&total)
+		tenantID, contributor, org, repo, since).Scan(&total)
 	if err != nil {
 		return nil, 0, fmt.Errorf("count notification events: %w", err)
 	}
@@ -267,7 +283,7 @@ func (s *Store) GetNotificationEvents(ctx context.Context, tenantID, query strin
 		 FROM devtrace_notification_event ne
 		 JOIN devtrace_watchlist w ON w.id = ne.watchlist_id`+filterClause+`
 		 ORDER BY ne.created_at DESC
-		 LIMIT $3 OFFSET $4`, tenantID, q, limit, offset)
+		 LIMIT $6 OFFSET $7`, tenantID, contributor, org, repo, since, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("query notification events: %w", err)
 	}

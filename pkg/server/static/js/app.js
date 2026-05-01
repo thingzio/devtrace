@@ -364,6 +364,164 @@
     }
   }
 
+  // Watchlist activity table — client-side filter/page without full reload.
+  function initWatchlistActivity() {
+    var section = document.getElementById('watchlist-activity');
+    if (!section) return;
+    var tbody = document.getElementById('events-tbody');
+    var emptyMsg = document.getElementById('events-empty');
+    var pager = document.getElementById('events-pager');
+    var pagerLabel = document.getElementById('events-pager-label');
+    var prevBtn = document.getElementById('events-prev');
+    var nextBtn = document.getElementById('events-next');
+    if (!tbody || !pager || !prevBtn || !nextBtn) return;
+
+    var contribInput = section.querySelector('[data-events-filter="contributor"]');
+    var orgInput = section.querySelector('[data-events-filter="org"]');
+    var repoInput = section.querySelector('[data-events-filter="repo"]');
+    var sinceInput = section.querySelector('[data-events-filter="since"]');
+
+    var state = {
+      page: parseInt(section.getAttribute('data-initial-page'), 10) || 1,
+      contributor: section.getAttribute('data-initial-contributor') || '',
+      org: section.getAttribute('data-initial-org') || '',
+      repo: section.getAttribute('data-initial-repo') || '',
+      since: '',
+    };
+    var debounceTimer = null;
+    var inflight = 0;
+
+    // Hydrate pager from SSR totals so users see Prev/Next without an
+    // extra round-trip on first paint.
+    var initialTotal = parseInt(section.getAttribute('data-initial-total'), 10) || 0;
+    var initialTotalPages = parseInt(section.getAttribute('data-initial-total-pages'), 10) || 1;
+    if (initialTotalPages > 1) {
+      pager.style.display = 'flex';
+      pagerLabel.textContent = 'Page ' + state.page + ' of ' + initialTotalPages + ' (' + initialTotal + ' events)';
+      var hasPrev = state.page > 1;
+      var hasNext = state.page < initialTotalPages;
+      prevBtn.disabled = !hasPrev;
+      nextBtn.disabled = !hasNext;
+      prevBtn.style.opacity = hasPrev ? '' : '0.4';
+      nextBtn.style.opacity = hasNext ? '' : '0.4';
+    }
+
+    function escapeHTML(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function badgeFor(t) {
+      if (t === 'new_contributor') return '<span class="badge-event badge-new-contributor">new</span>';
+      if (t === 'score_change') return '<span class="badge-event badge-score-change">score</span>';
+      return '<span class="badge-event">' + escapeHTML(t) + '</span>';
+    }
+
+    function formatDetected(iso) {
+      var d = new Date(iso);
+      if (isNaN(d)) return escapeHTML(iso);
+      var label = d.toLocaleString(undefined, {
+        month: 'numeric', day: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+      return '<time datetime="' + escapeHTML(iso) + '">' + escapeHTML(label) + '</time>';
+    }
+
+    function renderRow(ev) {
+      var repoCell = ev.repo_summary
+        ? escapeHTML(ev.repo_summary)
+        : '&mdash;';
+      var tooltipAttr = ev.repo_tooltip ? ' title="' + escapeHTML(ev.repo_tooltip) + '"' : '';
+      return '<tr>' +
+        '<td>' + badgeFor(ev.event_type) + '</td>' +
+        '<td><a href="/score/' + encodeURIComponent(ev.username) + '">' + escapeHTML(ev.username) + '</a></td>' +
+        '<td>' + escapeHTML(ev.target) + '</td>' +
+        '<td' + tooltipAttr + '>' + repoCell + '</td>' +
+        '<td class="muted" style="font-size:0.8rem;">' + escapeHTML(ev.detail_summary) + '</td>' +
+        '<td>' + formatDetected(ev.created_at) + '</td>' +
+        '</tr>';
+    }
+
+    function render(data) {
+      var events = data.events || [];
+      if (events.length === 0) {
+        tbody.innerHTML = '';
+        if (emptyMsg) {
+          emptyMsg.style.display = '';
+          var hasFilter = state.contributor || state.org || state.repo || state.since;
+          emptyMsg.textContent = hasFilter
+            ? 'No events match the current filters.'
+            : emptyMsg.dataset.defaultMsg || 'No watchlist activity yet.';
+        }
+      } else {
+        if (emptyMsg) emptyMsg.style.display = 'none';
+        tbody.innerHTML = events.map(renderRow).join('');
+      }
+
+      if (data.total_pages > 1) {
+        pager.style.display = 'flex';
+        pagerLabel.textContent = 'Page ' + data.page + ' of ' + data.total_pages + ' (' + data.total + ' events)';
+        prevBtn.disabled = !data.has_prev;
+        nextBtn.disabled = !data.has_next;
+        prevBtn.style.opacity = data.has_prev ? '' : '0.4';
+        nextBtn.style.opacity = data.has_next ? '' : '0.4';
+      } else {
+        pager.style.display = 'none';
+      }
+    }
+
+    function fetchEvents() {
+      var params = new URLSearchParams();
+      if (state.contributor) params.set('contributor', state.contributor);
+      if (state.org) params.set('org', state.org);
+      if (state.repo) params.set('repo', state.repo);
+      if (state.since) params.set('since', state.since);
+      if (state.page > 1) params.set('page', String(state.page));
+
+      var token = ++inflight;
+      section.setAttribute('aria-busy', 'true');
+      fetch('/dashboard/events.json?' + params.toString(), { credentials: 'same-origin' })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(data) {
+          if (token !== inflight || !data) return;
+          render(data);
+        })
+        .catch(function() { /* ignore — keep last good state */ })
+        .finally(function() {
+          if (token === inflight) section.removeAttribute('aria-busy');
+        });
+    }
+
+    function applyFilterChange() {
+      state.contributor = contribInput ? contribInput.value.trim() : '';
+      state.org = orgInput ? orgInput.value.trim() : '';
+      state.repo = repoInput ? repoInput.value.trim() : '';
+      state.since = sinceInput ? sinceInput.value : '';
+      state.page = 1;
+      fetchEvents();
+    }
+
+    function debounced(fn, ms) {
+      return function() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(fn, ms);
+      };
+    }
+
+    if (contribInput) contribInput.addEventListener('input', debounced(applyFilterChange, 250));
+    if (orgInput) orgInput.addEventListener('input', debounced(applyFilterChange, 250));
+    if (repoInput) repoInput.addEventListener('input', debounced(applyFilterChange, 250));
+    if (sinceInput) sinceInput.addEventListener('change', applyFilterChange);
+
+    prevBtn.addEventListener('click', function() {
+      if (state.page > 1) { state.page -= 1; fetchEvents(); }
+    });
+    nextBtn.addEventListener('click', function() {
+      state.page += 1; fetchEvents();
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     initCSRF();
     initNavDropdown();
@@ -374,6 +532,7 @@
     initHelpSearch();
     initFeatureTooltips();
     initSettingsActions();
+    initWatchlistActivity();
     applyTheme(getTheme());
   });
 })();

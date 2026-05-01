@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"log/slog"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/thingzio/devtrace/pkg/compliance"
 	"github.com/thingzio/devtrace/pkg/data/postgres"
@@ -166,25 +164,17 @@ func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			}
 		}
 
-		const eventsPerPage = 10
-		eventsPage := 1
-		if p, perr := strconv.Atoi(r.URL.Query().Get("events_page")); perr == nil && p > 0 {
-			eventsPage = p
-		}
-		q := strings.TrimSpace(r.URL.Query().Get("q"))
-		if len(q) > 64 {
-			q = q[:64]
-		}
-		qLower := strings.ToLower(q)
-		eventsOffset := (eventsPage - 1) * eventsPerPage
-		events, eventsTotal, eerr := store.GetNotificationEvents(r.Context(), tn.ID, qLower, eventsPerPage, eventsOffset)
+		filter, eventsPage := parseEventFilter(r)
+		eventsResp, events, eerr := fetchEvents(r, store, tn.ID, filter, eventsPage)
 		if eerr != nil {
 			slog.Error("dashboard: get notification events", "tenant", tn.ID, "error", eerr)
 		}
-		eventsTotalPages := (eventsTotal + eventsPerPage - 1) / eventsPerPage
-		if eventsTotalPages < 1 {
-			eventsTotalPages = 1
+
+		watchlists, wlErr := store.ListWatchlists(r.Context(), tn.ID)
+		if wlErr != nil {
+			slog.Error("dashboard: list watchlists", "tenant", tn.ID, "error", wlErr)
 		}
+		hasWatchlists := len(watchlists) > 0
 
 		t := pageTemplates["home.html"]
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -202,14 +192,13 @@ func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			"tokens":             tokens,
 			"recent":             recent,
 			"events":             events,
-			"events_q":           q,
+			"has_watchlists":     hasWatchlists,
+			"events_filter_user": filter.Contributor,
+			"events_filter_org":  filter.Org,
+			"events_filter_repo": filter.Repo,
 			"events_page":        eventsPage,
-			"events_total":       eventsTotal,
-			"events_total_pages": eventsTotalPages,
-			"events_has_prev":    eventsPage > 1,
-			"events_has_next":    eventsPage < eventsTotalPages,
-			"events_prev_page":   eventsPage - 1,
-			"events_next_page":   eventsPage + 1,
+			"events_total":       eventsResp.Total,
+			"events_total_pages": eventsResp.TotalPages,
 			"version":            opts.Version,
 			"commit":             opts.Commit,
 			"date":               opts.Date,

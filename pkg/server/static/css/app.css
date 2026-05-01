@@ -2658,6 +2658,27 @@ section h2 {
   font-size: 0.8rem;
 }
 
+/* Watchlist Activity per-column filters */
+.data-table .filters-row th {
+  padding: 0.25rem 0.5rem 0.5rem;
+  background: var(--page-content-blockColor);
+}
+.events-filter-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 400;
+  background: var(--bg-secondary, var(--page-content-blockColor));
+  color: var(--page-content-txtColor);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+.events-filter-input:focus {
+  outline: none;
+  border-color: var(--link-color);
+}
+
 /* Footer */
 .app-footer {
   max-width: 800px;
