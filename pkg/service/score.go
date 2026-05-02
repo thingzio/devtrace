@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/thingzio/devtrace/pkg/bot"
@@ -537,8 +538,21 @@ func (s *ScoreService) securityCreditsEnrichment(ctx context.Context, username s
 
 	credits, ferr := s.gh.FetchSecurityCredits(ctx, username, config.SecurityCreditLimit())
 	if ferr != nil {
+		// Surface fetch failures so operators can distinguish "user has
+		// no credits" (sentinel saved, silent path) from "we couldn't
+		// ask GitHub" (this branch). Don't escalate to Error: a single
+		// user's enrichment shouldn't drown logs in a deploy regression.
+		slog.Warn("fetch security credits",
+			"username", username,
+			"error", ferr,
+			"had_cache", cached != nil,
+		)
 		return cached
 	}
+	slog.Debug("fetched security credits",
+		"username", username,
+		"count", len(credits),
+	)
 
 	modelCredits := make([]model.SecurityCredit, 0, len(credits))
 	for _, c := range credits {
