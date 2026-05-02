@@ -178,9 +178,9 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 	body := rec.Body.String()
 
 	mustContain := []string{
-		// Lifetime activity stat tiles
-		"Lifetime Activity", ">79<", ">50<", ">143<", ">106<", ">87<",
-		"Active in DevTrace ingest from Jan 2026",
+		// Activity stat tiles
+		">Activity<", ">79<", ">50<", ">143<", ">106<", ">87<",
+		"Tracked Jan 2026", "Apr 2026",
 		// Reciprocity
 		"Reciprocity", "1.81", "67%", "1.34",
 		// Top contributed repos
@@ -194,7 +194,7 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 		"Linked Accounts",
 		"personal_site", "https://example.dev/blog",
 		"twitter", "https://x.com/jane",
-		"Public email:", "jane@example.com",
+		"Public email", "Starter+", "jane@example.com",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(body, want) {
@@ -215,7 +215,7 @@ func TestScorecardWithoutEnrichmentRenders(t *testing.T) {
 	}
 	body := rec.Body.String()
 	// The enrichment headings must NOT appear when no data is provided.
-	for _, mustNotContain := range []string{"Lifetime Activity", "Reciprocity", "Owned Repositories", "Linked Accounts"} {
+	for _, mustNotContain := range []string{">Activity<", "Reciprocity", "Owned Repositories", "Linked Accounts"} {
 		if strings.Contains(body, mustNotContain) {
 			t.Errorf("scorecard rendered %q despite nil Enrichment", mustNotContain)
 		}
