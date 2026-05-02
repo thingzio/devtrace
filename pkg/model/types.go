@@ -36,6 +36,22 @@ type Enrichment struct {
 	TopContributedRepos []RepoContribution `json:"top_contributed_repos,omitempty"`
 	LinkedAccounts      []LinkedAccount    `json:"linked_accounts,omitempty"`
 	Emails              []string           `json:"emails,omitempty"`
+	Reciprocity         *Reciprocity       `json:"reciprocity,omitempty"`
+}
+
+// Reciprocity describes the contributor's give-vs-take pattern: how much
+// they review/comment relative to how much they ask for. Derived from
+// LifetimeActivity; nil when the contributor has no PRs to anchor ratios.
+type Reciprocity struct {
+	// ReviewsPerPR captures whether the contributor gives back: high values
+	// indicate maintainer-style behavior, near-zero suggests drive-by PRs.
+	ReviewsPerPR float64 `json:"reviews_per_pr"`
+	// IssueClosingRate is closed / opened on issues they filed; a proxy for
+	// follow-through and self-resolution.
+	IssueClosingRate float64 `json:"issue_closing_rate"`
+	// IssueCommentsPerPR captures whether they comment on others work or
+	// primarily ship their own.
+	IssueCommentsPerPR float64 `json:"issue_comments_per_pr"`
 }
 
 // LinkedAccount is a URL that the contributor declared in their public
@@ -43,10 +59,10 @@ type Enrichment struct {
 // later phases promote individual links to T1-T3 via cross-platform
 // verification (e.g. SSH key fingerprints, Keybase proofs).
 type LinkedAccount struct {
-	Platform string `json:"platform"`         // e.g. "twitter", "mastodon", "personal_site"
+	Platform string `json:"platform"` // e.g. "twitter", "mastodon", "personal_site"
 	URL      string `json:"url"`
-	Source   string `json:"source"`           // "bio" or "blog"
-	Tier     string `json:"tier"`             // T1-T5 confidence; v1 is always "T4"
+	Source   string `json:"source"` // "bio" or "blog"
+	Tier     string `json:"tier"`   // T1-T5 confidence; v1 is always "T4"
 }
 
 // RepoContribution summarizes a contributor's footprint in a single repo.
@@ -72,6 +88,24 @@ type LifetimeActivity struct {
 	ActiveDays    int        `json:"active_days"`
 	FirstActive   *time.Time `json:"first_active,omitempty"`
 	LastActive    *time.Time `json:"last_active,omitempty"`
+}
+
+// ComputeReciprocity returns the contributor's give-vs-take ratios derived
+// from lifetime activity counts. Returns nil when there is no PR baseline
+// to anchor the ratios against (PRsOpened == 0), since "0 reviews per 0
+// PRs" is undefined and would be misleading.
+func (la *LifetimeActivity) ComputeReciprocity() *Reciprocity {
+	if la == nil || la.PRsOpened == 0 {
+		return nil
+	}
+	r := &Reciprocity{
+		ReviewsPerPR:       float64(la.ReviewsGiven) / float64(la.PRsOpened),
+		IssueCommentsPerPR: float64(la.IssueComments) / float64(la.PRsOpened),
+	}
+	if la.IssuesOpened > 0 {
+		r.IssueClosingRate = float64(la.IssuesClosed) / float64(la.IssuesOpened)
+	}
+	return r
 }
 
 // Profile holds public contributor metadata from GitHub.

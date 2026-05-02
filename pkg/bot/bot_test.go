@@ -1,6 +1,10 @@
-package bot
+package bot_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/thingzio/devtrace/pkg/bot"
+)
 
 func TestIsBot(t *testing.T) {
 	t.Parallel()
@@ -29,6 +33,23 @@ func TestIsBot(t *testing.T) {
 		{"snyk-bot", true},
 		{"imgbot", true},
 
+		// Expanded merge / CI / automation bots without [bot] suffix.
+		{"mergify", true},
+		{"kodiak", true},
+		{"bulldozer", true},
+		{"semantic-release-bot", true},
+		{"changeset-bot", true},
+		{"pre-commit-ci", true},
+		{"coderabbitai", true},
+		{"sonar-bot", true},
+		{"circleci", true},
+		{"jenkins", true},
+		{"travisci", true},
+		{"googleapis-bot", true},
+		{"google-cla", true},
+		{"whitesource-bolt", true},
+		{"imgbotapp", true},
+
 		// Real humans.
 		{"torvalds", false},
 		{"octocat", false},
@@ -42,7 +63,7 @@ func TestIsBot(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.username, func(t *testing.T) {
 			t.Parallel()
-			if got := IsBot(tt.username); got != tt.want {
+			if got := bot.IsBot(tt.username); got != tt.want {
 				t.Errorf("IsBot(%q) = %v, want %v", tt.username, got, tt.want)
 			}
 		})

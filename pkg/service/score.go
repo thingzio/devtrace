@@ -225,6 +225,10 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 			laCopy := *full.Enrichment.LifetimeActivity
 			enrCopy.LifetimeActivity = &laCopy
 		}
+		if full.Enrichment.Reciprocity != nil {
+			rcCopy := *full.Enrichment.Reciprocity
+			enrCopy.Reciprocity = &rcCopy
+		}
 		if full.Enrichment.TopContributedRepos != nil {
 			enrCopy.TopContributedRepos = append([]model.RepoContribution(nil), full.Enrichment.TopContributedRepos...)
 		}
@@ -422,6 +426,11 @@ func (s *ScoreService) buildEnrichment(ctx context.Context, username string, pro
 		if la, err := s.behStore.GetLifetimeActivity(ctx, username, provider); err == nil && la != nil {
 			enr.LifetimeActivity = la
 			populated = true
+			// Reciprocity is derived purely from lifetime counts — no extra
+			// query — so it travels with LifetimeActivity automatically.
+			if r := la.ComputeReciprocity(); r != nil {
+				enr.Reciprocity = r
+			}
 		}
 		if repos, err := s.behStore.GetTopContributedRepos(ctx, username, provider, topContributedRepoLimit); err == nil && len(repos) > 0 {
 			enr.TopContributedRepos = repos

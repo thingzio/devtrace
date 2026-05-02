@@ -374,6 +374,37 @@ func TestScoreEnrichmentLifetimeActivity(t *testing.T) {
 	if got.FirstActive == nil || got.LastActive == nil {
 		t.Error("expected populated FirstActive and LastActive")
 	}
+	// Reciprocity travels with LifetimeActivity automatically.
+	if resp.Enrichment.Reciprocity == nil {
+		t.Fatal("expected reciprocity to be populated when lifetime activity present")
+	}
+	if resp.Enrichment.Reciprocity.ReviewsPerPR == 0 {
+		t.Errorf("expected non-zero ReviewsPerPR (9 reviews / 14 PRs)")
+	}
+}
+
+func TestScoreEnrichmentReciprocityAbsentWithoutPRs(t *testing.T) {
+	store := &mockBehaviorStore{
+		lifetime: &model.LifetimeActivity{
+			PRsOpened: 0, ReviewsGiven: 5, IssueComments: 3,
+		},
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "free", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment == nil || resp.Enrichment.LifetimeActivity == nil {
+		t.Fatal("expected enrichment with lifetime")
+	}
+	if resp.Enrichment.Reciprocity != nil {
+		t.Errorf("expected nil reciprocity when PRsOpened==0, got %+v", resp.Enrichment.Reciprocity)
+	}
 }
 
 func TestScoreEnrichmentTopContributedRepos(t *testing.T) {
@@ -416,9 +447,9 @@ func TestScoreEnrichmentLinkedAccountsAndEmails(t *testing.T) {
 	store := &mockBehaviorStore{}
 
 	tests := []struct {
-		plan        string
-		wantLinks   bool
-		wantEmails  bool
+		plan       string
+		wantLinks  bool
+		wantEmails bool
 	}{
 		{plan: "free", wantLinks: true, wantEmails: false},
 		{plan: "starter", wantLinks: true, wantEmails: true},
