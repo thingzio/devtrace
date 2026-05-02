@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/middleware"
@@ -31,6 +32,10 @@ func (m *mockGH) FetchSignals(_ context.Context, _, _ string, _ *ghclient.Archiv
 
 func (m *mockGH) IsOrgMember(_ context.Context, _, _ string) (bool, error) {
 	return false, nil
+}
+
+func (m *mockGH) ListUserRepos(_ context.Context, _ string, _ int) ([]ghclient.Repo, error) {
+	return nil, nil
 }
 
 func TestScoreHandler(t *testing.T) {
@@ -91,9 +96,11 @@ func TestScoreHandler(t *testing.T) {
 
 // stubBehaviorStore is a test-only BehaviorStore that returns canned values.
 type stubBehaviorStore struct {
-	behavior *model.Behavior
-	lifetime *model.LifetimeActivity
-	topRepos []model.RepoContribution
+	behavior      *model.Behavior
+	lifetime      *model.LifetimeActivity
+	topRepos      []model.RepoContribution
+	repoSummary   *model.OwnedRepos
+	repoFetchedAt time.Time
 }
 
 func (s *stubBehaviorStore) GetBehavioralSignals(_ context.Context, _, _ string) (*model.Behavior, error) {
@@ -108,7 +115,15 @@ func (s *stubBehaviorStore) GetTopContributedRepos(_ context.Context, _, _ strin
 	return s.topRepos, nil
 }
 
-func TestScoreHandlerDetailFlag(t *testing.T) {
+func (s *stubBehaviorStore) GetRepoSummary(_ context.Context, _, _ string) (*model.OwnedRepos, time.Time, error) {
+	return s.repoSummary, s.repoFetchedAt, nil
+}
+
+func (s *stubBehaviorStore) SaveRepoSummary(_ context.Context, _, _ string, _ *model.OwnedRepos) error {
+	return nil
+}
+
+func TestScoreHandlerEnrichmentByPlan(t *testing.T) {
 	mock := &mockGH{
 		profile: &ghclient.UserProfile{Username: "testuser", PublicRepos: 5, Followers: 10},
 		signals: &score.InputSignals{AgeDays: 200, PublicRepos: 5, Followers: 10, PRsMerged: 2},
@@ -121,26 +136,23 @@ func TestScoreHandlerDetailFlag(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/score/{username}", scoreHandler(nil, nil, svc))
 
-	// Inject a free-tier tenant context so enrichment isn't stripped by the
-	// unauthenticated path; gating between detail=true/false is then the only
-	// behavior under test.
-	tn := &tenant.Tenant{ID: "test-tenant", Plan: "free"}
-
 	cases := []struct {
 		name           string
-		url            string
+		tenant         *tenant.Tenant
 		wantEnrichment bool
 	}{
-		{"default omits enrichment", "/api/v1/score/testuser", false},
-		{"detail=true returns enrichment", "/api/v1/score/testuser?detail=true", true},
-		{"detail=1 returns enrichment", "/api/v1/score/testuser?detail=1", true},
-		{"detail=false omits enrichment", "/api/v1/score/testuser?detail=false", false},
-		{"detail=garbage omits enrichment (ParseBool fails closed)", "/api/v1/score/testuser?detail=yes", false},
+		{"unauth strips enrichment", nil, false},
+		{"free authed returns enrichment", &tenant.Tenant{ID: "t1", Plan: "free"}, true},
+		{"starter authed returns enrichment", &tenant.Tenant{ID: "t2", Plan: "starter"}, true},
+		{"pro authed returns enrichment", &tenant.Tenant{ID: "t3", Plan: "pro"}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := middleware.WithTenantContext(context.Background(), tn)
-			req := httptest.NewRequestWithContext(ctx, http.MethodGet, tc.url, nil)
+			ctx := context.Background()
+			if tc.tenant != nil {
+				ctx = middleware.WithTenantContext(ctx, tc.tenant)
+			}
+			req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/v1/score/testuser", nil)
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, req)
 			if rec.Code != http.StatusOK {
@@ -152,11 +164,11 @@ func TestScoreHandlerDetailFlag(t *testing.T) {
 			}
 			switch {
 			case tc.wantEnrichment && resp.Enrichment == nil:
-				t.Fatal("expected enrichment block")
+				t.Fatal("expected enrichment block for authed caller")
 			case tc.wantEnrichment && resp.Enrichment.LifetimeActivity == nil:
 				t.Error("expected lifetime activity in enrichment")
 			case !tc.wantEnrichment && resp.Enrichment != nil:
-				t.Errorf("expected no enrichment, got %+v", resp.Enrichment)
+				t.Errorf("unauth caller got enrichment: %+v", resp.Enrichment)
 			}
 		})
 	}

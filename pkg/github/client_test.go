@@ -12,6 +12,7 @@ import (
 type MockClient struct {
 	UserProfile *UserProfile
 	Signals     *score.InputSignals
+	Repos       []Repo
 	Err         error
 }
 
@@ -25,6 +26,10 @@ func (m *MockClient) FetchSignals(_ context.Context, _, _ string, _ *ArchiveHint
 
 func (m *MockClient) IsOrgMember(_ context.Context, _, _ string) (bool, error) {
 	return false, m.Err
+}
+
+func (m *MockClient) ListUserRepos(_ context.Context, _ string, _ int) ([]Repo, error) {
+	return m.Repos, m.Err
 }
 
 func TestMockClientImplementsInterface(t *testing.T) {

@@ -359,6 +359,61 @@ func fetchContributorStats(ctx context.Context, api *gh.Client, org, repo, usern
 	return true
 }
 
+// maxFetchRepos caps the number of repositories the user-repos listing
+// will pull from GitHub for a single contributor. Three pages of 100
+// covers nearly all real users; high-volume accounts get the most-
+// recently-pushed slice.
+const maxFetchRepos = 300
+
+// fetchUserRepos returns the contributor's owned repositories, capped
+// at maxRepos. Uses Sort="pushed" so most active repos arrive first;
+// the aggregation layer applies its own ranking by star count.
+func fetchUserRepos(ctx context.Context, api *gh.Client, username string, maxRepos int) ([]Repo, error) {
+	if maxRepos <= 0 || maxRepos > maxFetchRepos {
+		maxRepos = maxFetchRepos
+	}
+	const perPage = 100
+
+	out := make([]Repo, 0, maxRepos)
+	for page := 1; len(out) < maxRepos; page++ {
+		repos, resp, err := api.Repositories.ListByUser(ctx, username, &gh.RepositoryListByUserOptions{
+			Type:        "owner",
+			Sort:        "pushed",
+			ListOptions: gh.ListOptions{PerPage: perPage, Page: page},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list user repos %s page %d: %w", username, page, err)
+		}
+		for _, r := range repos {
+			out = append(out, mapRepo(r))
+			if len(out) >= maxRepos {
+				break
+			}
+		}
+		if resp == nil || resp.NextPage == 0 {
+			break
+		}
+	}
+	return out, nil
+}
+
+// mapRepo converts a go-github Repository to the local Repo type.
+func mapRepo(r *gh.Repository) Repo {
+	out := Repo{
+		Name:        r.GetName(),
+		FullName:    r.GetFullName(),
+		Description: r.GetDescription(),
+		Language:    r.GetLanguage(),
+		Stars:       r.GetStargazersCount(),
+		Fork:        r.GetFork(),
+		Archived:    r.GetArchived(),
+	}
+	if r.PushedAt != nil {
+		out.PushedAt = r.PushedAt.Time
+	}
+	return out
+}
+
 // mapUser converts a go-github User to a UserProfile.
 func mapUser(u *gh.User) *UserProfile {
 	p := &UserProfile{

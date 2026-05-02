@@ -37,6 +37,33 @@ type Enrichment struct {
 	LinkedAccounts      []LinkedAccount    `json:"linked_accounts,omitempty"`
 	Emails              []string           `json:"emails,omitempty"`
 	Reciprocity         *Reciprocity       `json:"reciprocity,omitempty"`
+	OwnedRepos          *OwnedRepos        `json:"owned_repos,omitempty"`
+}
+
+// OwnedRepos summarizes a contributor's own (non-forked) repositories
+// from the GitHub user-repos listing. Aggregated and cached for 24h.
+type OwnedRepos struct {
+	TotalStars int64            `json:"total_stars"`
+	TotalRepos int              `json:"total_repos"`
+	Top        []OwnedRepo      `json:"top,omitempty"`
+	Languages  []LanguageBucket `json:"languages,omitempty"`
+}
+
+// OwnedRepo represents a single repository in the top-by-stars list.
+type OwnedRepo struct {
+	Name        string `json:"name"`
+	Stars       int    `json:"stars"`
+	Language    string `json:"language,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+// LanguageBucket is a single primary language with its share among the
+// contributor's non-fork repos. Share is in [0, 1] and the slice is
+// sorted by share descending.
+type LanguageBucket struct {
+	Language string  `json:"language"`
+	Repos    int     `json:"repos"`
+	Share    float64 `json:"share"`
 }
 
 // Reciprocity describes the contributor's give-vs-take pattern: how much

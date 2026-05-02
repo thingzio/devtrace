@@ -148,6 +148,10 @@ func (m *mockGHClient) IsOrgMember(_ context.Context, _, _ string) (bool, error)
 	return false, nil
 }
 
+func (m *mockGHClient) ListUserRepos(_ context.Context, _ string, _ int) ([]ghclient.Repo, error) {
+	return nil, nil
+}
+
 const testVersion = "v0.0.1-test"
 
 func TestScorerStatsRecord(t *testing.T) {

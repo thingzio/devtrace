@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -14,9 +15,13 @@ import (
 // mockBehaviorStore implements service.BehaviorStore for testing the
 // enrichment pipeline without a real Postgres dependency.
 type mockBehaviorStore struct {
-	behavior *model.Behavior
-	lifetime *model.LifetimeActivity
-	topRepos []model.RepoContribution
+	behavior       *model.Behavior
+	lifetime       *model.LifetimeActivity
+	topRepos       []model.RepoContribution
+	repoSummary    *model.OwnedRepos
+	repoFetchedAt  time.Time
+	saveSummaryErr error
+	savedSummary   *model.OwnedRepos
 }
 
 func (m *mockBehaviorStore) GetBehavioralSignals(_ context.Context, _, _ string) (*model.Behavior, error) {
@@ -31,10 +36,20 @@ func (m *mockBehaviorStore) GetTopContributedRepos(_ context.Context, _, _ strin
 	return m.topRepos, nil
 }
 
+func (m *mockBehaviorStore) GetRepoSummary(_ context.Context, _, _ string) (*model.OwnedRepos, time.Time, error) {
+	return m.repoSummary, m.repoFetchedAt, nil
+}
+
+func (m *mockBehaviorStore) SaveRepoSummary(_ context.Context, _, _ string, summary *model.OwnedRepos) error {
+	m.savedSummary = summary
+	return m.saveSummaryErr
+}
+
 // mockClient implements ghclient.Client for testing.
 type mockClient struct {
 	signals    *score.InputSignals
 	profile    *ghclient.UserProfile
+	repos      []ghclient.Repo
 	trustedOrg string // IsOrgMember returns true for this org
 }
 
@@ -48,6 +63,10 @@ func (m *mockClient) IsOrgMember(_ context.Context, org, _ string) (bool, error)
 
 func (m *mockClient) FetchUser(_ context.Context, _ string) (*ghclient.UserProfile, error) {
 	return m.profile, nil
+}
+
+func (m *mockClient) ListUserRepos(_ context.Context, _ string, _ int) ([]ghclient.Repo, error) {
+	return m.repos, nil
 }
 
 func establishedSignals() *score.InputSignals {
@@ -477,6 +496,117 @@ func TestScoreEnrichmentLinkedAccountsAndEmails(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestScoreEnrichmentOwnedReposCacheHit(t *testing.T) {
+	cached := &model.OwnedRepos{
+		TotalStars: 500, TotalRepos: 4,
+		Top: []model.OwnedRepo{{Name: "u/a", Stars: 300, Language: "Go"}},
+	}
+	store := &mockBehaviorStore{
+		repoSummary:   cached,
+		repoFetchedAt: time.Now().Add(-1 * time.Hour), // fresh
+	}
+	mc := &mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+		// repos populated to detect erroneous fetch
+		repos: []ghclient.Repo{{FullName: "u/wrong", Stars: 9999}},
+	}
+	svc := NewScoreService(mc, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "free", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment == nil || resp.Enrichment.OwnedRepos == nil {
+		t.Fatal("expected owned repos from cache")
+	}
+	if resp.Enrichment.OwnedRepos.TotalStars != 500 {
+		t.Errorf("got %d stars, want 500 (cache should win)", resp.Enrichment.OwnedRepos.TotalStars)
+	}
+	if store.savedSummary != nil {
+		t.Errorf("fresh cache should not trigger save, got %+v", store.savedSummary)
+	}
+}
+
+func TestScoreEnrichmentOwnedReposCacheStaleRefreshes(t *testing.T) {
+	store := &mockBehaviorStore{
+		repoSummary:   &model.OwnedRepos{TotalStars: 1, TotalRepos: 1},
+		repoFetchedAt: time.Now().Add(-48 * time.Hour), // stale
+	}
+	mc := &mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+		repos: []ghclient.Repo{
+			{FullName: "u/r1", Stars: 1000, Language: "Go"},
+			{FullName: "u/r2", Stars: 500, Language: "Go"},
+		},
+	}
+	svc := NewScoreService(mc, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "free", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment == nil || resp.Enrichment.OwnedRepos == nil {
+		t.Fatal("expected owned repos after refresh")
+	}
+	if resp.Enrichment.OwnedRepos.TotalStars != 1500 {
+		t.Errorf("got %d stars, want 1500 (refreshed from gh client)", resp.Enrichment.OwnedRepos.TotalStars)
+	}
+	if store.savedSummary == nil {
+		t.Fatal("stale refresh should call SaveRepoSummary")
+	}
+}
+
+func TestScoreEnrichmentOwnedReposFetchErrorFallsBackToCache(t *testing.T) {
+	stale := &model.OwnedRepos{TotalStars: 99, TotalRepos: 2}
+	store := &mockBehaviorStore{
+		repoSummary:   stale,
+		repoFetchedAt: time.Now().Add(-48 * time.Hour),
+	}
+	// errClient returns an error from ListUserRepos.
+	ec := &errorRepoClient{base: &mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}}
+	svc := NewScoreService(ec, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "free", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment == nil || resp.Enrichment.OwnedRepos == nil {
+		t.Fatal("expected fallback to stale cache on fetch error")
+	}
+	if resp.Enrichment.OwnedRepos.TotalStars != 99 {
+		t.Errorf("got %d, want 99 (stale cache served on fetch failure)", resp.Enrichment.OwnedRepos.TotalStars)
+	}
+}
+
+// errorRepoClient wraps mockClient but returns an error from ListUserRepos.
+type errorRepoClient struct {
+	base *mockClient
+}
+
+func (c *errorRepoClient) FetchSignals(ctx context.Context, u, r string, h *ghclient.ArchiveHints) (*score.InputSignals, error) {
+	return c.base.FetchSignals(ctx, u, r, h)
+}
+
+func (c *errorRepoClient) FetchUser(ctx context.Context, u string) (*ghclient.UserProfile, error) {
+	return c.base.FetchUser(ctx, u)
+}
+
+func (c *errorRepoClient) IsOrgMember(ctx context.Context, o, u string) (bool, error) {
+	return c.base.IsOrgMember(ctx, o, u)
+}
+
+func (c *errorRepoClient) ListUserRepos(_ context.Context, _ string, _ int) ([]ghclient.Repo, error) {
+	return nil, errors.New("upstream unavailable")
 }
 
 func TestScoreEnrichmentBlocksIndependent(t *testing.T) {

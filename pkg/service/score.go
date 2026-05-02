@@ -16,14 +16,26 @@ import (
 // BehaviorStore provides behavioral signal data from contributor activity.
 // GetLifetimeActivity returns aggregate lifetime counts; nil when no data exists.
 // GetTopContributedRepos returns the top-N repos ranked by active-hour count.
+// GetRepoSummary / SaveRepoSummary cache the contributor's owned-repos
+// aggregate for 24h to amortize the cost of GitHub /users/{u}/repos calls.
 type BehaviorStore interface {
 	GetBehavioralSignals(ctx context.Context, username, provider string) (*model.Behavior, error)
 	GetLifetimeActivity(ctx context.Context, username, provider string) (*model.LifetimeActivity, error)
 	GetTopContributedRepos(ctx context.Context, username, provider string, limit int) ([]model.RepoContribution, error)
+	GetRepoSummary(ctx context.Context, username, provider string) (*model.OwnedRepos, time.Time, error)
+	SaveRepoSummary(ctx context.Context, username, provider string, summary *model.OwnedRepos) error
 }
 
 // topContributedRepoLimit caps the number of repos surfaced in enrichment.
 const topContributedRepoLimit = 5
+
+// repoSummaryTTL bounds how long a cached owned-repos aggregate is
+// considered fresh before the next score request triggers a re-fetch.
+const repoSummaryTTL = 24 * time.Hour
+
+// repoListLimit caps the number of repositories fetched from GitHub for
+// the owned-repos aggregation. The GitHub client clamps further for safety.
+const repoListLimit = 300
 
 // ScoreService orchestrates signal fetching, scoring, and response enrichment.
 type ScoreService struct {
@@ -228,6 +240,16 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 		if full.Enrichment.Reciprocity != nil {
 			rcCopy := *full.Enrichment.Reciprocity
 			enrCopy.Reciprocity = &rcCopy
+		}
+		if full.Enrichment.OwnedRepos != nil {
+			orCopy := *full.Enrichment.OwnedRepos
+			if full.Enrichment.OwnedRepos.Top != nil {
+				orCopy.Top = append([]model.OwnedRepo(nil), full.Enrichment.OwnedRepos.Top...)
+			}
+			if full.Enrichment.OwnedRepos.Languages != nil {
+				orCopy.Languages = append([]model.LanguageBucket(nil), full.Enrichment.OwnedRepos.Languages...)
+			}
+			enrCopy.OwnedRepos = &orCopy
 		}
 		if full.Enrichment.TopContributedRepos != nil {
 			enrCopy.TopContributedRepos = append([]model.RepoContribution(nil), full.Enrichment.TopContributedRepos...)
@@ -450,8 +472,42 @@ func (s *ScoreService) buildEnrichment(ctx context.Context, username string, pro
 		}
 	}
 
+	if owned := s.ownedReposEnrichment(ctx, username); owned != nil {
+		enr.OwnedRepos = owned
+		populated = true
+	}
+
 	if !populated {
 		return nil
 	}
 	return enr
+}
+
+// ownedReposEnrichment returns the cached OwnedRepos aggregate, refreshing
+// from GitHub when the cache is missing or older than repoSummaryTTL. The
+// refresh path tolerates errors silently — a stale-or-missing summary is
+// strictly better than failing the whole score request.
+func (s *ScoreService) ownedReposEnrichment(ctx context.Context, username string) *model.OwnedRepos {
+	if s.behStore == nil {
+		return nil
+	}
+	provider := string(model.ProviderGitHub)
+
+	cached, fetchedAt, err := s.behStore.GetRepoSummary(ctx, username, provider)
+	if err == nil && cached != nil && time.Since(fetchedAt) < repoSummaryTTL {
+		return cached
+	}
+
+	repos, ferr := s.gh.ListUserRepos(ctx, username, repoListLimit)
+	if ferr != nil {
+		// On fetch failure return whatever we have cached even if stale.
+		return cached
+	}
+	summary := profilepkg.AggregateRepos(repos)
+	if err := s.behStore.SaveRepoSummary(ctx, username, provider, summary); err != nil {
+		// Failure to persist is non-fatal — return the freshly computed
+		// summary so the caller sees current data.
+		_ = err
+	}
+	return summary
 }

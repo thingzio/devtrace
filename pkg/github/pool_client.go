@@ -83,6 +83,30 @@ func (c *PoolClient) FetchSignals(ctx context.Context, username, repo string, hi
 	return signals, fetchErr
 }
 
+// ListUserRepos retrieves the contributor's owned repositories with
+// automatic token rotation on rate limit.
+func (c *PoolClient) ListUserRepos(ctx context.Context, username string, maxRepos int) ([]Repo, error) {
+	api, token, err := c.ghClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	repos, fetchErr := fetchUserRepos(ctx, api, username, maxRepos)
+	for fetchErr != nil && isRateLimited(fetchErr) {
+		c.pool.Exhaust(token)
+		if c.pool.ActiveCount() == 0 {
+			return nil, fmt.Errorf("all tokens exhausted: %w", fetchErr)
+		}
+		slog.Warn("token rate limited, retrying list user repos", "username", username)
+		api, token, err = c.ghClient(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("retry after rate limit: %w", err)
+		}
+		repos, fetchErr = fetchUserRepos(ctx, api, username, maxRepos)
+	}
+	return repos, fetchErr
+}
+
 // IsOrgMember checks if the user is a member of the given org with token rotation.
 func (c *PoolClient) IsOrgMember(ctx context.Context, org, username string) (bool, error) {
 	api, token, err := c.ghClient(ctx)

@@ -41,3 +41,8 @@ func (c *PATClient) IsOrgMember(ctx context.Context, org, username string) (bool
 	}
 	return isMember, nil
 }
+
+// ListUserRepos retrieves the contributor's owned repositories.
+func (c *PATClient) ListUserRepos(ctx context.Context, username string, maxRepos int) ([]Repo, error) {
+	return fetchUserRepos(ctx, c.api, username, maxRepos)
+}

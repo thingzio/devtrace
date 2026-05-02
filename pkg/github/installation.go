@@ -86,3 +86,12 @@ func (c *InstallationClient) IsOrgMember(ctx context.Context, org, username stri
 	}
 	return isMember, nil
 }
+
+// ListUserRepos retrieves the contributor's owned repositories.
+func (c *InstallationClient) ListUserRepos(ctx context.Context, username string, maxRepos int) ([]Repo, error) {
+	api, err := c.ghClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return fetchUserRepos(ctx, api, username, maxRepos)
+}
