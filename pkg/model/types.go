@@ -125,8 +125,14 @@ type Reciprocity struct {
 	// ReviewsPerPR captures whether the contributor gives back: high values
 	// indicate maintainer-style behavior, near-zero suggests drive-by PRs.
 	ReviewsPerPR float64 `json:"reviews_per_pr"`
-	// IssueClosingRate is closed / opened on issues they filed; a proxy for
-	// follow-through and self-resolution.
+	// IssueClosingRate is the share of issue actions that are closes:
+	// IssuesClosed / (IssuesClosed + IssuesOpened). Bounded to [0, 1]:
+	//   1.0 = pure giver — only ever closes issues, never opens
+	//   0.5 = balanced — closes as often as opens
+	//   0.0 = pure asker — opens issues, never closes any
+	// The previous formulation (closed / opened) was unbounded and lost
+	// the "pure giver" case (opened==0) entirely. Field name kept for
+	// API stability; semantics are now bounded share.
 	IssueClosingRate float64 `json:"issue_closing_rate"`
 	// IssueCommentsPerPR captures whether they comment on others work or
 	// primarily ship their own.
@@ -173,6 +179,10 @@ type LifetimeActivity struct {
 // from lifetime activity counts. Returns nil when there is no PR baseline
 // to anchor the ratios against (PRsOpened == 0), since "0 reviews per 0
 // PRs" is undefined and would be misleading.
+//
+// IssueClosingRate is a bounded share: closes / (closes + opens). This
+// surfaces the pure-maintainer case (opens==0, closes>0 → 1.0) that the
+// previous closes/opens ratio threw away when opens was zero.
 func (la *LifetimeActivity) ComputeReciprocity() *Reciprocity {
 	if la == nil || la.PRsOpened == 0 {
 		return nil
@@ -181,8 +191,8 @@ func (la *LifetimeActivity) ComputeReciprocity() *Reciprocity {
 		ReviewsPerPR:       float64(la.ReviewsGiven) / float64(la.PRsOpened),
 		IssueCommentsPerPR: float64(la.IssueComments) / float64(la.PRsOpened),
 	}
-	if la.IssuesOpened > 0 {
-		r.IssueClosingRate = float64(la.IssuesClosed) / float64(la.IssuesOpened)
+	if total := la.IssuesClosed + la.IssuesOpened; total > 0 {
+		r.IssueClosingRate = float64(la.IssuesClosed) / float64(total)
 	}
 	return r
 }

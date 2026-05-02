@@ -26,10 +26,11 @@ func TestComputeReciprocity(t *testing.T) {
 			want: nil,
 		},
 		{
-			name: "balanced contributor",
+			// Closes / (closes+opens) = 3 / (3+3) = 0.5 — balanced.
+			name: "balanced contributor — equal opens and closes",
 			la: &model.LifetimeActivity{
 				PRsOpened: 10, ReviewsGiven: 8, IssueComments: 4,
-				IssuesOpened: 6, IssuesClosed: 3,
+				IssuesOpened: 3, IssuesClosed: 3,
 			},
 			want: &model.Reciprocity{
 				ReviewsPerPR:       0.8,
@@ -38,7 +39,7 @@ func TestComputeReciprocity(t *testing.T) {
 			},
 		},
 		{
-			name: "drive-by contributor — opens PRs, never reviews",
+			name: "drive-by contributor — opens PRs, never reviews, no issue activity",
 			la: &model.LifetimeActivity{
 				PRsOpened: 20, ReviewsGiven: 0, IssueComments: 1,
 			},
@@ -49,12 +50,40 @@ func TestComputeReciprocity(t *testing.T) {
 			},
 		},
 		{
+			// Bounded share: 0 / (0+10) = 0.0 — pure asker.
 			name: "issues opened but never closed",
 			la: &model.LifetimeActivity{
 				PRsOpened: 1, ReviewsGiven: 0,
 				IssuesOpened: 10, IssuesClosed: 0,
 			},
 			want: &model.Reciprocity{IssueClosingRate: 0},
+		},
+		{
+			// Pure maintainer: closes others' issues, never opens any
+			// of their own. The pre-fix formula returned 0.0 because the
+			// IssuesOpened==0 branch was guarded out, throwing away the
+			// strongest possible give-side signal. Bounded share returns 1.0.
+			name: "pure giver — closes only, no opens",
+			la: &model.LifetimeActivity{
+				PRsOpened: 5, ReviewsGiven: 10,
+				IssuesOpened: 0, IssuesClosed: 3,
+			},
+			want: &model.Reciprocity{
+				ReviewsPerPR:     2.0,
+				IssueClosingRate: 1.0,
+			},
+		},
+		{
+			// Maintainer-leaning: many closes, few opens.
+			name: "maintainer-leaning — closes >> opens",
+			la: &model.LifetimeActivity{
+				PRsOpened: 5, ReviewsGiven: 5,
+				IssuesOpened: 1, IssuesClosed: 9,
+			},
+			want: &model.Reciprocity{
+				ReviewsPerPR:     1.0,
+				IssueClosingRate: 0.9,
+			},
 		},
 	}
 

@@ -117,7 +117,7 @@
   {{with .Reciprocity}}
   <section class="enrichment-section enrichment-reciprocity">
     <h2>Reciprocity</h2>
-    <p class="metric-desc" style="margin-bottom:0.75rem;">Give-vs-take pattern derived from lifetime activity. Higher reviews-per-PR indicates maintainer-style behavior.</p>
+    <p class="metric-desc" style="margin-bottom:0.75rem;">Give-vs-take pattern derived from lifetime activity. Higher reviews-per-PR and issue-resolver share indicate maintainer-style behavior; lower values suggest asker-style behavior.</p>
     <div class="metric-cards">
       <div class="metric-card">
         <div class="metric-value">{{printf "%.2f" .ReviewsPerPR}}</div>
@@ -125,7 +125,7 @@
       </div>
       <div class="metric-card">
         <div class="metric-value">{{printf "%.0f%%" (mul .IssueClosingRate 100.0)}}</div>
-        <div class="metric-label">Issue Close Rate</div>
+        <div class="metric-label">Issue Resolver Share</div>
       </div>
       <div class="metric-card">
         <div class="metric-value">{{printf "%.2f" .IssueCommentsPerPR}}</div>
