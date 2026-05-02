@@ -54,9 +54,9 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 		if err != nil {
 			slog.Error("scoring for scorecard", "username", username, "error", err)
 			errData := map[string]any{
-				tmplTitle: username, "Username": username,
-				"Grade": "?", "Value": 0.0, "ModelVersion": "?", tmplVersion: opts.Version, tmplCommit: opts.Commit, tmplDate: opts.Date,
-				"GradeClass": "grade-f",
+				tmplTitle: username, tmplUsername: username,
+				tmplGrade: "?", tmplValue: 0.0, tmplModelVersion: "?", tmplVersion: opts.Version, tmplCommit: opts.Commit, tmplDate: opts.Date,
+				tmplGradeClass: "grade-f",
 			}
 			if tn != nil {
 				errData[tmplNavUser] = tn.Username
@@ -97,23 +97,24 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 		}
 
 		data := map[string]any{
-			tmplTitle:      username,
-			"Username":     username,
-			"Profile":      resp.Profile,
-			"Grade":        resp.Score.Grade,
-			"Value":        resp.Score.Value,
-			"ModelVersion": resp.Version,
-			tmplVersion:    opts.Version,
-			tmplCommit:     opts.Commit,
-			tmplDate:       opts.Date,
-			"ScoringMode":  resp.ScoringMode,
-			"GradeClass":   gradeClass,
-			"Categories":   resp.Score.Categories,
-			"Signals":      resp.Signals,
-			"RiskSummary":  resp.RiskSummary,
-			"RepoContext":  resp.RepoContext,
-			"AISensing":    resp.AISensing,
-			"Upsell":       plan.Upsell(planName),
+			tmplTitle:        username,
+			tmplUsername:     username,
+			"Profile":        resp.Profile,
+			tmplGrade:        resp.Score.Grade,
+			tmplValue:        resp.Score.Value,
+			tmplModelVersion: resp.Version,
+			tmplVersion:      opts.Version,
+			tmplCommit:       opts.Commit,
+			tmplDate:         opts.Date,
+			"ScoringMode":    resp.ScoringMode,
+			tmplGradeClass:   gradeClass,
+			"Categories":     resp.Score.Categories,
+			"Signals":        resp.Signals,
+			"RiskSummary":    resp.RiskSummary,
+			"RepoContext":    resp.RepoContext,
+			"AISensing":      resp.AISensing,
+			"Enrichment":     resp.Enrichment,
+			"Upsell":         plan.Upsell(planName),
 		}
 		if scorePlan == tmplPlanPro {
 			data["Compliance"] = compliance.EvaluatePractices(
@@ -183,7 +184,7 @@ func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			tmplName:             tn.Name,
 			"company":            tn.Company,
 			"location":           tn.Location,
-			"bio":                tn.Bio,
+			tmplBio:              tn.Bio,
 			"avatar_url":         tn.AvatarURL,
 			"plan":               tn.Plan,
 			"quota_used":         used,
@@ -254,7 +255,7 @@ func settingsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			"email":             tn.Email,
 			"company":           tn.Company,
 			"location":          tn.Location,
-			"bio":               tn.Bio,
+			tmplBio:             tn.Bio,
 			"avatar_url":        tn.AvatarURL,
 			"plan":              tn.Plan,
 			"max_contributors":  limits.MaxContributors,

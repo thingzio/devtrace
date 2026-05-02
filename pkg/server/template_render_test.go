@@ -1,9 +1,27 @@
 package server
 
 import (
+	"bytes"
+	"net/http/httptest"
 	"regexp"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/thingzio/devtrace/pkg/model"
 )
+
+// truncate is a small helper used by failure-message assembly to keep
+// the body excerpt short enough to read in test output.
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	var b bytes.Buffer
+	b.WriteString(s[:n])
+	b.WriteString("…(truncated)")
+	return b.String()
+}
 
 // TestTemplateConstKeysAreCanonical asserts the const VALUES in
 // template_keys.go are the strings we actually want — guards against
@@ -105,5 +123,125 @@ func TestLayoutFieldsCoveredByConsts(t *testing.T) {
 func TestRoutesUsingErrorEnvelope(t *testing.T) {
 	if tmplErrorKey != "error" {
 		t.Errorf("API contract: error envelope key changed unexpectedly: %q", tmplErrorKey)
+	}
+}
+
+// TestScorecardRendersEnrichmentSections renders the scorecard with a
+// realistic Enrichment payload and asserts each section actually
+// surfaces in the HTML. Catches regressions where a template field
+// reference drifts from the model struct field name (Go templates fail
+// silently for missing fields when rendering against any/interface).
+func TestScorecardRendersEnrichmentSections(t *testing.T) {
+	first := time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC)
+	last := time.Date(2026, 4, 30, 0, 0, 0, 0, time.UTC)
+	enrichment := &model.Enrichment{
+		LifetimeActivity: &model.LifetimeActivity{
+			PRsOpened: 79, PRsMerged: 50, PRsClosed: 5,
+			ReviewsGiven: 143, IssueComments: 106,
+			IssuesOpened: 12, IssuesClosed: 8, ActiveDays: 87,
+			FirstActive: &first, LastActive: &last,
+		},
+		Reciprocity: &model.Reciprocity{
+			ReviewsPerPR:       1.81,
+			IssueClosingRate:   0.67,
+			IssueCommentsPerPR: 1.34,
+		},
+		TopContributedRepos: []model.RepoContribution{
+			{Repo: "kubernetes/kubernetes", Activities: 42, LastContribution: last},
+			{Repo: "moby/moby", Activities: 18, LastContribution: last},
+		},
+		LinkedAccounts: []model.LinkedAccount{
+			{Platform: "personal_site", URL: "https://example.dev/blog", Source: "blog", Tier: "T4"},
+			{Platform: "twitter", URL: "https://x.com/jane", Source: "bio", Tier: "T4"},
+		},
+		Emails: []string{"jane@example.com"},
+		OwnedRepos: &model.OwnedRepos{
+			TotalStars: 8534, TotalRepos: 76,
+			Top: []model.OwnedRepo{
+				{Name: "user/best-repo", Stars: 2400, Language: "Go", Description: "A useful Go thing"},
+				{Name: "user/other-repo", Stars: 1100, Language: "Python"},
+			},
+			Languages: []model.LanguageBucket{
+				{Language: "Go", Repos: 32, Share: 0.42},
+				{Language: "Shell", Repos: 24, Share: 0.32},
+			},
+		},
+	}
+
+	data := scorecardTestData(enrichment)
+	rec := httptest.NewRecorder()
+	renderTemplate(rec, "scorecard.html", data)
+
+	if rec.Code != 200 {
+		t.Fatalf("render failed: status %d, body: %s", rec.Code, truncate(rec.Body.String(), 500))
+	}
+	body := rec.Body.String()
+
+	mustContain := []string{
+		// Lifetime activity stat tiles
+		"Lifetime Activity", ">79<", ">50<", ">143<", ">106<", ">87<",
+		"Active in DevTrace ingest from Jan 2026",
+		// Reciprocity
+		"Reciprocity", "1.81", "67%", "1.34",
+		// Top contributed repos
+		"Top Contributing To", "kubernetes/kubernetes", "42 active hours",
+		"https://github.com/kubernetes/kubernetes",
+		// Owned repos
+		"Owned Repositories", "76 non-fork", "8534 total star",
+		"user/best-repo", "2400", "A useful Go thing",
+		"Language footprint", ">Go<", ">Shell<",
+		// Linked accounts + emails
+		"Linked Accounts",
+		"personal_site", "https://example.dev/blog",
+		"twitter", "https://x.com/jane",
+		"Public email:", "jane@example.com",
+	}
+	for _, want := range mustContain {
+		if !strings.Contains(body, want) {
+			t.Errorf("scorecard missing %q\nbody (first 1500 chars): %s",
+				want, truncate(body, 1500))
+		}
+	}
+}
+
+// TestScorecardWithoutEnrichmentRenders asserts scorecard still works
+// when Enrichment is nil (sparse contributor, suspended account, etc.).
+func TestScorecardWithoutEnrichmentRenders(t *testing.T) {
+	data := scorecardTestData(nil)
+	rec := httptest.NewRecorder()
+	renderTemplate(rec, "scorecard.html", data)
+	if rec.Code != 200 {
+		t.Fatalf("render failed: status %d, body: %s", rec.Code, truncate(rec.Body.String(), 500))
+	}
+	body := rec.Body.String()
+	// The enrichment headings must NOT appear when no data is provided.
+	for _, mustNotContain := range []string{"Lifetime Activity", "Reciprocity", "Owned Repositories", "Linked Accounts"} {
+		if strings.Contains(body, mustNotContain) {
+			t.Errorf("scorecard rendered %q despite nil Enrichment", mustNotContain)
+		}
+	}
+}
+
+func scorecardTestData(enrichment *model.Enrichment) map[string]any {
+	return map[string]any{
+		tmplTitle:        "testuser",
+		"Username":       "testuser",
+		"Profile":        &model.Profile{Name: "Test User"},
+		"Grade":          "A",
+		tmplValue:        0.9,
+		tmplModelVersion: "v3",
+		tmplVersion:      "v1.0.0",
+		tmplCommit:       "abc1234",
+		tmplDate:         "2026-05-02",
+		"ScoringMode":    "global",
+		"GradeClass":     "grade-a",
+		"Categories": map[string]float64{
+			"identity": 0.2, "engagement": 0.15, "community": 0.1, "behavioral": 0.45,
+		},
+		"Signals":     &model.Signals{AccountAgeDays: 365, Followers: 100},
+		"RiskSummary": "Test summary",
+		"AISensing":   nil,
+		"Enrichment":  enrichment,
+		"Upsell":      nil,
 	}
 }
