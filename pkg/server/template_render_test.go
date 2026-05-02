@@ -200,9 +200,10 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 	body := rec.Body.String()
 
 	mustContain := []string{
-		// Activity stat tiles (PRs Opened, PRs Merged, Reviews Given,
-		// Issues Opened, Issues Closed, Issue Comments, Active Days)
-		">Activity ", ">79<", ">50<", ">143<", ">12<", ">8<", ">106<", ">87<",
+		// Activity stat tiles (PRs Opened, Reviews Given, Issues Opened,
+		// Issues Closed, Issue Comments, Active Days). PRs Merged tile
+		// is intentionally absent; see template comment in scorecard.html.
+		">Activity ", ">79<", ">143<", ">12<", ">8<", ">106<", ">87<",
 		"Issues Opened", "Issues Closed",
 		"Tracked Jan 2026", "Apr 2026",
 		// Scope badges
@@ -237,6 +238,13 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("scorecard missing %q\nbody (first 1500 chars): %s",
 				want, truncate(body, 1500))
+		}
+	}
+	// PRs Merged tile is intentionally NOT rendered — the per-user
+	// merge-click count is a misleading signal in CI-merge workflows.
+	for _, mustNotContain := range []string{"PRs Merged"} {
+		if strings.Contains(body, mustNotContain) {
+			t.Errorf("scorecard rendered %q despite intentional removal", mustNotContain)
 		}
 	}
 }

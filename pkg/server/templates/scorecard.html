@@ -88,10 +88,17 @@
         <div class="metric-value">{{.PRsOpened}}</div>
         <div class="metric-label">PRs Opened</div>
       </div>
-      <div class="metric-card">
-        <div class="metric-value">{{.PRsMerged}}</div>
-        <div class="metric-label">PRs Merged</div>
-      </div>
+      {{/* PRs Merged tile removed: GH Archive's PullRequestEvent
+           action="merged" attributes to the actor that *clicked* merge.
+           In modern OSS that's almost always a CI bot (Mergify, Kodiak,
+           github-actions, auto-merge), which we filter out, leaving
+           humans with prs_merged≈0 even when their work ships. The
+           per-user count therefore measures "how often you clicked the
+           merge button" — a sparse maintainer-ness signal, not the
+           "your work got accepted" signal users expect. Re-add when
+           we can attribute merges back to the PR author (cross-event
+           correlation: PullRequestEvent opened-by author → later
+           merged-by anyone, credit the author). */}}
       <div class="metric-card">
         <div class="metric-value">{{.ReviewsGiven}}</div>
         <div class="metric-label">Reviews Given</div>
