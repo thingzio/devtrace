@@ -2285,6 +2285,12 @@ a.link {
   margin-left: 0.25rem;
   opacity: 0.7;
 }
+/* Severity coloring on security-credit recent advisories. */
+.severity-critical { color: #ff6b6b; font-weight: 600; }
+.severity-high     { color: #ff9656; font-weight: 500; }
+.severity-moderate { color: #d4a017; }
+.severity-low      { color: var(--fgColor-muted, #6a737d); }
+.severity-unknown  { color: var(--fgColor-muted, #6a737d); font-style: italic; }
 .enrichment-section h3 {
   font-size: 0.85rem;
   font-weight: 600;

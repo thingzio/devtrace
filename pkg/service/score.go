@@ -10,6 +10,7 @@ import (
 	"github.com/thingzio/devtrace/pkg/config"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/model"
+	"github.com/thingzio/devtrace/pkg/plan"
 	profilepkg "github.com/thingzio/devtrace/pkg/profile"
 	"github.com/thingzio/devtrace/pkg/score"
 )
@@ -19,12 +20,16 @@ import (
 // GetTopContributedRepos returns the top-N repos ranked by active-hour count.
 // GetRepoSummary / SaveRepoSummary cache the contributor's owned-repos
 // aggregate for 24h to amortize the cost of GitHub /users/{u}/repos calls.
+// GetSecurityCredits / SaveSecurityCredits cache the contributor's GHSA
+// advisory credits with a TTL governed by config.SecurityCreditTTL.
 type BehaviorStore interface {
 	GetBehavioralSignals(ctx context.Context, username, provider string) (*model.Behavior, error)
 	GetLifetimeActivity(ctx context.Context, username, provider string) (*model.LifetimeActivity, error)
 	GetTopContributedRepos(ctx context.Context, username, provider string, limit int) ([]model.RepoContribution, error)
 	GetRepoSummary(ctx context.Context, username, provider string) (*model.OwnedRepos, time.Time, error)
 	SaveRepoSummary(ctx context.Context, username, provider string, summary *model.OwnedRepos) error
+	GetSecurityCredits(ctx context.Context, username, provider string) (*model.SecurityCredits, time.Time, error)
+	SaveSecurityCredits(ctx context.Context, username, provider string, credits []model.SecurityCredit) error
 }
 
 // topContributedRepoLimit caps the number of repos surfaced in enrichment.
@@ -65,7 +70,7 @@ func (s *ScoreService) SetClaudeClient(c *claude.Client) {
 
 // Score fetches signals, computes a reputation score, and builds a plan-aware response.
 // Results are cached to avoid redundant GitHub API calls.
-func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, trustedOrgs []string) (*model.ScoreResponse, error) {
+func (s *ScoreService) Score(ctx context.Context, username, repo, planName string, trustedOrgs []string) (*model.ScoreResponse, error) {
 	// Bot accounts get a predictable zero-score response — no API calls.
 	if bot.IsBot(username) {
 		return s.botResponse(username), nil
@@ -74,7 +79,7 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 	// Check cache first. Cached responses contain the full data;
 	// plan-aware filtering is applied below before returning.
 	if cached := s.cache.get(username, repo); cached != nil {
-		return enrichForPlan(cached, plan), nil
+		return enrichForPlan(cached, planName), nil
 	}
 
 	// Fetch behavioral signals once — used for both archive hints and response enrichment.
@@ -187,16 +192,16 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 	// Cache the full response.
 	s.cache.set(username, repo, full)
 
-	return enrichForPlan(full, plan), nil
+	return enrichForPlan(full, planName), nil
 }
 
 // enrichForPlan returns a deep copy of the response filtered for the caller's plan.
 // Deep-copying pointer fields prevents downstream mutations from corrupting the cache.
-func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse {
+func enrichForPlan(full *model.ScoreResponse, planName string) *model.ScoreResponse {
 	respPtr := deepCopyResponse(full)
 	resp := *respPtr
 
-	switch plan {
+	switch planName {
 	case "": // unauthenticated — score only
 		resp.Score = &model.Score{
 			Grade: full.Score.Grade,
@@ -214,7 +219,7 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 		now := time.Now().UTC()
 		resp.CachedAt = &now
 
-	case "free":
+	case plan.PlanFree:
 		// Free gets categories, signals, risk summary, behavior, AI sensing Tier 1 (metadata).
 		resp.License = nil
 		if resp.AISensing != nil {
@@ -223,12 +228,16 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 		} else {
 			resp.AISensing = &model.AISensing{}
 		}
-		// Email extraction is Starter+ to deter scraping the API as a contact list.
+		// Email extraction and security credits are Starter+. Emails are
+		// gated to deter scraping the API as a contact list; security
+		// credits are gated as a paid-tier upgrade hook (the strongest
+		// "rescues bug-bounty researcher" signal).
 		if resp.Enrichment != nil {
 			resp.Enrichment.Emails = nil
+			resp.Enrichment.SecurityCredits = nil
 		}
 
-	case "starter":
+	case plan.PlanStarter:
 		// Starter gets Tier 1 AI sensing (metadata + PR authenticity). No Tier 2.
 		resp.License = nil
 		if resp.AISensing != nil {
@@ -237,7 +246,7 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 			resp.AISensing = &model.AISensing{}
 		}
 
-	case "pro":
+	case plan.PlanPro:
 		// Pro gets everything including Tier 2 behavioral heuristics.
 		if resp.AISensing == nil {
 			resp.AISensing = &model.AISensing{}
@@ -440,6 +449,19 @@ func deepCopyEnrichment(src *model.Enrichment) *model.Enrichment {
 	if src.Emails != nil {
 		dst.Emails = append([]string(nil), src.Emails...)
 	}
+	if src.SecurityCredits != nil {
+		sc := *src.SecurityCredits
+		if src.SecurityCredits.BySeverity != nil {
+			sc.BySeverity = make(map[string]int, len(src.SecurityCredits.BySeverity))
+			for k, v := range src.SecurityCredits.BySeverity {
+				sc.BySeverity[k] = v
+			}
+		}
+		if src.SecurityCredits.Recent != nil {
+			sc.Recent = append([]model.SecurityCredit(nil), src.SecurityCredits.Recent...)
+		}
+		dst.SecurityCredits = &sc
+	}
 	return &dst
 }
 
@@ -486,10 +508,61 @@ func (s *ScoreService) buildEnrichment(ctx context.Context, username string, pro
 		populated = true
 	}
 
+	if creds := s.securityCreditsEnrichment(ctx, username); creds != nil {
+		enr.SecurityCredits = creds
+		populated = true
+	}
+
 	if !populated {
 		return nil
 	}
 	return enr
+}
+
+// securityCreditsEnrichment returns the cached GHSA credits aggregate,
+// refreshing from GitHub when the cache is missing or older than
+// config.SecurityCreditTTL. On fetch failure returns whatever is cached
+// (possibly stale) rather than failing the score request — same fallback
+// pattern as ownedReposEnrichment.
+func (s *ScoreService) securityCreditsEnrichment(ctx context.Context, username string) *model.SecurityCredits {
+	if s.behStore == nil {
+		return nil
+	}
+	provider := string(model.ProviderGitHub)
+
+	cached, fetchedAt, err := s.behStore.GetSecurityCredits(ctx, username, provider)
+	if err == nil && !fetchedAt.IsZero() && time.Since(fetchedAt) < config.SecurityCreditTTL() {
+		return cached
+	}
+
+	credits, ferr := s.gh.FetchSecurityCredits(ctx, username, config.SecurityCreditLimit())
+	if ferr != nil {
+		return cached
+	}
+
+	modelCredits := make([]model.SecurityCredit, 0, len(credits))
+	for _, c := range credits {
+		sev := c.Severity
+		if sev == "" {
+			sev = "unknown"
+		}
+		modelCredits = append(modelCredits, model.SecurityCredit{
+			AdvisoryID:  c.AdvisoryID,
+			CreditType:  c.CreditType,
+			Severity:    sev,
+			CVEID:       c.CVEID,
+			Summary:     c.Summary,
+			PublishedAt: c.PublishedAt,
+		})
+	}
+	if err := s.behStore.SaveSecurityCredits(ctx, username, provider, modelCredits); err != nil {
+		_ = err
+	}
+
+	// Re-read so the aggregate (counts + bySeverity + recent slice) is
+	// computed from the canonical query rather than duplicated here.
+	fresh, _, _ := s.behStore.GetSecurityCredits(ctx, username, provider)
+	return fresh
 }
 
 // ownedReposEnrichment returns the cached OwnedRepos aggregate, refreshing

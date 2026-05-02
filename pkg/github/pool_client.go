@@ -85,6 +85,8 @@ func (c *PoolClient) FetchSignals(ctx context.Context, username, repo string, hi
 
 // ListUserRepos retrieves the contributor's owned repositories with
 // automatic token rotation on rate limit.
+//
+//nolint:dupl // intentionally parallel to FetchSecurityCredits — extracting a generic retry helper would obscure the per-method log message and return type
 func (c *PoolClient) ListUserRepos(ctx context.Context, username string, maxRepos int) ([]Repo, error) {
 	api, token, err := c.ghClient(ctx)
 	if err != nil {
@@ -105,6 +107,32 @@ func (c *PoolClient) ListUserRepos(ctx context.Context, username string, maxRepo
 		repos, fetchErr = fetchUserRepos(ctx, api, username, maxRepos)
 	}
 	return repos, fetchErr
+}
+
+// FetchSecurityCredits queries the contributor's GHSA credits via
+// GraphQL, with automatic token rotation on rate limit.
+//
+//nolint:dupl // intentionally parallel to ListUserRepos — see note there
+func (c *PoolClient) FetchSecurityCredits(ctx context.Context, username string, maxCredits int) ([]SecurityAdvisoryCredit, error) {
+	api, token, err := c.ghClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	credits, fetchErr := fetchSecurityCredits(ctx, api, username, maxCredits)
+	for fetchErr != nil && isRateLimited(fetchErr) {
+		c.pool.Exhaust(token)
+		if c.pool.ActiveCount() == 0 {
+			return nil, fmt.Errorf("all tokens exhausted: %w", fetchErr)
+		}
+		slog.Warn("token rate limited, retrying security credits", "username", username)
+		api, token, err = c.ghClient(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("retry after rate limit: %w", err)
+		}
+		credits, fetchErr = fetchSecurityCredits(ctx, api, username, maxCredits)
+	}
+	return credits, fetchErr
 }
 
 // IsOrgMember checks if the user is a member of the given org with token rotation.

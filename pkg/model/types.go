@@ -38,6 +38,33 @@ type Enrichment struct {
 	Emails              []string           `json:"emails,omitempty"`
 	Reciprocity         *Reciprocity       `json:"reciprocity,omitempty"`
 	OwnedRepos          *OwnedRepos        `json:"owned_repos,omitempty"`
+	SecurityCredits     *SecurityCredits   `json:"security_credits,omitempty"`
+}
+
+// SecurityCredits aggregates a contributor's GitHub Security Advisory
+// credits — published vulnerability advisories where the contributor is
+// listed as reporter, fixer, analyst, or other credited role. A non-empty
+// roster is a strong positive signal: GHSA credits are username-keyed by
+// GitHub itself (T1 confidence), so this is one of the most authoritative
+// pieces of contributor credibility we can surface.
+type SecurityCredits struct {
+	ReporterCount int              `json:"reporter_count"`
+	FixerCount    int              `json:"fixer_count"`
+	OtherCount    int              `json:"other_count"`
+	BySeverity    map[string]int   `json:"by_severity,omitempty"`
+	Recent        []SecurityCredit `json:"recent,omitempty"`
+}
+
+// SecurityCredit is a single advisory the contributor is credited on.
+// The advisory_id is the GHSA identifier; cve_id is populated when the
+// advisory has been assigned a CVE.
+type SecurityCredit struct {
+	AdvisoryID  string    `json:"advisory_id"`
+	CreditType  string    `json:"credit_type"`
+	Severity    string    `json:"severity"`
+	CVEID       string    `json:"cve_id,omitempty"`
+	Summary     string    `json:"summary,omitempty"`
+	PublishedAt time.Time `json:"published_at,omitempty"`
 }
 
 // OwnedRepos summarizes a contributor's own (non-forked) repositories

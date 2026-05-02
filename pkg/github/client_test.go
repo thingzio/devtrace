@@ -13,6 +13,7 @@ type MockClient struct {
 	UserProfile *UserProfile
 	Signals     *score.InputSignals
 	Repos       []Repo
+	Credits     []SecurityAdvisoryCredit
 	Err         error
 }
 
@@ -30,6 +31,10 @@ func (m *MockClient) IsOrgMember(_ context.Context, _, _ string) (bool, error) {
 
 func (m *MockClient) ListUserRepos(_ context.Context, _ string, _ int) ([]Repo, error) {
 	return m.Repos, m.Err
+}
+
+func (m *MockClient) FetchSecurityCredits(_ context.Context, _ string, _ int) ([]SecurityAdvisoryCredit, error) {
+	return m.Credits, m.Err
 }
 
 func TestMockClientImplementsInterface(t *testing.T) {

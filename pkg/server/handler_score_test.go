@@ -38,6 +38,10 @@ func (m *mockGH) ListUserRepos(_ context.Context, _ string, _ int) ([]ghclient.R
 	return nil, nil
 }
 
+func (m *mockGH) FetchSecurityCredits(_ context.Context, _ string, _ int) ([]ghclient.SecurityAdvisoryCredit, error) {
+	return nil, nil
+}
+
 func TestScoreHandler(t *testing.T) {
 	mock := &mockGH{
 		profile: &ghclient.UserProfile{
@@ -120,6 +124,14 @@ func (s *stubBehaviorStore) GetRepoSummary(_ context.Context, _, _ string) (*mod
 }
 
 func (s *stubBehaviorStore) SaveRepoSummary(_ context.Context, _, _ string, _ *model.OwnedRepos) error {
+	return nil
+}
+
+func (s *stubBehaviorStore) GetSecurityCredits(_ context.Context, _, _ string) (*model.SecurityCredits, time.Time, error) {
+	return nil, time.Time{}, nil
+}
+
+func (s *stubBehaviorStore) SaveSecurityCredits(_ context.Context, _, _ string, _ []model.SecurityCredit) error {
 	return nil
 }
 

@@ -553,3 +553,135 @@ func srvURL(r *http.Request) string {
 	}
 	return "http://" + r.Host
 }
+
+// TestFetchSecurityCreditsParsesGraphQL verifies the GraphQL response
+// shape from User.securityAdvisoryCredits is parsed into the expected
+// SecurityAdvisoryCredit slice, including CVE extraction from the
+// identifiers array.
+func TestFetchSecurityCreditsParsesGraphQL(t *testing.T) {
+	const username = "ghsa-user"
+	srv, client := ghAPIServer(t, map[string]http.HandlerFunc{
+		"POST /api/v3/graphql": func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, map[string]any{
+				"data": map[string]any{
+					"user": map[string]any{
+						"securityAdvisoryCredits": map[string]any{
+							"nodes": []map[string]any{
+								{
+									"type": "REPORTER",
+									"securityAdvisory": map[string]any{
+										"ghsaId":      "GHSA-aaaa-bbbb-cccc",
+										"summary":     "Critical RCE",
+										"severity":    "CRITICAL",
+										"publishedAt": "2024-06-01T00:00:00Z",
+										"identifiers": []map[string]any{
+											{"type": "GHSA", "value": "GHSA-aaaa-bbbb-cccc"},
+											{"type": "CVE", "value": "CVE-2024-001"},
+										},
+									},
+								},
+								{
+									"type": "FIXER",
+									"securityAdvisory": map[string]any{
+										"ghsaId":      "GHSA-1111-2222-3333",
+										"summary":     "Path traversal",
+										"severity":    "HIGH",
+										"publishedAt": "2024-08-15T00:00:00Z",
+										"identifiers": []map[string]any{
+											{"type": "GHSA", "value": "GHSA-1111-2222-3333"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			})
+		},
+	})
+	defer srv.Close()
+
+	got, err := fetchSecurityCredits(context.Background(), client, username, 0)
+	if err != nil {
+		t.Fatalf("fetchSecurityCredits: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 credits, got %d", len(got))
+	}
+
+	// First credit: reporter, critical, with CVE.
+	if got[0].AdvisoryID != "GHSA-aaaa-bbbb-cccc" {
+		t.Errorf("[0].AdvisoryID: got %q", got[0].AdvisoryID)
+	}
+	if got[0].CreditType != "reporter" {
+		t.Errorf("[0].CreditType: got %q, want lowercased 'reporter'", got[0].CreditType)
+	}
+	if got[0].Severity != "critical" {
+		t.Errorf("[0].Severity: got %q, want lowercased 'critical'", got[0].Severity)
+	}
+	if got[0].CVEID != "CVE-2024-001" {
+		t.Errorf("[0].CVEID: got %q, want CVE-2024-001", got[0].CVEID)
+	}
+	if got[0].PublishedAt.IsZero() {
+		t.Error("[0].PublishedAt should be parsed")
+	}
+
+	// Second credit: fixer, no CVE, just GHSA identifier.
+	if got[1].CVEID != "" {
+		t.Errorf("[1].CVEID: got %q, want empty", got[1].CVEID)
+	}
+	if got[1].CreditType != "fixer" {
+		t.Errorf("[1].CreditType: got %q", got[1].CreditType)
+	}
+}
+
+// TestFetchSecurityCreditsEmptyUser handles users with no credits —
+// the GraphQL response has an empty nodes array.
+func TestFetchSecurityCreditsEmptyUser(t *testing.T) {
+	srv, client := ghAPIServer(t, map[string]http.HandlerFunc{
+		"POST /api/v3/graphql": func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, map[string]any{
+				"data": map[string]any{
+					"user": map[string]any{
+						"securityAdvisoryCredits": map[string]any{
+							"nodes": []any{},
+						},
+					},
+				},
+			})
+		},
+	})
+	defer srv.Close()
+
+	got, err := fetchSecurityCredits(context.Background(), client, "no-creds-user", 0)
+	if err != nil {
+		t.Fatalf("expected nil error for empty credits, got %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected 0 credits, got %d", len(got))
+	}
+}
+
+// TestFetchSecurityCreditsUserNotFound returns nil error for the
+// NOT_FOUND GraphQL error class — treats unknown-user as "no credits".
+func TestFetchSecurityCreditsUserNotFound(t *testing.T) {
+	srv, client := ghAPIServer(t, map[string]http.HandlerFunc{
+		"POST /api/v3/graphql": func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, map[string]any{
+				"data": map[string]any{"user": nil},
+				"errors": []map[string]any{
+					{"type": "NOT_FOUND", "message": "Could not resolve user"},
+				},
+			})
+		},
+	})
+	defer srv.Close()
+
+	got, err := fetchSecurityCredits(context.Background(), client, "nonexistent", 0)
+	if err != nil {
+		t.Fatalf("NOT_FOUND should be treated as no-credits, got error: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil credits, got %+v", got)
+	}
+}

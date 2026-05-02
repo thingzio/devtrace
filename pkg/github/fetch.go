@@ -414,6 +414,125 @@ func mapRepo(r *gh.Repository) Repo {
 	return out
 }
 
+// maxFetchSecurityCredits caps the number of GHSA credits pulled per
+// fetch. Top contributors with extensive credits are bounded to avoid
+// runaway pagination; the cap is generous enough that almost everyone
+// gets the full set.
+const maxFetchSecurityCredits = 100
+
+// fetchSecurityCredits queries the GitHub GraphQL API for the
+// contributor's published-advisory credits via the
+// `User.securityAdvisoryCredits` connection. The REST surface does
+// not expose this connection, so GraphQL is required.
+//
+// Returns an empty slice when the user has no credits — that's a
+// valid result, not an error. Returns an error only on transport or
+// auth failure, so callers can distinguish "no credits" from
+// "couldn't ask."
+func fetchSecurityCredits(ctx context.Context, api *gh.Client, username string, maxCredits int) ([]SecurityAdvisoryCredit, error) {
+	if maxCredits <= 0 || maxCredits > maxFetchSecurityCredits {
+		maxCredits = maxFetchSecurityCredits
+	}
+
+	const query = `
+query($login: String!, $first: Int!) {
+  user(login: $login) {
+    securityAdvisoryCredits(first: $first) {
+      nodes {
+        type
+        securityAdvisory {
+          ghsaId
+          summary
+          severity
+          publishedAt
+          identifiers { type value }
+        }
+      }
+    }
+  }
+}`
+
+	type identifier struct {
+		Type  string `json:"type"`
+		Value string `json:"value"`
+	}
+	type advisory struct {
+		GhsaID      string       `json:"ghsaId"`
+		Summary     string       `json:"summary"`
+		Severity    string       `json:"severity"`
+		PublishedAt time.Time    `json:"publishedAt"`
+		Identifiers []identifier `json:"identifiers"`
+	}
+	type creditNode struct {
+		Type             string   `json:"type"`
+		SecurityAdvisory advisory `json:"securityAdvisory"`
+	}
+	type creditConn struct {
+		Nodes []creditNode `json:"nodes"`
+	}
+	type userResp struct {
+		SecurityAdvisoryCredits creditConn `json:"securityAdvisoryCredits"`
+	}
+	type respData struct {
+		User userResp `json:"user"`
+	}
+	type graphqlResp struct {
+		Data   respData         `json:"data"`
+		Errors []map[string]any `json:"errors,omitempty"`
+	}
+
+	body := struct {
+		Query     string         `json:"query"`
+		Variables map[string]any `json:"variables"`
+	}{
+		Query: query,
+		Variables: map[string]any{
+			"login": username,
+			"first": maxCredits,
+		},
+	}
+
+	var out graphqlResp
+	req, err := api.NewRequest(http.MethodPost, "graphql", body)
+	if err != nil {
+		return nil, fmt.Errorf("build graphql request: %w", err)
+	}
+	if _, err := api.Do(ctx, req, &out); err != nil {
+		return nil, fmt.Errorf("graphql security credits %s: %w", username, err)
+	}
+	if len(out.Errors) > 0 {
+		// "user not found" comes back as a GraphQL error — treat as empty.
+		for _, e := range out.Errors {
+			if t, _ := e["type"].(string); t == "NOT_FOUND" {
+				return nil, nil
+			}
+		}
+		return nil, fmt.Errorf("graphql security credits %s: errors: %v", username, out.Errors)
+	}
+
+	credits := make([]SecurityAdvisoryCredit, 0, len(out.Data.User.SecurityAdvisoryCredits.Nodes))
+	for _, n := range out.Data.User.SecurityAdvisoryCredits.Nodes {
+		c := SecurityAdvisoryCredit{
+			AdvisoryID:  n.SecurityAdvisory.GhsaID,
+			CreditType:  strings.ToLower(n.Type),
+			Severity:    strings.ToLower(n.SecurityAdvisory.Severity),
+			Summary:     n.SecurityAdvisory.Summary,
+			PublishedAt: n.SecurityAdvisory.PublishedAt,
+		}
+		for _, id := range n.SecurityAdvisory.Identifiers {
+			if strings.EqualFold(id.Type, "CVE") {
+				c.CVEID = id.Value
+				break
+			}
+		}
+		if c.AdvisoryID == "" {
+			continue
+		}
+		credits = append(credits, c)
+	}
+	return credits, nil
+}
+
 // mapUser converts a go-github User to a UserProfile.
 func mapUser(u *gh.User) *UserProfile {
 	p := &UserProfile{

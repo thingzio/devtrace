@@ -46,3 +46,8 @@ func (c *PATClient) IsOrgMember(ctx context.Context, org, username string) (bool
 func (c *PATClient) ListUserRepos(ctx context.Context, username string, maxRepos int) ([]Repo, error) {
 	return fetchUserRepos(ctx, c.api, username, maxRepos)
 }
+
+// FetchSecurityCredits queries the contributor's GHSA credits via GraphQL.
+func (c *PATClient) FetchSecurityCredits(ctx context.Context, username string, maxCredits int) ([]SecurityAdvisoryCredit, error) {
+	return fetchSecurityCredits(ctx, c.api, username, maxCredits)
+}

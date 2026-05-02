@@ -95,3 +95,12 @@ func (c *InstallationClient) ListUserRepos(ctx context.Context, username string,
 	}
 	return fetchUserRepos(ctx, api, username, maxRepos)
 }
+
+// FetchSecurityCredits queries the contributor's GHSA credits via GraphQL.
+func (c *InstallationClient) FetchSecurityCredits(ctx context.Context, username string, maxCredits int) ([]SecurityAdvisoryCredit, error) {
+	api, err := c.ghClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return fetchSecurityCredits(ctx, api, username, maxCredits)
+}

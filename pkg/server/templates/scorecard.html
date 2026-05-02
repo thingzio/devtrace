@@ -127,6 +127,55 @@
   </section>
   {{end}}
 
+  {{with .SecurityCredits}}
+  <section class="enrichment-section enrichment-security">
+    <h2>Security Credits <span class="plan-badge">Starter+</span></h2>
+    <p class="metric-desc" style="margin-bottom:0.75rem;">Published GitHub Security Advisories where this contributor is credited (reporter, fixer, analyst, or other roles). Credits are username-attested by GitHub itself.</p>
+    <div class="metric-cards">
+      <div class="metric-card">
+        <div class="metric-value">{{.ReporterCount}}</div>
+        <div class="metric-label">Reporter</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value">{{.FixerCount}}</div>
+        <div class="metric-label">Fixer</div>
+      </div>
+      {{if gt .OtherCount 0}}
+      <div class="metric-card">
+        <div class="metric-value">{{.OtherCount}}</div>
+        <div class="metric-label">Other</div>
+      </div>
+      {{end}}
+    </div>
+
+    {{if .BySeverity}}
+    <p class="metric-desc" style="margin-top:0.75rem;">
+      By severity:
+      {{if .BySeverity.critical}}<strong>{{.BySeverity.critical}} critical</strong>{{end}}
+      {{if .BySeverity.high}}{{if .BySeverity.critical}} · {{end}}{{.BySeverity.high}} high{{end}}
+      {{if .BySeverity.moderate}}{{if or .BySeverity.critical .BySeverity.high}} · {{end}}{{.BySeverity.moderate}} moderate{{end}}
+      {{if .BySeverity.low}}{{if or .BySeverity.critical .BySeverity.high .BySeverity.moderate}} · {{end}}{{.BySeverity.low}} low{{end}}
+    </p>
+    {{end}}
+
+    {{if .Recent}}
+    <h3>Recent advisories</h3>
+    <ul class="enrichment-list">
+      {{range .Recent}}
+      <li>
+        <a href="https://github.com/advisories/{{.AdvisoryID}}" target="_blank" rel="noopener">{{.AdvisoryID}}</a>
+        <span class="platform-badge">{{.CreditType}}</span>
+        <span class="item-meta severity-{{.Severity}}">{{.Severity}}</span>
+        {{if .CVEID}}<span class="item-meta">{{.CVEID}}</span>{{end}}
+        {{if not .PublishedAt.IsZero}}<span class="item-meta">{{.PublishedAt.Format "Jan 2006"}}</span>{{end}}
+        {{if .Summary}}<div class="item-desc">{{.Summary}}</div>{{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+  </section>
+  {{end}}
+
   {{if or .LinkedAccounts .Emails}}
   <section class="enrichment-section enrichment-linked">
     <h2>Linked Accounts</h2>

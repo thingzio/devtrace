@@ -29,6 +29,13 @@ type Client interface {
 	// by the GitHub API (currently "pushed" descending). maxRepos is
 	// clamped to a sane upper bound by the implementation.
 	ListUserRepos(ctx context.Context, username string, maxRepos int) ([]Repo, error)
+	// FetchSecurityCredits returns the contributor's GHSA security
+	// advisory credits — published advisories where the user is credited
+	// as reporter, fixer, analyst, or other role. Uses the GitHub
+	// GraphQL API since the REST surface does not expose the per-user
+	// credits connection. Empty slice is a valid result (user has no
+	// public credits); error indicates fetch failure.
+	FetchSecurityCredits(ctx context.Context, username string, maxCredits int) ([]SecurityAdvisoryCredit, error)
 }
 
 // Repo holds a subset of GitHub repository metadata used by enrichment
@@ -43,6 +50,19 @@ type Repo struct {
 	Fork        bool
 	Archived    bool
 	PushedAt    time.Time
+}
+
+// SecurityAdvisoryCredit represents one GHSA credit edge: a contributor
+// is credited as `CreditType` on advisory `AdvisoryID`. Fields mirror
+// the subset of the GraphQL `SecurityAdvisoryCredit` and embedded
+// `SecurityAdvisory` types that we surface in enrichment.
+type SecurityAdvisoryCredit struct {
+	AdvisoryID  string    // GHSA identifier, e.g. "GHSA-xxxx-yyyy-zzzz"
+	CreditType  string    // reporter / fixer / analyst / remediation_developer / etc.
+	Severity    string    // critical / high / moderate / low / unknown (lowercased)
+	CVEID       string    // CVE identifier when assigned, empty otherwise
+	Summary     string    // short advisory summary
+	PublishedAt time.Time // advisory publication date
 }
 
 // UserProfile holds GitHub user metadata.

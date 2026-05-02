@@ -16,14 +16,17 @@ import (
 // mockBehaviorStore implements service.BehaviorStore for testing the
 // enrichment pipeline without a real Postgres dependency.
 type mockBehaviorStore struct {
-	behavior       *model.Behavior
-	lifetime       *model.LifetimeActivity
-	topRepos       []model.RepoContribution
-	repoSummary    *model.OwnedRepos
-	repoFetchedAt  time.Time
-	saveSummaryErr error
-	savedSummary   *model.OwnedRepos
-	saveCallCount  int
+	behavior         *model.Behavior
+	lifetime         *model.LifetimeActivity
+	topRepos         []model.RepoContribution
+	repoSummary      *model.OwnedRepos
+	repoFetchedAt    time.Time
+	saveSummaryErr   error
+	savedSummary     *model.OwnedRepos
+	saveCallCount    int
+	credits          *model.SecurityCredits
+	creditsFetchedAt time.Time
+	savedCredits     []model.SecurityCredit
 }
 
 func (m *mockBehaviorStore) GetBehavioralSignals(_ context.Context, _, _ string) (*model.Behavior, error) {
@@ -48,11 +51,21 @@ func (m *mockBehaviorStore) SaveRepoSummary(_ context.Context, _, _ string, summ
 	return m.saveSummaryErr
 }
 
+func (m *mockBehaviorStore) GetSecurityCredits(_ context.Context, _, _ string) (*model.SecurityCredits, time.Time, error) {
+	return m.credits, m.creditsFetchedAt, nil
+}
+
+func (m *mockBehaviorStore) SaveSecurityCredits(_ context.Context, _, _ string, credits []model.SecurityCredit) error {
+	m.savedCredits = credits
+	return nil
+}
+
 // mockClient implements ghclient.Client for testing.
 type mockClient struct {
 	signals    *score.InputSignals
 	profile    *ghclient.UserProfile
 	repos      []ghclient.Repo
+	credits    []ghclient.SecurityAdvisoryCredit
 	trustedOrg string // IsOrgMember returns true for this org
 }
 
@@ -70,6 +83,10 @@ func (m *mockClient) FetchUser(_ context.Context, _ string) (*ghclient.UserProfi
 
 func (m *mockClient) ListUserRepos(_ context.Context, _ string, _ int) ([]ghclient.Repo, error) {
 	return m.repos, nil
+}
+
+func (m *mockClient) FetchSecurityCredits(_ context.Context, _ string, _ int) ([]ghclient.SecurityAdvisoryCredit, error) {
+	return m.credits, nil
 }
 
 func establishedSignals() *score.InputSignals {
@@ -610,6 +627,121 @@ func (c *errorRepoClient) IsOrgMember(ctx context.Context, o, u string) (bool, e
 
 func (c *errorRepoClient) ListUserRepos(_ context.Context, _ string, _ int) ([]ghclient.Repo, error) {
 	return nil, errors.New("upstream unavailable")
+}
+
+func (c *errorRepoClient) FetchSecurityCredits(_ context.Context, _ string, _ int) ([]ghclient.SecurityAdvisoryCredit, error) {
+	return c.base.FetchSecurityCredits(context.Background(), "", 0)
+}
+
+// TestSecurityCreditsCacheHit returns the cached aggregate without
+// hitting GitHub when the cached row is fresh.
+func TestSecurityCreditsCacheHit(t *testing.T) {
+	cached := &model.SecurityCredits{
+		ReporterCount: 3, FixerCount: 1,
+		BySeverity: map[string]int{"high": 4},
+	}
+	store := &mockBehaviorStore{
+		credits:          cached,
+		creditsFetchedAt: time.Now().Add(-1 * time.Hour),
+	}
+	mc := &mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+		// If we erroneously fetch, this canned response would surface.
+		credits: []ghclient.SecurityAdvisoryCredit{
+			{AdvisoryID: "GHSA-fresh-fetch", CreditType: "fixer", Severity: "low"},
+		},
+	}
+	svc := NewScoreService(mc, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment == nil || resp.Enrichment.SecurityCredits == nil {
+		t.Fatal("expected security credits in enrichment")
+	}
+	if resp.Enrichment.SecurityCredits.ReporterCount != 3 {
+		t.Errorf("got reporter=%d, want 3 (cache hit, not fresh fetch)",
+			resp.Enrichment.SecurityCredits.ReporterCount)
+	}
+	if store.savedCredits != nil {
+		t.Errorf("fresh cache should not save: got %d new credits", len(store.savedCredits))
+	}
+}
+
+// TestSecurityCreditsStaleRefresh re-fetches from GitHub when the
+// cached row is older than config.SecurityCreditTTL.
+func TestSecurityCreditsStaleRefresh(t *testing.T) {
+	store := &mockBehaviorStore{
+		credits:          &model.SecurityCredits{ReporterCount: 1},
+		creditsFetchedAt: time.Now().Add(-30 * 24 * time.Hour), // way past TTL
+	}
+	mc := &mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+		credits: []ghclient.SecurityAdvisoryCredit{
+			{
+				AdvisoryID: "GHSA-fresh-1234", CreditType: "reporter",
+				Severity: "high", CVEID: "CVE-2024-100",
+				PublishedAt: time.Now(),
+			},
+		},
+	}
+	svc := NewScoreService(mc, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+
+	_, err := svc.Score(context.Background(), "testuser", "", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if len(store.savedCredits) != 1 {
+		t.Fatalf("expected 1 saved credit after refresh, got %d", len(store.savedCredits))
+	}
+	if store.savedCredits[0].AdvisoryID != "GHSA-fresh-1234" {
+		t.Errorf("saved advisory: got %q, want GHSA-fresh-1234", store.savedCredits[0].AdvisoryID)
+	}
+}
+
+// TestSecurityCreditsStrippedForFree confirms Free-tier callers don't
+// see the SecurityCredits block — it's a Starter+ upgrade hook.
+func TestSecurityCreditsStrippedForFree(t *testing.T) {
+	store := &mockBehaviorStore{
+		credits: &model.SecurityCredits{
+			ReporterCount: 5, FixerCount: 2,
+		},
+		creditsFetchedAt: time.Now().Add(-1 * time.Hour),
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+
+	tests := []struct {
+		plan    string
+		wantSet bool
+	}{
+		{"free", false},
+		{"starter", true},
+		{"pro", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.plan, func(t *testing.T) {
+			resp, err := svc.Score(context.Background(), "testuser", "", tc.plan, nil)
+			if err != nil {
+				t.Fatalf("score: %v", err)
+			}
+			if resp.Enrichment == nil {
+				t.Fatal("expected enrichment block")
+			}
+			has := resp.Enrichment.SecurityCredits != nil
+			if has != tc.wantSet {
+				t.Errorf("plan=%s SecurityCredits present=%v, want %v", tc.plan, has, tc.wantSet)
+			}
+		})
+	}
 }
 
 // TestOwnedReposCacheTTLBoundary pins the exact-at-TTL behavior: a

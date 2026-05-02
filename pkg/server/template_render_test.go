@@ -155,6 +155,18 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 			{Platform: "twitter", URL: "https://x.com/jane", Source: "bio", Tier: "T4"},
 		},
 		Emails: []string{"jane@example.com"},
+		SecurityCredits: &model.SecurityCredits{
+			ReporterCount: 5, FixerCount: 2, OtherCount: 0,
+			BySeverity: map[string]int{"critical": 2, "high": 3, "moderate": 1, "low": 1},
+			Recent: []model.SecurityCredit{
+				{
+					AdvisoryID: "GHSA-aaaa-bbbb-cccc",
+					CreditType: "reporter", Severity: "critical",
+					CVEID: "CVE-2024-001", Summary: "Critical RCE in foo",
+					PublishedAt: time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
+				},
+			},
+		},
 		OwnedRepos: &model.OwnedRepos{
 			TotalStars: 8534, TotalRepos: 76,
 			Top: []model.OwnedRepo{
@@ -195,6 +207,11 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 		"personal_site", "https://example.dev/blog",
 		"twitter", "https://x.com/jane",
 		"Public email", "Starter+", "jane@example.com",
+		// Security credits
+		"Security Credits", "GHSA-aaaa-bbbb-cccc",
+		"CVE-2024-001", "Critical RCE in foo",
+		">5<", ">2<", // ReporterCount, FixerCount tile values
+		"2 critical", "3 high",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(body, want) {
@@ -215,7 +232,7 @@ func TestScorecardWithoutEnrichmentRenders(t *testing.T) {
 	}
 	body := rec.Body.String()
 	// The enrichment headings must NOT appear when no data is provided.
-	for _, mustNotContain := range []string{">Activity<", "Reciprocity", "Owned Repositories", "Linked Accounts"} {
+	for _, mustNotContain := range []string{">Activity<", "Reciprocity", "Owned Repositories", "Linked Accounts", "Security Credits"} {
 		if strings.Contains(body, mustNotContain) {
 			t.Errorf("scorecard rendered %q despite nil Enrichment", mustNotContain)
 		}

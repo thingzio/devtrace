@@ -152,6 +152,10 @@ func (m *mockGHClient) ListUserRepos(_ context.Context, _ string, _ int) ([]ghcl
 	return nil, nil
 }
 
+func (m *mockGHClient) FetchSecurityCredits(_ context.Context, _ string, _ int) ([]ghclient.SecurityAdvisoryCredit, error) {
+	return nil, nil
+}
+
 const testVersion = "v0.0.1-test"
 
 func TestScorerStatsRecord(t *testing.T) {

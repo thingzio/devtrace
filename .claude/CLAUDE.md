@@ -173,6 +173,8 @@ Data flow: GitHub App webhook → tenant repos → background ingest worker → 
 - `GHARCHIVE_BACKFILL_WORKERS` — concurrent backfill workers (default 3)
 - `DEVTRACE_REPO_SUMMARY_TTL` — owned-repos enrichment cache freshness (Go duration, default 24h)
 - `DEVTRACE_REPO_LIST_LIMIT` — cap on repos fetched from GitHub per refresh (default 300)
+- `DEVTRACE_SECURITY_CREDIT_TTL` — GHSA credits cache freshness (Go duration, default 168h)
+- `DEVTRACE_SECURITY_CREDIT_LIMIT` — cap on GHSA credits fetched per refresh (default 100)
 - `ANTHROPIC_API_KEY` — optional, enables AI risk sensing
 - `SEND_API_KEY` — email service API key (enables contact form on help page)
 - `SUPPORT_EMAIL` — support email address for contact form

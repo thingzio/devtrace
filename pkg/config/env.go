@@ -35,6 +35,31 @@ func RepoListLimit() int {
 	return GetEnvAsInt("DEVTRACE_REPO_LIST_LIMIT", defaultRepoListLimit)
 }
 
+const (
+	// defaultSecurityCreditTTL is the freshness window for cached GHSA
+	// security-advisory credits. GHSA advisories don't churn rapidly;
+	// a week is a reasonable default. Operators can tune via env var.
+	defaultSecurityCreditTTL = 7 * 24 * time.Hour
+
+	// defaultSecurityCreditLimit caps how many GHSA credits we pull
+	// per fetch. Even prolific researchers like Tavis Ormandy have
+	// hundreds, not thousands; 100 is generous.
+	defaultSecurityCreditLimit = 100
+)
+
+// SecurityCreditTTL returns the freshness window for cached GHSA
+// security-advisory credits. Override via DEVTRACE_SECURITY_CREDIT_TTL.
+func SecurityCreditTTL() time.Duration {
+	return GetEnvAsDuration("DEVTRACE_SECURITY_CREDIT_TTL", defaultSecurityCreditTTL)
+}
+
+// SecurityCreditLimit returns the cap on how many GHSA credits the
+// security-advisory fetcher pulls from GitHub on a single refresh.
+// Override via DEVTRACE_SECURITY_CREDIT_LIMIT.
+func SecurityCreditLimit() int {
+	return GetEnvAsInt("DEVTRACE_SECURITY_CREDIT_LIMIT", defaultSecurityCreditLimit)
+}
+
 // GetEnvAsDuration parses the env var as a Go duration; falls back to
 // the default on absent or invalid values.
 func GetEnvAsDuration(key string, fallback time.Duration) time.Duration {
