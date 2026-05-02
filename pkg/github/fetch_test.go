@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -342,4 +343,213 @@ func searchString(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func ptr[T any](v T) *T { return &v }
+
+// TestMapRepoEdgeCases covers nil sub-fields and unusual flag combos in
+// the go-github Repository → Repo conversion. Each case documents an
+// invariant we rely on in pkg/profile/repos.go aggregation.
+func TestMapRepoEdgeCases(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		input      *gh.Repository
+		want       Repo
+		wantPushed bool
+	}{
+		{
+			name: "all fields populated",
+			input: &gh.Repository{
+				Name: ptr("myrepo"), FullName: ptr("user/myrepo"),
+				Description: ptr("A repo"), Language: ptr("Go"),
+				StargazersCount: ptr(42), Fork: ptr(false), Archived: ptr(false),
+				PushedAt: &gh.Timestamp{Time: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+			},
+			want: Repo{
+				Name: "myrepo", FullName: "user/myrepo", Description: "A repo",
+				Language: "Go", Stars: 42,
+			},
+			wantPushed: true,
+		},
+		{
+			name:  "fork repository preserved",
+			input: &gh.Repository{Name: ptr("forked"), FullName: ptr("user/forked"), Fork: ptr(true), StargazersCount: ptr(0)},
+			want:  Repo{Name: "forked", FullName: "user/forked", Fork: true},
+		},
+		{
+			name:  "archived repository preserved",
+			input: &gh.Repository{Name: ptr("old"), Archived: ptr(true)},
+			want:  Repo{Name: "old", Archived: true},
+		},
+		{
+			name:  "fork AND archived",
+			input: &gh.Repository{Name: ptr("oldfork"), Fork: ptr(true), Archived: ptr(true)},
+			want:  Repo{Name: "oldfork", Fork: true, Archived: true},
+		},
+		{
+			name:  "missing language defaults to empty",
+			input: &gh.Repository{Name: ptr("polyglot"), StargazersCount: ptr(5)},
+			want:  Repo{Name: "polyglot", Stars: 5, Language: ""},
+		},
+		{
+			name:  "nil PushedAt yields zero time",
+			input: &gh.Repository{Name: ptr("never-pushed"), PushedAt: nil},
+			want:  Repo{Name: "never-pushed"},
+		},
+		{
+			name:  "completely empty repository — should not panic",
+			input: &gh.Repository{},
+			want:  Repo{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := mapRepo(tc.input)
+			if got.Name != tc.want.Name {
+				t.Errorf("Name: got %q, want %q", got.Name, tc.want.Name)
+			}
+			if got.FullName != tc.want.FullName {
+				t.Errorf("FullName: got %q, want %q", got.FullName, tc.want.FullName)
+			}
+			if got.Description != tc.want.Description {
+				t.Errorf("Description: got %q, want %q", got.Description, tc.want.Description)
+			}
+			if got.Language != tc.want.Language {
+				t.Errorf("Language: got %q, want %q", got.Language, tc.want.Language)
+			}
+			if got.Stars != tc.want.Stars {
+				t.Errorf("Stars: got %d, want %d", got.Stars, tc.want.Stars)
+			}
+			if got.Fork != tc.want.Fork {
+				t.Errorf("Fork: got %v, want %v", got.Fork, tc.want.Fork)
+			}
+			if got.Archived != tc.want.Archived {
+				t.Errorf("Archived: got %v, want %v", got.Archived, tc.want.Archived)
+			}
+			if got.PushedAt.IsZero() == tc.wantPushed {
+				t.Errorf("PushedAt zero=%v, want zero=%v", got.PushedAt.IsZero(), !tc.wantPushed)
+			}
+		})
+	}
+}
+
+// TestFetchUserReposPagination verifies fetchUserRepos walks the
+// "Link: rel=next" pagination protocol, accumulates pages correctly,
+// and stops cleanly at the last page (no NextPage).
+func TestFetchUserReposPagination(t *testing.T) {
+	const username = "paginate-user"
+	pages := 0
+	srv, client := ghAPIServer(t, map[string]http.HandlerFunc{
+		"GET /api/v3/users/" + username + "/repos": func(w http.ResponseWriter, r *http.Request) {
+			pages++
+			page := r.URL.Query().Get("page")
+			var (
+				start, count, nextPage int
+			)
+			switch page {
+			case "", "1":
+				start, count, nextPage = 0, 100, 2
+			case "2":
+				start, count, nextPage = 100, 100, 3
+			case "3":
+				start, count, nextPage = 200, 50, 0
+			default:
+				t.Fatalf("unexpected page %q", page)
+			}
+			repos := make([]*gh.Repository, count)
+			for i := range count {
+				n := fmt.Sprintf("repo-%d", start+i)
+				repos[i] = &gh.Repository{
+					Name: ptr(n), FullName: ptr(username + "/" + n),
+					StargazersCount: ptr(start + i),
+				}
+			}
+			if nextPage > 0 {
+				// go-github parses Link header URL's page= query param into resp.NextPage.
+				w.Header().Set("Link", fmt.Sprintf(`<%s/api/v3/users/%s/repos?page=%d>; rel="next"`, srvURL(r), username, nextPage))
+			}
+			writeJSON(w, repos)
+		},
+	})
+	defer srv.Close()
+
+	repos, err := fetchUserRepos(context.Background(), client, username, 0)
+	if err != nil {
+		t.Fatalf("fetchUserRepos: %v", err)
+	}
+	if len(repos) != 250 {
+		t.Errorf("expected 250 (100+100+50), got %d", len(repos))
+	}
+	if pages != 3 {
+		t.Errorf("expected 3 page fetches, got %d", pages)
+	}
+}
+
+// TestFetchUserReposRespectsMaxCap exits the loop once maxRepos is
+// reached, even when GitHub indicates more pages exist — protects the
+// token budget against runaway pagination on huge accounts.
+func TestFetchUserReposRespectsMaxCap(t *testing.T) {
+	const username = "cap-user"
+	pageHits := 0
+	srv, client := ghAPIServer(t, map[string]http.HandlerFunc{
+		"GET /api/v3/users/" + username + "/repos": func(w http.ResponseWriter, r *http.Request) {
+			pageHits++
+			repos := make([]*gh.Repository, 100)
+			for i := range 100 {
+				n := fmt.Sprintf("r%d", i)
+				repos[i] = &gh.Repository{
+					Name: ptr(n), FullName: ptr(username + "/" + n),
+					StargazersCount: ptr(i),
+				}
+			}
+			w.Header().Set("Link", fmt.Sprintf(`<%s/api/v3/users/%s/repos?page=2>; rel="next"`, srvURL(r), username))
+			writeJSON(w, repos)
+		},
+	})
+	defer srv.Close()
+
+	repos, err := fetchUserRepos(context.Background(), client, username, 50)
+	if err != nil {
+		t.Fatalf("fetchUserRepos: %v", err)
+	}
+	if len(repos) != 50 {
+		t.Errorf("expected exactly 50 repos at maxRepos=50, got %d", len(repos))
+	}
+	if pageHits != 1 {
+		t.Errorf("expected 1 page fetch (cap reached on page 1), got %d", pageHits)
+	}
+}
+
+// TestFetchUserReposPropagatesError verifies that a 500 from GitHub
+// on the first page surfaces as an error rather than silently returning
+// partial / empty data.
+func TestFetchUserReposPropagatesError(t *testing.T) {
+	const username = "error-user"
+	srv, client := ghAPIServer(t, map[string]http.HandlerFunc{
+		"GET /api/v3/users/" + username + "/repos": func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+		},
+	})
+	defer srv.Close()
+
+	repos, err := fetchUserRepos(context.Background(), client, username, 50)
+	if err == nil {
+		t.Fatalf("expected error, got %d repos", len(repos))
+	}
+	if !contains(err.Error(), "list user repos") {
+		t.Errorf("error should reference list user repos: %q", err)
+	}
+}
+
+// srvURL extracts the request's full server URL prefix; needed because
+// go-github parses the Link header against the configured base URL.
+func srvURL(r *http.Request) string {
+	if r.TLS != nil {
+		return "https://" + r.Host
+	}
+	return "http://" + r.Host
 }

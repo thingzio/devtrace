@@ -127,12 +127,12 @@ func adminBaseData(r *http.Request, opts Options) (map[string]any, *tenant.Tenan
 	}
 
 	data := map[string]any{
-		tmplTitle:   tmplAdmin,
-		tmplVersion: opts.Version,
-		tmplCommit:  opts.Commit,
-		tmplDate:    opts.Date,
-		"NavUser":   tn.Username,
-		"NavAvatar": tn.AvatarURL,
+		tmplTitle:     tmplAdmin,
+		tmplVersion:   opts.Version,
+		tmplCommit:    opts.Commit,
+		tmplDate:      opts.Date,
+		tmplNavUser:   tn.Username,
+		tmplNavAvatar: tn.AvatarURL,
 	}
 
 	if msg := r.URL.Query().Get("msg"); msg != "" {

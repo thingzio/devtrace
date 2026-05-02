@@ -59,8 +59,8 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 				"GradeClass": "grade-f",
 			}
 			if tn != nil {
-				errData["NavUser"] = tn.Username
-				errData["NavAvatar"] = tn.AvatarURL
+				errData[tmplNavUser] = tn.Username
+				errData[tmplNavAvatar] = tn.AvatarURL
 			}
 			renderTemplate(w, "scorecard.html", errData)
 			return
@@ -121,8 +121,8 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 				resp.Behavior, resp.AISensing)
 		}
 		if tn != nil {
-			data["NavUser"] = tn.Username
-			data["NavAvatar"] = tn.AvatarURL
+			data[tmplNavUser] = tn.Username
+			data[tmplNavAvatar] = tn.AvatarURL
 		}
 		renderTemplate(w, "scorecard.html", data)
 	}
@@ -247,8 +247,8 @@ func settingsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 			tmplCommit:          opts.Commit,
 			tmplDate:            opts.Date,
 			"CSRFToken":         middleware.CSRFTokenFromContext(r.Context()),
-			"NavUser":           tn.Username,
-			"NavAvatar":         tn.AvatarURL,
+			tmplNavUser:         tn.Username,
+			tmplNavAvatar:       tn.AvatarURL,
 			"username":          tn.Username,
 			tmplName:            tn.Name,
 			"email":             tn.Email,

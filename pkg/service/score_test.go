@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thingzio/devtrace/pkg/config"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/model"
 	"github.com/thingzio/devtrace/pkg/score"
@@ -22,6 +23,7 @@ type mockBehaviorStore struct {
 	repoFetchedAt  time.Time
 	saveSummaryErr error
 	savedSummary   *model.OwnedRepos
+	saveCallCount  int
 }
 
 func (m *mockBehaviorStore) GetBehavioralSignals(_ context.Context, _, _ string) (*model.Behavior, error) {
@@ -42,6 +44,7 @@ func (m *mockBehaviorStore) GetRepoSummary(_ context.Context, _, _ string) (*mod
 
 func (m *mockBehaviorStore) SaveRepoSummary(_ context.Context, _, _ string, summary *model.OwnedRepos) error {
 	m.savedSummary = summary
+	m.saveCallCount++
 	return m.saveSummaryErr
 }
 
@@ -607,6 +610,117 @@ func (c *errorRepoClient) IsOrgMember(ctx context.Context, o, u string) (bool, e
 
 func (c *errorRepoClient) ListUserRepos(_ context.Context, _ string, _ int) ([]ghclient.Repo, error) {
 	return nil, errors.New("upstream unavailable")
+}
+
+// TestOwnedReposCacheTTLBoundary pins the exact-at-TTL behavior: a
+// summary fetched 1ns before the TTL is fresh; one fetched at exactly
+// the TTL is stale (forces a refresh). Catches off-by-one regressions
+// in the freshness comparison.
+func TestOwnedReposCacheTTLBoundary(t *testing.T) {
+	tests := []struct {
+		name          string
+		fetchedAtAge  time.Duration
+		wantRefresh   bool
+		cachedStars   int64
+		newFetchStars int64
+	}{
+		{
+			name:          "just inside TTL — uses cache, no refresh",
+			fetchedAtAge:  config.RepoSummaryTTL() - time.Second,
+			wantRefresh:   false,
+			cachedStars:   100,
+			newFetchStars: 999, // wouldn't be used
+		},
+		{
+			name:          "exactly at TTL — refresh",
+			fetchedAtAge:  config.RepoSummaryTTL(),
+			wantRefresh:   true,
+			cachedStars:   100,
+			newFetchStars: 200,
+		},
+		{
+			name:          "just past TTL — refresh",
+			fetchedAtAge:  config.RepoSummaryTTL() + time.Second,
+			wantRefresh:   true,
+			cachedStars:   100,
+			newFetchStars: 200,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &mockBehaviorStore{
+				repoSummary: &model.OwnedRepos{
+					TotalStars: tc.cachedStars, TotalRepos: 1,
+				},
+				repoFetchedAt: time.Now().Add(-tc.fetchedAtAge),
+			}
+			mc := &mockClient{
+				signals: establishedSignals(),
+				profile: establishedProfile(),
+				repos: []ghclient.Repo{
+					{FullName: "u/r", Stars: int(tc.newFetchStars), Language: "Go"},
+				},
+			}
+			svc := NewScoreService(mc, "v0.0.1-test")
+			svc.SetBehaviorStore(store)
+
+			resp, err := svc.Score(context.Background(), "boundary-user", "", "free", nil)
+			if err != nil {
+				t.Fatalf("score: %v", err)
+			}
+			if resp.Enrichment == nil || resp.Enrichment.OwnedRepos == nil {
+				t.Fatal("expected owned repos")
+			}
+			gotStars := resp.Enrichment.OwnedRepos.TotalStars
+
+			refreshed := store.savedSummary != nil
+			if refreshed != tc.wantRefresh {
+				t.Errorf("refresh: got %v, want %v (saved=%+v)",
+					refreshed, tc.wantRefresh, store.savedSummary)
+			}
+			if tc.wantRefresh {
+				if gotStars != tc.newFetchStars {
+					t.Errorf("expected refreshed stars=%d, got %d", tc.newFetchStars, gotStars)
+				}
+			} else {
+				if gotStars != tc.cachedStars {
+					t.Errorf("expected cached stars=%d, got %d", tc.cachedStars, gotStars)
+				}
+			}
+		})
+	}
+}
+
+// TestOwnedReposCacheStillSavesEmptyResult ensures that contributors
+// with zero owned non-fork repos get a row written so the refresh
+// worker doesn't repeatedly re-fetch them on every score request.
+// Bug-class: the AggregateRepos function returns nil for empty/all-
+// fork inputs; if we naively skip the save when summary is nil, the
+// next request goes through the same fetch loop indefinitely.
+func TestOwnedReposCacheStillSavesEmptyResult(t *testing.T) {
+	store := &mockBehaviorStore{} // no cached summary, no fetched_at
+	mc := &mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+		repos: []ghclient.Repo{
+			{FullName: "u/fork", Fork: true, Stars: 100},
+		},
+	}
+	svc := NewScoreService(mc, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+
+	_, err := svc.Score(context.Background(), "fork-only-user", "", "free", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	// AggregateRepos returns nil for fork-only input; SaveRepoSummary
+	// should still be called (with nil) so the empty-record sentinel
+	// suppresses repeated fetches.
+	saveCalls := store.saveCallCount
+	if saveCalls != 1 {
+		t.Errorf("expected 1 SaveRepoSummary call to record empty result, got %d", saveCalls)
+	}
 }
 
 func TestScoreEnrichmentBlocksIndependent(t *testing.T) {
