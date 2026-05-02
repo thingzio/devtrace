@@ -9,6 +9,14 @@ import (
 const (
 	actionOpened = "opened"
 	actionClosed = "closed"
+	// GH Archive emits a distinct "merged" action for merged PRs — it
+	// does NOT use action=closed + payload.pull_request.merged=true.
+	// The pull_request object in archive payloads only carries thin
+	// metadata (url, id, number, head, base); no merged flag exists
+	// to read. Detected after a contributor with known merged PRs
+	// showed PRsMerged=0; survey of one hour found 936 events with
+	// action=merged and zero with payload.pull_request.merged=true.
+	actionMerged = "merged"
 )
 
 // Summary is the per-contributor hourly aggregation result.
@@ -56,18 +64,20 @@ func (a *Aggregator) Add(ev Event) {
 
 	switch ev.Type {
 	case EventPullRequest:
-		// Only "opened" and "closed" actions are tracked. "reopened" is
-		// intentionally ignored because it does not represent a new PR; counting
-		// it would inflate the contributor's PR velocity and distort scoring.
+		// "opened", "merged", and "closed" are the actions tracked.
+		// "reopened" is intentionally ignored because it does not
+		// represent a new PR; counting it would inflate the
+		// contributor's PR velocity and distort scoring. After fix:
+		// action=merged routes to PRsMerged, action=closed to
+		// PRsClosed (closed without merging) — these are mutually
+		// exclusive in GH Archive.
 		switch ev.Action {
 		case actionOpened:
 			s.PRsOpened++
+		case actionMerged:
+			s.PRsMerged++
 		case actionClosed:
-			if ev.Merged {
-				s.PRsMerged++
-			} else {
-				s.PRsClosed++
-			}
+			s.PRsClosed++
 		}
 	case EventPullRequestReview:
 		s.ReviewsGiven++

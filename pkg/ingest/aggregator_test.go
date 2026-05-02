@@ -127,6 +127,39 @@ func TestAggregatorSkipsBots(t *testing.T) {
 	}
 }
 
+// TestAggregatorMergedAction pins the action="merged" → PRsMerged
+// routing. GH Archive emits a distinct "merged" action when a PR is
+// merged; we historically watched for action="closed" with a separate
+// merged flag, which never matched. Real archives never set
+// payload.pull_request.merged, so the previous logic produced
+// PRsMerged=0 for every contributor.
+func TestAggregatorMergedAction(t *testing.T) {
+	a := NewAggregator(time.Now())
+	events := []Event{
+		{Type: "PullRequestEvent", Action: "opened", Actor: "alice", Repo: "org/repo1"},
+		{Type: "PullRequestEvent", Action: "merged", Actor: "alice", Repo: "org/repo1"},
+		{Type: "PullRequestEvent", Action: "merged", Actor: "alice", Repo: "org/repo1"},
+		{Type: "PullRequestEvent", Action: "closed", Actor: "alice", Repo: "org/repo1"},
+	}
+	for _, ev := range events {
+		a.Add(ev)
+	}
+	results := a.Results()
+	if len(results) != 1 {
+		t.Fatalf("Results len = %d, want 1", len(results))
+	}
+	s := results[0]
+	if s.PRsOpened != 1 {
+		t.Errorf("PRsOpened = %d, want 1", s.PRsOpened)
+	}
+	if s.PRsMerged != 2 {
+		t.Errorf("PRsMerged = %d, want 2 (action=merged)", s.PRsMerged)
+	}
+	if s.PRsClosed != 1 {
+		t.Errorf("PRsClosed = %d, want 1 (action=closed only counts unmerged closes)", s.PRsClosed)
+	}
+}
+
 func TestAggregatorIssuesEvent(t *testing.T) {
 	a := NewAggregator(time.Now())
 

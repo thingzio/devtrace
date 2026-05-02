@@ -29,7 +29,6 @@ type Event struct {
 	Action    string
 	Actor     string
 	Repo      string
-	Merged    bool // PullRequestEvent: true if PR was merged (action=closed + merged=true)
 	CreatedAt time.Time
 }
 
@@ -113,11 +112,12 @@ func parseEvent(line []byte) (Event, bool) {
 	default:
 		return Event{}, false
 	}
+	// Only the action field is needed from the payload — the
+	// pull_request object in GH Archive carries no `merged` field
+	// (just url/id/number/head/base). Merge detection is via
+	// action="merged"; see aggregator.go.
 	var payload struct {
-		Action      string `json:"action"`
-		PullRequest struct {
-			Merged bool `json:"merged"`
-		} `json:"pull_request"`
+		Action string `json:"action"`
 	}
 	_ = json.Unmarshal(raw.Payload, &payload)
 	t, _ := time.Parse(time.RFC3339, raw.CreatedAt)
@@ -126,7 +126,6 @@ func parseEvent(line []byte) (Event, bool) {
 		Action:    payload.Action,
 		Actor:     raw.Actor.Login,
 		Repo:      raw.Repo.Name,
-		Merged:    payload.PullRequest.Merged,
 		CreatedAt: t,
 	}, raw.Actor.Login != "" && raw.Repo.Name != ""
 }
