@@ -178,6 +178,16 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 				{Language: "Shell", Repos: 24, Share: 0.32},
 			},
 		},
+		OSSFScorecard: &model.OSSFScorecard{
+			Score:        7.5,
+			Date:         time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC),
+			ScorecardVer: "v5.0.0",
+			Checks: []model.OSSFCheck{
+				{Name: "Code-Review", Score: 10, Reason: "all changesets reviewed", DocURL: "https://example.com/cr"},
+				{Name: "Fuzzing", Score: -1, Reason: "project is not fuzzed", DocURL: "https://example.com/fz"},
+				{Name: "License", Score: 9, Reason: "license file detected"},
+			},
+		},
 	}
 
 	data := scorecardTestData(enrichment)
@@ -212,6 +222,12 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 		"CVE-2024-001", "Critical RCE in foo",
 		">5<", ">2<", // ReporterCount, FixerCount tile values
 		"2 critical", "3 high",
+		// OSSF Scorecard
+		"OSSF Scorecard", "7.5", "v5.0.0", "Apr 27, 2026",
+		"Code-Review", "all changesets reviewed",
+		"Fuzzing", "N/A", // -1 score renders as N/A
+		"License", "license file detected",
+		"https://example.com/cr",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(body, want) {
@@ -232,7 +248,7 @@ func TestScorecardWithoutEnrichmentRenders(t *testing.T) {
 	}
 	body := rec.Body.String()
 	// The enrichment headings must NOT appear when no data is provided.
-	for _, mustNotContain := range []string{">Activity<", "Reciprocity", "Owned Repositories", "Linked Accounts", "Security Credits"} {
+	for _, mustNotContain := range []string{">Activity<", "Reciprocity", "Owned Repositories", "Linked Accounts", "Security Credits", "OSSF Scorecard"} {
 		if strings.Contains(body, mustNotContain) {
 			t.Errorf("scorecard rendered %q despite nil Enrichment", mustNotContain)
 		}

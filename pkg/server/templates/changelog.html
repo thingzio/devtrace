@@ -11,6 +11,14 @@
   <div style="max-width:700px;margin:0 auto">
 
     <div class="landing-feature" style="margin-bottom:24px">
+      <h3>May 2, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.22</span></h3>
+      <ul>
+        <li><strong>OSSF Scorecard (Starter+)</strong> &mdash; when a repo is provided in the score request (<code>?repo=owner/name</code>), the contributor scorecard now surfaces the OpenSSF Scorecard assessment for that repo: aggregate score (0&ndash;10) plus per-check results for Code-Review, Branch-Protection, Maintained, Vulnerabilities, Token-Permissions, Fuzzing, SAST, and others. Cached weekly to align with upstream cadence. Repo-quality context that helps separate "credible contributor in a healthy project" from "credible contributor in an abandoned codebase."</li>
+        <li><strong>PRs Merged count fix</strong> &mdash; the Activity tile previously showed <code>0 PRs Merged</code> for everyone since launch. The aggregator was reading a phantom field; merges actually arrive as a distinct <code>action: "merged"</code> event from GH Archive. Forward ingestion is now correct; existing rows will heal as the 120-day retention window rolls over.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:24px">
       <h3>May 2, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.21</span></h3>
       <ul>
         <li><strong>Security credits (Starter+)</strong> &mdash; the contributor scorecard now surfaces GitHub Security Advisory credits where the contributor is listed as reporter, fixer, analyst, or other role. Includes counts by role, severity breakdown, and a recent-advisories list with CVE links. Credits are username-attested by GitHub itself, making this one of the strongest credibility signals available &mdash; particularly valuable for security researchers whose contribution patterns may otherwise look sparse. <em>Note: live fetching is paused while we build a viable indexing path &mdash; GitHub does not expose a per-user credits API; the schema and UI are in place pending that work.</em></li>

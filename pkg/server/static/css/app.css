@@ -2291,6 +2291,15 @@ a.link {
 .severity-moderate { color: #d4a017; }
 .severity-low      { color: var(--fgColor-muted, #6a737d); }
 .severity-unknown  { color: var(--fgColor-muted, #6a737d); font-style: italic; }
+
+/* OSSF Scorecard scores. Semantic direction is opposite to severity-*:
+   higher numeric score is better, so good = green and bad = red. */
+.ossf-score        { font-family: var(--font-mono, monospace); font-size: 0.85em; padding: 0 0.4em; border-radius: 0.25rem; margin-left: 0.5em; }
+.ossf-score-good   { color: #3fb950; font-weight: 600; }
+.ossf-score-mid    { color: #d4a017; font-weight: 500; }
+.ossf-score-bad    { color: #ff6b6b; font-weight: 500; }
+.ossf-score-na     { color: var(--fgColor-muted, #6a737d); font-style: italic; }
+.ossf-checks li    { margin-bottom: 0.5rem; }
 .enrichment-section h3 {
   font-size: 0.85rem;
   font-weight: 600;

@@ -135,6 +135,14 @@ func (s *stubBehaviorStore) SaveSecurityCredits(_ context.Context, _, _ string, 
 	return nil
 }
 
+func (s *stubBehaviorStore) GetOSSFScorecard(_ context.Context, _, _, _ string) (*model.OSSFScorecard, time.Time, error) {
+	return nil, time.Time{}, nil
+}
+
+func (s *stubBehaviorStore) SaveOSSFScorecard(_ context.Context, _, _, _ string, _ *model.OSSFScorecard) error {
+	return nil
+}
+
 func TestScoreHandlerEnrichmentByPlan(t *testing.T) {
 	mock := &mockGH{
 		profile: &ghclient.UserProfile{Username: "testuser", PublicRepos: 5, Followers: 10},

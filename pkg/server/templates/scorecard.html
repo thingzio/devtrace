@@ -176,6 +176,46 @@
   </section>
   {{end}}
 
+  {{with .OSSFScorecard}}
+  <section class="enrichment-section enrichment-ossf">
+    <h2>OSSF Scorecard <span class="plan-badge">Starter+</span></h2>
+    <p class="metric-desc" style="margin-bottom:0.75rem;">Repository quality assessment from the <a href="https://openssf.org/projects/scorecard/" target="_blank" rel="noopener">OpenSSF Scorecard</a> project. Aggregate score is 0&ndash;10; individual checks score &minus;1 (not applicable) through 10. Higher is better.</p>
+    <div class="metric-cards">
+      <div class="metric-card">
+        <div class="metric-value ossf-score-{{if ge .Score 8.0}}good{{else if ge .Score 5.0}}mid{{else}}bad{{end}}">{{printf "%.1f" .Score}}</div>
+        <div class="metric-label">Aggregate Score</div>
+      </div>
+      {{if .ScorecardVer}}
+      <div class="metric-card">
+        <div class="metric-value" style="font-size:1rem;font-family:var(--font-mono,monospace);">{{.ScorecardVer}}</div>
+        <div class="metric-label">Scorecard Version</div>
+      </div>
+      {{end}}
+      {{if not .Date.IsZero}}
+      <div class="metric-card">
+        <div class="metric-value" style="font-size:1rem;">{{.Date.Format "Jan 2, 2006"}}</div>
+        <div class="metric-label">Last Updated</div>
+      </div>
+      {{end}}
+    </div>
+
+    {{if .Checks}}
+    <h3>Checks</h3>
+    <ul class="enrichment-list ossf-checks">
+      {{range .Checks}}
+      <li>
+        {{if .DocURL}}<a href="{{.DocURL}}" target="_blank" rel="noopener">{{.Name}}</a>{{else}}<strong>{{.Name}}</strong>{{end}}
+        <span class="ossf-score ossf-score-{{if lt .Score 0}}na{{else if ge .Score 8}}good{{else if ge .Score 5}}mid{{else}}bad{{end}}">
+          {{if lt .Score 0}}N/A{{else}}{{.Score}}/10{{end}}
+        </span>
+        {{if .Reason}}<div class="item-desc">{{.Reason}}</div>{{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+  </section>
+  {{end}}
+
   {{if or .LinkedAccounts .Emails}}
   <section class="enrichment-section enrichment-linked">
     <h2>Linked Accounts</h2>

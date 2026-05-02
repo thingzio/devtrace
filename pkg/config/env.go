@@ -70,6 +70,30 @@ func SecurityCreditsEnabled() bool {
 	return GetEnvBool("DEVTRACE_SECURITY_CREDITS_ENABLED")
 }
 
+const (
+	// defaultOSSFTTL is the freshness window for cached OSSF Scorecard
+	// rows. The OSSF refreshes scorecards roughly weekly, so a 7-day
+	// TTL stays in step with upstream cadence.
+	defaultOSSFTTL = 7 * 24 * time.Hour
+
+	// defaultOSSFTimeout bounds a single OSSF API call. The endpoint
+	// is usually fast (<1s) but large monorepos can occasionally take
+	// longer; 10s is generous without holding score requests open.
+	defaultOSSFTimeout = 10 * time.Second
+)
+
+// OSSFTTL returns the freshness window for cached OSSF Scorecard
+// rows. Override via DEVTRACE_OSSF_TTL.
+func OSSFTTL() time.Duration {
+	return GetEnvAsDuration("DEVTRACE_OSSF_TTL", defaultOSSFTTL)
+}
+
+// OSSFTimeout returns the per-call timeout for the OSSF Scorecard
+// HTTP client. Override via DEVTRACE_OSSF_TIMEOUT.
+func OSSFTimeout() time.Duration {
+	return GetEnvAsDuration("DEVTRACE_OSSF_TIMEOUT", defaultOSSFTimeout)
+}
+
 // GetEnvAsDuration parses the env var as a Go duration; falls back to
 // the default on absent or invalid values.
 func GetEnvAsDuration(key string, fallback time.Duration) time.Duration {

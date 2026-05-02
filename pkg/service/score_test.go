@@ -10,6 +10,7 @@ import (
 	"github.com/thingzio/devtrace/pkg/config"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/model"
+	"github.com/thingzio/devtrace/pkg/ossf"
 	"github.com/thingzio/devtrace/pkg/score"
 )
 
@@ -27,6 +28,9 @@ type mockBehaviorStore struct {
 	credits          *model.SecurityCredits
 	creditsFetchedAt time.Time
 	savedCredits     []model.SecurityCredit
+	ossfCard         *model.OSSFScorecard
+	ossfFetchedAt    time.Time
+	savedOSSFCard    *model.OSSFScorecard
 }
 
 func (m *mockBehaviorStore) GetBehavioralSignals(_ context.Context, _, _ string) (*model.Behavior, error) {
@@ -57,6 +61,15 @@ func (m *mockBehaviorStore) GetSecurityCredits(_ context.Context, _, _ string) (
 
 func (m *mockBehaviorStore) SaveSecurityCredits(_ context.Context, _, _ string, credits []model.SecurityCredit) error {
 	m.savedCredits = credits
+	return nil
+}
+
+func (m *mockBehaviorStore) GetOSSFScorecard(_ context.Context, _, _, _ string) (*model.OSSFScorecard, time.Time, error) {
+	return m.ossfCard, m.ossfFetchedAt, nil
+}
+
+func (m *mockBehaviorStore) SaveOSSFScorecard(_ context.Context, _, _, _ string, card *model.OSSFScorecard) error {
+	m.savedOSSFCard = card
 	return nil
 }
 
@@ -778,6 +791,257 @@ func TestSecurityCreditsStrippedForFree(t *testing.T) {
 			has := resp.Enrichment.SecurityCredits != nil
 			if has != tc.wantSet {
 				t.Errorf("plan=%s SecurityCredits present=%v, want %v", tc.plan, has, tc.wantSet)
+			}
+		})
+	}
+}
+
+// mockOSSF implements service.OSSFFetcher for testing the scorecard
+// enrichment path without an httptest server.
+type mockOSSF struct {
+	card  *ossf.Scorecard
+	err   error
+	calls int
+}
+
+func (m *mockOSSF) Fetch(_ context.Context, _, _ string) (*ossf.Scorecard, error) {
+	m.calls++
+	return m.card, m.err
+}
+
+// TestOSSFEnrichmentCacheHit: fresh cached row → no upstream call,
+// returned card matches cached.
+func TestOSSFEnrichmentCacheHit(t *testing.T) {
+	cached := &model.OSSFScorecard{
+		Score: 7.5,
+		Date:  time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC),
+		Checks: []model.OSSFCheck{
+			{Name: "Code-Review", Score: 10},
+		},
+	}
+	store := &mockBehaviorStore{
+		ossfCard:      cached,
+		ossfFetchedAt: time.Now().Add(-1 * time.Hour),
+	}
+	mc := &mockOSSF{
+		card: &ossf.Scorecard{Score: 9.9}, // different — would surface if fetched
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetOSSFFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "owner/repo", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment == nil || resp.Enrichment.OSSFScorecard == nil {
+		t.Fatal("expected OSSF scorecard in enrichment")
+	}
+	if resp.Enrichment.OSSFScorecard.Score != 7.5 {
+		t.Errorf("score: got %v, want 7.5 (cache hit)", resp.Enrichment.OSSFScorecard.Score)
+	}
+	if mc.calls != 0 {
+		t.Errorf("expected 0 upstream fetches on cache hit, got %d", mc.calls)
+	}
+}
+
+// TestOSSFEnrichmentStaleRefresh: stale row → upstream fetch + save.
+func TestOSSFEnrichmentStaleRefresh(t *testing.T) {
+	store := &mockBehaviorStore{
+		ossfCard: &model.OSSFScorecard{
+			Score:  3.0,
+			Checks: []model.OSSFCheck{{Name: "License", Score: 0}},
+		},
+		ossfFetchedAt: time.Now().Add(-30 * 24 * time.Hour), // way past TTL
+	}
+	mc := &mockOSSF{
+		card: &ossf.Scorecard{
+			Score:        9.0,
+			Date:         time.Now(),
+			Commit:       "deadbeef",
+			ScorecardVer: "v5.0.0",
+			Checks: []ossf.Check{
+				{Name: "License", Score: 10},
+				{Name: "Maintained", Score: 8},
+			},
+		},
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetOSSFFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "owner/repo", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment == nil || resp.Enrichment.OSSFScorecard == nil {
+		t.Fatal("expected refreshed OSSF scorecard")
+	}
+	if resp.Enrichment.OSSFScorecard.Score != 9.0 {
+		t.Errorf("score after refresh: got %v, want 9.0", resp.Enrichment.OSSFScorecard.Score)
+	}
+	if mc.calls != 1 {
+		t.Errorf("expected 1 upstream fetch on stale refresh, got %d", mc.calls)
+	}
+	if store.savedOSSFCard == nil || len(store.savedOSSFCard.Checks) != 2 {
+		t.Errorf("expected save with 2 checks, got %+v", store.savedOSSFCard)
+	}
+}
+
+// TestOSSFEnrichmentNotFoundSavesSentinel: 404 from upstream writes a
+// zero-score sentinel so subsequent score requests for the same repo
+// don't re-hit the OSSF API for the full TTL window.
+func TestOSSFEnrichmentNotFoundSavesSentinel(t *testing.T) {
+	store := &mockBehaviorStore{}
+	mc := &mockOSSF{err: ossf.ErrNotFound}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetOSSFFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "owner/missing", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment != nil && resp.Enrichment.OSSFScorecard != nil {
+		t.Errorf("expected nil OSSF on not-found, got %+v", resp.Enrichment.OSSFScorecard)
+	}
+	if store.savedOSSFCard == nil {
+		t.Fatal("expected sentinel save on not-found")
+	}
+	if store.savedOSSFCard.Score != 0 || len(store.savedOSSFCard.Checks) != 0 {
+		t.Errorf("sentinel shape: score=%v checks=%d", store.savedOSSFCard.Score, len(store.savedOSSFCard.Checks))
+	}
+}
+
+// TestOSSFEnrichmentSentinelSuppressesFetch: a previously-saved
+// sentinel (zero score, no checks) within the TTL must NOT trigger a
+// re-fetch and must surface as nil to the caller.
+func TestOSSFEnrichmentSentinelSuppressesFetch(t *testing.T) {
+	store := &mockBehaviorStore{
+		ossfCard:      &model.OSSFScorecard{}, // sentinel
+		ossfFetchedAt: time.Now().Add(-1 * time.Hour),
+	}
+	mc := &mockOSSF{
+		card: &ossf.Scorecard{Score: 9.0, Checks: []ossf.Check{{Name: "X", Score: 9}}},
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetOSSFFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "owner/repo", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment != nil && resp.Enrichment.OSSFScorecard != nil {
+		t.Error("sentinel should surface as nil to caller")
+	}
+	if mc.calls != 0 {
+		t.Errorf("sentinel must not trigger refetch, got %d calls", mc.calls)
+	}
+}
+
+// TestOSSFEnrichmentSkipsWithoutRepo: no repo argument → no upstream
+// call and no enrichment block populated, even when fetcher would
+// return data.
+func TestOSSFEnrichmentSkipsWithoutRepo(t *testing.T) {
+	store := &mockBehaviorStore{}
+	mc := &mockOSSF{card: &ossf.Scorecard{Score: 9.0, Checks: []ossf.Check{{Name: "X"}}}}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetOSSFFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment != nil && resp.Enrichment.OSSFScorecard != nil {
+		t.Error("OSSF should be nil without repo")
+	}
+	if mc.calls != 0 {
+		t.Errorf("expected 0 fetches without repo, got %d", mc.calls)
+	}
+}
+
+// TestOSSFStrippedForFree: Free-tier callers don't see the OSSF block.
+func TestOSSFStrippedForFree(t *testing.T) {
+	store := &mockBehaviorStore{
+		ossfCard: &model.OSSFScorecard{
+			Score:  9.0,
+			Checks: []model.OSSFCheck{{Name: "Code-Review", Score: 10}},
+		},
+		ossfFetchedAt: time.Now().Add(-1 * time.Hour),
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetOSSFFetcher(&mockOSSF{})
+
+	tests := []struct {
+		plan    string
+		wantSet bool
+	}{
+		{"free", false},
+		{"starter", true},
+		{"pro", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.plan, func(t *testing.T) {
+			resp, err := svc.Score(context.Background(), "testuser", "owner/repo", tc.plan, nil)
+			if err != nil {
+				t.Fatalf("score: %v", err)
+			}
+			if resp.Enrichment == nil {
+				t.Fatal("expected enrichment block")
+			}
+			has := resp.Enrichment.OSSFScorecard != nil
+			if has != tc.wantSet {
+				t.Errorf("plan=%s OSSFScorecard present=%v, want %v", tc.plan, has, tc.wantSet)
+			}
+		})
+	}
+}
+
+// TestSplitOwnerRepo covers the parser used by the OSSF helper to
+// reject malformed repo arguments before making any upstream call.
+func TestSplitOwnerRepo(t *testing.T) {
+	tests := []struct {
+		in        string
+		wantOwner string
+		wantRepo  string
+		wantOK    bool
+	}{
+		{"owner/repo", "owner", "repo", true},
+		{"  owner/repo  ", "owner", "repo", true},
+		{"owner/", "", "", false},
+		{"/repo", "", "", false},
+		{"owner", "", "", false},
+		{"owner/sub/repo", "", "", false},
+		{"", "", "", false},
+		{" / ", "", "", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.in, func(t *testing.T) {
+			o, r, ok := splitOwnerRepo(tc.in)
+			if ok != tc.wantOK || o != tc.wantOwner || r != tc.wantRepo {
+				t.Errorf("got %q/%q/%v, want %q/%q/%v",
+					o, r, ok, tc.wantOwner, tc.wantRepo, tc.wantOK)
 			}
 		})
 	}

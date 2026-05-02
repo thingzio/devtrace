@@ -39,6 +39,31 @@ type Enrichment struct {
 	Reciprocity         *Reciprocity       `json:"reciprocity,omitempty"`
 	OwnedRepos          *OwnedRepos        `json:"owned_repos,omitempty"`
 	SecurityCredits     *SecurityCredits   `json:"security_credits,omitempty"`
+	OSSFScorecard       *OSSFScorecard     `json:"ossf_scorecard,omitempty"`
+}
+
+// OSSFScorecard summarizes the OSSF Scorecard project assessment for a
+// repository (Open Source Security Foundation, api.securityscorecards.dev).
+// Repo-scoped: only populated when the score request includes a repo.
+// Aggregate score is 0–10; individual checks are -1 (not applicable / not
+// run) through 10. Higher is better. The set of checks returned by the
+// upstream API may vary as new checks are added; we surface them all.
+type OSSFScorecard struct {
+	Score        float64     `json:"score"`
+	Date         time.Time   `json:"date"`
+	Commit       string      `json:"commit,omitempty"`
+	ScorecardVer string      `json:"scorecard_version,omitempty"`
+	Checks       []OSSFCheck `json:"checks,omitempty"`
+}
+
+// OSSFCheck is a single OSSF Scorecard check result. A score of -1 means
+// the check did not apply to this repo (e.g., Fuzzing on a docs-only repo)
+// — render distinctly from a literal 0 ("ran, scored zero").
+type OSSFCheck struct {
+	Name   string `json:"name"`
+	Score  int    `json:"score"`
+	Reason string `json:"reason,omitempty"`
+	DocURL string `json:"doc_url,omitempty"`
 }
 
 // SecurityCredits aggregates a contributor's GitHub Security Advisory

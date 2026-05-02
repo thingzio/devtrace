@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/thingzio/devtrace/pkg/bot"
@@ -11,10 +13,18 @@ import (
 	"github.com/thingzio/devtrace/pkg/config"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/model"
+	"github.com/thingzio/devtrace/pkg/ossf"
 	"github.com/thingzio/devtrace/pkg/plan"
 	profilepkg "github.com/thingzio/devtrace/pkg/profile"
 	"github.com/thingzio/devtrace/pkg/score"
 )
+
+// OSSFFetcher is the subset of the OSSF Scorecard client used by the
+// score service. Defined here so tests can inject a mock without
+// spinning up an httptest server.
+type OSSFFetcher interface {
+	Fetch(ctx context.Context, owner, repo string) (*ossf.Scorecard, error)
+}
 
 // BehaviorStore provides behavioral signal data from contributor activity.
 // GetLifetimeActivity returns aggregate lifetime counts; nil when no data exists.
@@ -31,6 +41,8 @@ type BehaviorStore interface {
 	SaveRepoSummary(ctx context.Context, username, provider string, summary *model.OwnedRepos) error
 	GetSecurityCredits(ctx context.Context, username, provider string) (*model.SecurityCredits, time.Time, error)
 	SaveSecurityCredits(ctx context.Context, username, provider string, credits []model.SecurityCredit) error
+	GetOSSFScorecard(ctx context.Context, provider, owner, repo string) (*model.OSSFScorecard, time.Time, error)
+	SaveOSSFScorecard(ctx context.Context, provider, owner, repo string, card *model.OSSFScorecard) error
 }
 
 // topContributedRepoLimit caps the number of repos surfaced in enrichment.
@@ -38,18 +50,31 @@ type BehaviorStore interface {
 // in pkg/config.
 const topContributedRepoLimit = 5
 
+// logKeyRepo is the slog attribute key for owner/repo identifiers.
+// Extracted as a constant so goconst is satisfied across the multiple
+// log sites in the OSSF enrichment helper.
+const logKeyRepo = "repo"
+
 // ScoreService orchestrates signal fetching, scoring, and response enrichment.
 type ScoreService struct {
 	gh       ghclient.Client
 	behStore BehaviorStore // nil-safe; behavioral signals omitted when nil
+	ossf     OSSFFetcher   // nil-safe; repo OSSF Scorecard enrichment omitted when nil
 	cache    *scoreCache
 	claude   *claude.Client // nil = fallback to templates
 	version  string         // DevTrace build version stamped on every response
 }
 
 // NewScoreService returns a ScoreService wired to the given GitHub client.
+// The OSSF Scorecard fetcher is initialized to a default *ossf.Client; pass
+// SetOSSFFetcher to override (e.g., a test mock or to disable entirely).
 func NewScoreService(gh ghclient.Client, version string) *ScoreService {
-	return &ScoreService{gh: gh, cache: newScoreCache(), version: version}
+	return &ScoreService{
+		gh:      gh,
+		ossf:    ossf.NewClient(config.OSSFTimeout()),
+		cache:   newScoreCache(),
+		version: version,
+	}
 }
 
 // Close stops background goroutines (e.g., cache eviction).
@@ -67,6 +92,13 @@ func (s *ScoreService) SetBehaviorStore(bs BehaviorStore) {
 // SetClaudeClient sets an optional Claude client for AI-powered risk narratives.
 func (s *ScoreService) SetClaudeClient(c *claude.Client) {
 	s.claude = c
+}
+
+// SetOSSFFetcher overrides the default OSSF Scorecard client. Pass nil
+// to disable OSSF enrichment entirely; useful for tests and for
+// environments where the OSSF API is unreachable.
+func (s *ScoreService) SetOSSFFetcher(f OSSFFetcher) {
+	s.ossf = f
 }
 
 // Score fetches signals, computes a reputation score, and builds a plan-aware response.
@@ -188,7 +220,7 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, planName strin
 
 	// Populate enrichment block (profile decoration, surfaced when caller
 	// requests detail view). Always cached; handler/plan layer decides exposure.
-	full.Enrichment = s.buildEnrichment(ctx, username, profile)
+	full.Enrichment = s.buildEnrichment(ctx, username, repo, profile)
 
 	// Cache the full response.
 	s.cache.set(username, repo, full)
@@ -229,13 +261,14 @@ func enrichForPlan(full *model.ScoreResponse, planName string) *model.ScoreRespo
 		} else {
 			resp.AISensing = &model.AISensing{}
 		}
-		// Email extraction and security credits are Starter+. Emails are
-		// gated to deter scraping the API as a contact list; security
-		// credits are gated as a paid-tier upgrade hook (the strongest
-		// "rescues bug-bounty researcher" signal).
+		// Email extraction, security credits, and OSSF Scorecard are
+		// Starter+. Emails are gated to deter scraping; security
+		// credits and OSSF Scorecard are paid-tier upgrade hooks
+		// (repo-quality and credibility signals respectively).
 		if resp.Enrichment != nil {
 			resp.Enrichment.Emails = nil
 			resp.Enrichment.SecurityCredits = nil
+			resp.Enrichment.OSSFScorecard = nil
 		}
 
 	case plan.PlanStarter:
@@ -273,7 +306,7 @@ func (s *ScoreService) checkTrustedOrgs(ctx context.Context, username string, or
 
 func scoringMode(hasRepo bool) string {
 	if hasRepo {
-		return "repo"
+		return "repo" //nolint:goconst // distinct semantic from logKeyRepo (slog key); inlining a constant just to share spelling would obscure intent
 	}
 	return "global"
 }
@@ -463,6 +496,13 @@ func deepCopyEnrichment(src *model.Enrichment) *model.Enrichment {
 		}
 		dst.SecurityCredits = &sc
 	}
+	if src.OSSFScorecard != nil {
+		o := *src.OSSFScorecard
+		if src.OSSFScorecard.Checks != nil {
+			o.Checks = append([]model.OSSFCheck(nil), src.OSSFScorecard.Checks...)
+		}
+		dst.OSSFScorecard = &o
+	}
 	return &dst
 }
 
@@ -470,8 +510,9 @@ func deepCopyEnrichment(src *model.Enrichment) *model.Enrichment {
 // behavior store and the freshly-fetched profile. Each sub-block is
 // independent — a failure or absent data in one does not suppress others.
 // Returns nil when no sub-block has data, so callers can rely on
-// omitempty serialization.
-func (s *ScoreService) buildEnrichment(ctx context.Context, username string, profile *ghclient.UserProfile) *model.Enrichment {
+// omitempty serialization. The repo argument scopes any repo-level
+// enrichment (e.g., OSSF Scorecard); empty means user-only.
+func (s *ScoreService) buildEnrichment(ctx context.Context, username, repo string, profile *ghclient.UserProfile) *model.Enrichment {
 	enr := &model.Enrichment{}
 	populated := false
 
@@ -514,10 +555,102 @@ func (s *ScoreService) buildEnrichment(ctx context.Context, username string, pro
 		populated = true
 	}
 
+	if card := s.ossfScorecardEnrichment(ctx, repo); card != nil {
+		enr.OSSFScorecard = card
+		populated = true
+	}
+
 	if !populated {
 		return nil
 	}
 	return enr
+}
+
+// ossfScorecardEnrichment returns the cached OSSF Scorecard for the
+// requested repo, refreshing from the OpenSSF API when the row is
+// missing or older than config.OSSFTTL. Returns nil when no repo is
+// scoped, when the OSSF fetcher / behavior store is unconfigured, or
+// when the upstream has no scorecard for this repo (a sentinel row
+// records that fact so we don't re-ask on every score request).
+func (s *ScoreService) ossfScorecardEnrichment(ctx context.Context, repo string) *model.OSSFScorecard {
+	if repo == "" || s.behStore == nil || s.ossf == nil {
+		return nil
+	}
+	owner, name, ok := splitOwnerRepo(repo)
+	if !ok {
+		return nil
+	}
+	provider := string(model.ProviderGitHub)
+
+	cached, fetchedAt, err := s.behStore.GetOSSFScorecard(ctx, provider, owner, name)
+	if err == nil && !fetchedAt.IsZero() && time.Since(fetchedAt) < config.OSSFTTL() {
+		return materializeOSSF(cached)
+	}
+
+	card, ferr := s.ossf.Fetch(ctx, owner, name)
+	switch {
+	case errors.Is(ferr, ossf.ErrNotFound):
+		// Save a sentinel so we don't re-ask for repos OSSF has nothing on.
+		if err := s.behStore.SaveOSSFScorecard(ctx, provider, owner, name,
+			&model.OSSFScorecard{}); err != nil {
+			slog.Warn("save ossf sentinel", logKeyRepo, repo, "error", err)
+		}
+		return nil
+	case ferr != nil:
+		slog.Warn("fetch ossf scorecard",
+			logKeyRepo, repo,
+			"error", ferr,
+			"had_cache", cached != nil,
+		)
+		return materializeOSSF(cached)
+	}
+
+	out := &model.OSSFScorecard{
+		Score:        card.Score,
+		Date:         card.Date,
+		Commit:       card.Commit,
+		ScorecardVer: card.ScorecardVer,
+		Checks:       make([]model.OSSFCheck, 0, len(card.Checks)),
+	}
+	for _, c := range card.Checks {
+		out.Checks = append(out.Checks, model.OSSFCheck{
+			Name:   c.Name,
+			Score:  c.Score,
+			Reason: c.Reason,
+			DocURL: c.DocURL,
+		})
+	}
+	if err := s.behStore.SaveOSSFScorecard(ctx, provider, owner, name, out); err != nil {
+		slog.Warn("save ossf scorecard", logKeyRepo, repo, "error", err)
+	}
+	return out
+}
+
+// materializeOSSF turns a cached row into a renderable card. The
+// "fetched but upstream had nothing" sentinel (zero score, no checks)
+// becomes nil here so the UI render path's `{{with .OSSFScorecard}}`
+// falls through cleanly.
+func materializeOSSF(card *model.OSSFScorecard) *model.OSSFScorecard {
+	if card == nil || len(card.Checks) == 0 {
+		return nil
+	}
+	return card
+}
+
+// splitOwnerRepo parses an "owner/repo" string. Returns ok=false on
+// any other shape (empty, no slash, multiple slashes, blank parts) so
+// the caller skips OSSF without surfacing a confusing error.
+func splitOwnerRepo(repo string) (string, string, bool) {
+	parts := strings.SplitN(strings.TrimSpace(repo), "/", 3)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	owner := strings.TrimSpace(parts[0])
+	name := strings.TrimSpace(parts[1])
+	if owner == "" || name == "" {
+		return "", "", false
+	}
+	return owner, name, true
 }
 
 // securityCreditsEnrichment returns the cached GHSA credits aggregate.
