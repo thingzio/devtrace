@@ -7,6 +7,7 @@ package profile
 
 import (
 	"net/mail"
+	neturl "net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -58,12 +59,41 @@ var platformPatterns = []platformRule{
 }
 
 // Extract returns LinkedAccounts and emails declared in the contributor's
-// bio and blog fields. Caller is responsible for plan-tier filtering of
-// the email list (Free tier omits, Starter+ retains).
-func Extract(bio, blog string) ([]model.LinkedAccount, []string) {
+// bio, blog, and dedicated profile email fields. Caller is responsible for
+// plan-tier filtering of the email list (Free tier omits, Starter+ retains).
+//
+// The profileEmail argument is the GitHub profile's `email` field — the
+// dedicated contact-email slot, distinct from any address that might also
+// appear inside bio text. Production data showed that excluding this field
+// missed almost every contributor's public email; including it here is the
+// canonical fix.
+func Extract(bio, blog, profileEmail string) ([]model.LinkedAccount, []string) {
 	accounts := extractURLs(bio, blog)
 	emails := extractEmails(bio, blog)
+	if profileEmail != "" {
+		emails = mergeEmail(emails, profileEmail)
+	}
 	return accounts, emails
+}
+
+// mergeEmail validates and inserts an email into the deduped list,
+// preserving alphabetical order so output is deterministic across calls.
+func mergeEmail(emails []string, candidate string) []string {
+	e := strings.ToLower(strings.TrimSpace(candidate))
+	if e == "" {
+		return emails
+	}
+	if _, err := mail.ParseAddress(e); err != nil {
+		return emails
+	}
+	for _, existing := range emails {
+		if existing == e {
+			return emails
+		}
+	}
+	emails = append(emails, e)
+	sort.Strings(emails)
+	return emails
 }
 
 // extractURLs collects URLs from bio (free text) and the dedicated blog
@@ -128,22 +158,51 @@ func buildAccount(rawURL, source string) (string, model.LinkedAccount) {
 	}
 }
 
-// classifyURL returns the platform name for a URL, or "personal_site" /
-// "unknown" when no platform pattern matches.
-func classifyURL(url string) string {
+// knownPlatformHosts is the set of hostnames whose URLs we know how to
+// recognize via platformPatterns. When a URL's host is in this set but
+// the pattern didn't match (unusual URL shape, e.g. a github repo URL
+// rather than a user URL), classify as "unknown" rather than overclaim
+// "personal_site". When the host is NOT in this set, the URL is on
+// some other domain and is most likely a personal site or blog.
+var knownPlatformHosts = map[string]bool{
+	"twitter.com":       true,
+	"x.com":             true,
+	"linkedin.com":      true,
+	"bsky.app":          true,
+	"youtube.com":       true,
+	"github.com":        true,
+	"gitlab.com":        true,
+	"codeberg.org":      true,
+	"bitbucket.org":     true,
+	"stackoverflow.com": true,
+	"dev.to":            true,
+	"medium.com":        true,
+	"keybase.io":        true,
+}
+
+// classifyURL returns the platform name for a URL. URLs matching a
+// platform pattern get that platform's name. URLs on a known-platform
+// host but with an unusual shape get "unknown" (we know the host but
+// can't normalize). Everything else with a parseable host is treated
+// as "personal_site".
+func classifyURL(rawURL string) string {
 	for _, p := range platformPatterns {
-		if p.pattern.MatchString(url) {
+		if p.pattern.MatchString(rawURL) {
 			return p.name
 		}
 	}
-	// Heuristic fallback: bare-host URLs (e.g. https://example.com) are
-	// treated as personal sites; more complex unmatched paths stay "unknown"
-	// so we don't overclaim.
-	bareHostRE := regexp.MustCompile(`^https?://[\w.-]+/?$`)
-	if bareHostRE.MatchString(url) {
-		return platformPersonalSite
+	u, err := neturl.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return platformUnknown
 	}
-	return platformUnknown
+	host := strings.ToLower(u.Host)
+	host = strings.TrimPrefix(host, "www.")
+	host = strings.TrimPrefix(host, "mobile.")
+	host = strings.TrimPrefix(host, "m.")
+	if knownPlatformHosts[host] {
+		return platformUnknown
+	}
+	return platformPersonalSite
 }
 
 // extractEmails collects valid emails from bio and the dedicated blog

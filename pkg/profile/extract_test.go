@@ -39,9 +39,12 @@ func TestClassifyAndExtract(t *testing.T) {
 			wantPlatforms: []string{"linkedin"},
 		},
 		{
-			name:          "mastodon distinct from blog",
+			// blog.jane.io is not a known platform host, so the deep-path
+			// blog URL now correctly classifies as personal_site. Mastodon
+			// pattern matches first and wins for hachyderm.io/@jane.
+			name:          "mastodon distinct from personal blog",
 			bio:           "https://hachyderm.io/@jane and https://blog.jane.io/posts/2025/01/01",
-			wantPlatforms: []string{"mastodon", "unknown"},
+			wantPlatforms: []string{"mastodon", "personal_site"},
 		},
 		{
 			name:           "emails extracted and sorted",
@@ -86,7 +89,7 @@ func TestClassifyAndExtract(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			accts, emails := profile.Extract(tc.bio, tc.blog)
+			accts, emails := profile.Extract(tc.bio, tc.blog, "")
 			gotPlatforms := make([]string, len(accts))
 			for i, a := range accts {
 				gotPlatforms[i] = a.Platform
@@ -108,11 +111,95 @@ func TestClassifyAndExtract(t *testing.T) {
 }
 
 func TestEmailsLowercaseAndDeduped(t *testing.T) {
-	_, emails := profile.Extract("Foo@Example.com and FOO@example.com same address", "")
+	_, emails := profile.Extract("Foo@Example.com and FOO@example.com same address", "", "")
 	if len(emails) != 1 {
 		t.Fatalf("expected 1 deduped email, got %d: %v", len(emails), emails)
 	}
 	if emails[0] != "foo@example.com" {
 		t.Errorf("got %q, want lowercased foo@example.com", emails[0])
+	}
+}
+
+// TestProfileEmailIncluded verifies the GitHub profile email field
+// is surfaced in enrichment.emails. Catches the F1 regression where
+// users with public emails on the dedicated profile field but no
+// email in bio text returned an empty emails slice.
+func TestProfileEmailIncluded(t *testing.T) {
+	tests := []struct {
+		name       string
+		bio        string
+		blog       string
+		profEmail  string
+		wantEmails []string
+	}{
+		{
+			name: "profile email only, no bio email",
+			bio:  "Hello world", blog: "", profEmail: "alice@example.com",
+			wantEmails: []string{"alice@example.com"},
+		},
+		{
+			name: "profile email AND bio email — both surfaced, sorted",
+			bio:  "old: bob@example.com", blog: "", profEmail: "alice@example.com",
+			wantEmails: []string{"alice@example.com", "bob@example.com"},
+		},
+		{
+			name: "profile email duplicates bio — dedup",
+			bio:  "Email: alice@example.com", blog: "", profEmail: "alice@example.com",
+			wantEmails: []string{"alice@example.com"},
+		},
+		{
+			name: "profile email lowercased",
+			bio:  "", blog: "", profEmail: "Alice@Example.COM",
+			wantEmails: []string{"alice@example.com"},
+		},
+		{
+			name: "invalid profile email — silently dropped",
+			bio:  "", blog: "", profEmail: "not-an-email",
+			wantEmails: nil,
+		},
+		{
+			name: "empty profile email — no addition",
+			bio:  "", blog: "", profEmail: "",
+			wantEmails: nil,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, emails := profile.Extract(tc.bio, tc.blog, tc.profEmail)
+			if !reflect.DeepEqual(emails, tc.wantEmails) {
+				t.Errorf("emails: got %v, want %v", emails, tc.wantEmails)
+			}
+		})
+	}
+}
+
+// TestPersonalSiteWithPathClassified verifies the F2 fix — URLs on
+// non-platform domains with a path component are now classified as
+// personal_site rather than falling through to "unknown". The
+// previous bare-host regex only accepted host-only URLs.
+func TestPersonalSiteWithPathClassified(t *testing.T) {
+	tests := []struct {
+		name     string
+		blog     string
+		wantPlat string
+	}{
+		{"bare host", "https://sindresorhus.com", "personal_site"},
+		{"host with single path", "https://sindresorhus.com/apps", "personal_site"},
+		{"host with deep path", "https://example.dev/blog/2025/12/post", "personal_site"},
+		{"host with subdomain and path", "https://blog.example.dev/posts/intro", "personal_site"},
+		{"github repo URL — known host, unusual shape, not personal", "https://github.com/user/repo", "unknown"},
+		{"twitter user URL still classifies", "https://x.com/janedoe", "twitter"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			accts, _ := profile.Extract("", tc.blog, "")
+			if len(accts) != 1 {
+				t.Fatalf("expected 1 account for blog=%q, got %d", tc.blog, len(accts))
+			}
+			if accts[0].Platform != tc.wantPlat {
+				t.Errorf("platform for %q: got %q, want %q",
+					tc.blog, accts[0].Platform, tc.wantPlat)
+			}
+		})
 	}
 }

@@ -11,6 +11,14 @@
   <div style="max-width:700px;margin:0 auto">
 
     <div class="landing-feature" style="margin-bottom:24px">
+      <h3>May 2, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.19.1</span></h3>
+      <ul>
+        <li><strong>Profile email surfaced</strong> &mdash; the contributor's public GitHub profile email is now included in <code>enrichment.emails</code> alongside any addresses found in bio or blog text. Previously only bio-embedded emails were captured, missing the most common case.</li>
+        <li><strong>Personal-site classification</strong> &mdash; URLs with a path component on a non-platform host (e.g. <code>https://example.com/blog/post</code>) now correctly classify as <code>personal_site</code> instead of falling through to <code>unknown</code>.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:24px">
       <h3>May 2, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.19</span></h3>
       <ul>
         <li><strong>Profile enrichment</strong> &mdash; the scoring API and contributor scorecard now surface lifetime activity, top contributed repositories, owned repos with language footprint, reciprocity ratios (reviews per PR, issue close rate), and linked external accounts detected from the contributor's bio and website (Twitter/X, Mastodon, LinkedIn, GitLab, and more), classified by platform.</li>

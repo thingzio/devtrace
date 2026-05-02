@@ -470,7 +470,7 @@ func (s *ScoreService) buildEnrichment(ctx context.Context, username string, pro
 	}
 
 	if profile != nil {
-		accts, emails := profilepkg.Extract(profile.Bio, profile.Website)
+		accts, emails := profilepkg.Extract(profile.Bio, profile.Website, profile.Email)
 		if len(accts) > 0 {
 			enr.LinkedAccounts = accts
 			populated = true
