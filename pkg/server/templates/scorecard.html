@@ -394,6 +394,24 @@
 
   {{with .Enrichment}}
 
+  {{with .OwnedRepos}}{{if .Languages}}
+  <section class="enrichment-section enrichment-languages">
+    <h2>Language Footprint <span class="scope-badge scope-badge-global">Global</span></h2>
+    <p class="metric-desc">Primary languages across this contributor's non-fork repositories.</p>
+    <div class="category-bars">
+      {{range .Languages}}
+      <div class="category-bar">
+        <label>{{.Language}}</label>
+        <div class="bar-track">
+          <div class="bar-fill" style="width: {{printf "%.0f" (mul .Share 100.0)}}%"></div>
+        </div>
+        <span class="bar-value">{{.Repos}}</span>
+      </div>
+      {{end}}
+    </div>
+  </section>
+  {{end}}{{end}}
+
   {{with .TopContributedRepos}}
   <section class="enrichment-section enrichment-top-contrib">
     <h2>Top Contributing To <span class="scope-badge scope-badge-global">Global</span></h2>
@@ -425,21 +443,6 @@
       </li>
       {{end}}
     </ul>
-    {{end}}
-
-    {{if .Languages}}
-    <h3>Language footprint</h3>
-    <div class="category-bars">
-      {{range .Languages}}
-      <div class="category-bar">
-        <label>{{.Language}}</label>
-        <div class="bar-track">
-          <div class="bar-fill" style="width: {{printf "%.0f" (mul .Share 100.0)}}%"></div>
-        </div>
-        <span class="bar-value">{{.Repos}}</span>
-      </div>
-      {{end}}
-    </div>
     {{end}}
   </section>
   {{end}}

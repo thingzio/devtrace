@@ -216,7 +216,7 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 		// Owned repos
 		"Owned Repositories", "76 non-fork", "8534 total star",
 		"user/best-repo", "2400", "A useful Go thing",
-		"Language footprint", ">Go<", ">Shell<",
+		"Language Footprint", ">Go<", ">Shell<",
 		// Linked accounts + emails
 		"Linked Accounts",
 		"personal_site", "https://example.dev/blog",
