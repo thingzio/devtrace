@@ -11,14 +11,10 @@ import (
 	"github.com/thingzio/devtrace/pkg/model"
 )
 
-// RepoSummaryTTL is the freshness window for the cached summary. A row
-// older than this is treated as stale by GetRepoSummary callers.
-const RepoSummaryTTL = 24 * time.Hour
-
 // GetRepoSummary returns the cached summary for the contributor along
 // with its fetched_at timestamp. Returns (nil, zero-time, nil) when no
-// row exists. Callers compare fetched_at against RepoSummaryTTL to
-// decide whether to refresh.
+// row exists. Callers compare fetched_at against config.RepoSummaryTTL
+// to decide whether to refresh.
 func (s *Store) GetRepoSummary(ctx context.Context, username, provider string) (*model.OwnedRepos, time.Time, error) {
 	const query = `
 		SELECT total_stars, total_repos, top_repos, languages, fetched_at

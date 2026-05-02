@@ -11,6 +11,17 @@ import (
 // GH Archive publishing the corresponding file (~2 hours).
 const ArchivePublishDelay = 2 * time.Hour
 
+// RepoSummaryTTL is the freshness window for cached owned-repos
+// aggregates. Beyond this age the next score request triggers a
+// re-fetch from the GitHub /users/{u}/repos endpoint.
+const RepoSummaryTTL = 24 * time.Hour
+
+// RepoListLimit caps how many of a contributor's repositories the
+// owned-repos aggregator pulls from GitHub on a single refresh. Three
+// pages of 100 covers nearly all real users; high-volume accounts get
+// the most-recently-pushed slice.
+const RepoListLimit = 300
+
 func GetEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v

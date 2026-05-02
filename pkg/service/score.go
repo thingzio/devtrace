@@ -7,6 +7,7 @@ import (
 
 	"github.com/thingzio/devtrace/pkg/bot"
 	"github.com/thingzio/devtrace/pkg/claude"
+	"github.com/thingzio/devtrace/pkg/config"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/model"
 	profilepkg "github.com/thingzio/devtrace/pkg/profile"
@@ -27,15 +28,9 @@ type BehaviorStore interface {
 }
 
 // topContributedRepoLimit caps the number of repos surfaced in enrichment.
+// This is a UI/display limit; operational tunables (TTLs, API caps) live
+// in pkg/config.
 const topContributedRepoLimit = 5
-
-// repoSummaryTTL bounds how long a cached owned-repos aggregate is
-// considered fresh before the next score request triggers a re-fetch.
-const repoSummaryTTL = 24 * time.Hour
-
-// repoListLimit caps the number of repositories fetched from GitHub for
-// the owned-repos aggregation. The GitHub client clamps further for safety.
-const repoListLimit = 300
 
 // ScoreService orchestrates signal fetching, scoring, and response enrichment.
 type ScoreService struct {
@@ -484,9 +479,9 @@ func (s *ScoreService) buildEnrichment(ctx context.Context, username string, pro
 }
 
 // ownedReposEnrichment returns the cached OwnedRepos aggregate, refreshing
-// from GitHub when the cache is missing or older than repoSummaryTTL. The
-// refresh path tolerates errors silently — a stale-or-missing summary is
-// strictly better than failing the whole score request.
+// from GitHub when the cache is missing or older than config.RepoSummaryTTL.
+// The refresh path tolerates errors silently — a stale-or-missing summary
+// is strictly better than failing the whole score request.
 func (s *ScoreService) ownedReposEnrichment(ctx context.Context, username string) *model.OwnedRepos {
 	if s.behStore == nil {
 		return nil
@@ -494,11 +489,11 @@ func (s *ScoreService) ownedReposEnrichment(ctx context.Context, username string
 	provider := string(model.ProviderGitHub)
 
 	cached, fetchedAt, err := s.behStore.GetRepoSummary(ctx, username, provider)
-	if err == nil && cached != nil && time.Since(fetchedAt) < repoSummaryTTL {
+	if err == nil && cached != nil && time.Since(fetchedAt) < config.RepoSummaryTTL {
 		return cached
 	}
 
-	repos, ferr := s.gh.ListUserRepos(ctx, username, repoListLimit)
+	repos, ferr := s.gh.ListUserRepos(ctx, username, config.RepoListLimit)
 	if ferr != nil {
 		// On fetch failure return whatever we have cached even if stale.
 		return cached
