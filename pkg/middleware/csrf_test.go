@@ -257,6 +257,78 @@ func TestInjectCSRF_GET(t *testing.T) {
 	}
 }
 
+// TestInjectCSRF_ReusesExistingCookie pins the no-rotate-on-GET
+// behavior: when the request already carries a valid CSRF cookie,
+// InjectCSRF reuses it rather than generating a fresh one. Stale-form
+// mismatches (form rendered on page A with token T1, then page B in
+// another tab rotates the cookie to T2 before the user submits the
+// form) would surface as "invalid CSRF token" 403s on sign-out.
+func TestInjectCSRF_ReusesExistingCookie(t *testing.T) {
+	existing, err := GenerateCSRFToken()
+	if err != nil {
+		t.Fatalf("seed token: %v", err)
+	}
+
+	var seenInContext string
+	handler := InjectCSRF(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenInContext = CSRFTokenFromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/dashboard", nil)
+	req.AddCookie(&http.Cookie{Name: CSRFCookieName(), Value: existing})
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if seenInContext != existing {
+		t.Errorf("context token: got %q, want existing %q", seenInContext, existing)
+	}
+	// Reuse means we should NOT be writing a fresh Set-Cookie header.
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == CSRFCookieName() {
+			t.Errorf("expected no Set-Cookie on valid existing token; got %q", c.Value)
+		}
+	}
+}
+
+// TestInjectCSRF_RotatesInvalidCookie confirms that a malformed/stale
+// cookie value (wrong length, non-hex, prior schema) is replaced —
+// the reuse path must not silently accept garbage.
+func TestInjectCSRF_RotatesInvalidCookie(t *testing.T) {
+	tests := []struct {
+		name string
+		bad  string
+	}{
+		{"too short", "abc123"},
+		{"too long", strings.Repeat("a", csrfTokenBytes*2+1)},
+		{"non-hex", strings.Repeat("z", csrfTokenBytes*2)},
+		{"empty", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := InjectCSRF(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+			if tt.bad != "" {
+				req.AddCookie(&http.Cookie{Name: CSRFCookieName(), Value: tt.bad})
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			var fresh string
+			for _, c := range rec.Result().Cookies() {
+				if c.Name == CSRFCookieName() {
+					fresh = c.Value
+				}
+			}
+			if !validCSRFToken(fresh) {
+				t.Errorf("expected fresh valid token; got %q", fresh)
+			}
+		})
+	}
+}
+
 func TestInjectCSRF_POSTPassthrough(t *testing.T) {
 	called := false
 	handler := InjectCSRF(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
