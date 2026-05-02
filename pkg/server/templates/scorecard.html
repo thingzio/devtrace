@@ -59,6 +59,14 @@
         <span class="bar-value">{{printf "%.2f" $val}}</span>
       </div>
       {{end}}
+      {{/* Code Provenance is repo-dependent — surface a placeholder row when scoring without repo context so users see all 5 categories. */}}
+      {{if eq .ScoringMode "global"}}
+      <div class="category-bar category-bar-disabled" title="Add ?repo=owner/name to score this category">
+        <label>code provenance</label>
+        <div class="bar-track"></div>
+        <span class="bar-value bar-value-muted">needs repo</span>
+      </div>
+      {{end}}
     </div>
   </section>
   {{end}}

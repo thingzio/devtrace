@@ -2202,6 +2202,21 @@ a.link {
   text-align: right;
   font-size: 0.85rem;
 }
+/* Muted variant used when a category is unavailable (e.g. code provenance
+   without repo context). Wider value column to fit the placeholder text. */
+.category-bar-disabled label,
+.category-bar-disabled .bar-value-muted {
+  opacity: 0.55;
+}
+.category-bar-disabled .bar-value-muted {
+  width: auto;
+  font-size: 0.8rem;
+  font-style: italic;
+  white-space: nowrap;
+}
+.category-bar-disabled .bar-track {
+  opacity: 0.4;
+}
 
 /* Signal table */
 .signal-table {
