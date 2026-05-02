@@ -200,8 +200,10 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 	body := rec.Body.String()
 
 	mustContain := []string{
-		// Activity stat tiles
-		">Activity<", ">79<", ">50<", ">143<", ">106<", ">87<",
+		// Activity stat tiles (PRs Opened, PRs Merged, Reviews Given,
+		// Issues Opened, Issues Closed, Issue Comments, Active Days)
+		">Activity<", ">79<", ">50<", ">143<", ">12<", ">8<", ">106<", ">87<",
+		"Issues Opened", "Issues Closed",
 		"Tracked Jan 2026", "Apr 2026",
 		// Reciprocity
 		"Reciprocity", "1.81", "67%", "1.34",
