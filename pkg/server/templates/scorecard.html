@@ -128,56 +128,6 @@
   </section>
   {{end}}
 
-  {{with .TopContributedRepos}}
-  <section class="enrichment-section enrichment-top-contrib">
-    <h2>Top Contributing To</h2>
-    <ul class="enrichment-list">
-      {{range .}}
-      <li>
-        <a href="https://github.com/{{.Repo}}" target="_blank" rel="noopener">{{.Repo}}</a>
-        <span class="item-meta">{{.Activities}} active hour{{if ne .Activities 1}}s{{end}}, last {{.LastContribution.Format "Jan 2006"}}</span>
-      </li>
-      {{end}}
-    </ul>
-  </section>
-  {{end}}
-
-  {{with .OwnedRepos}}
-  <section class="enrichment-section enrichment-owned">
-    <h2>Owned Repositories</h2>
-    <p class="metric-desc">{{.TotalRepos}} non-fork repositor{{if ne .TotalRepos 1}}ies{{else}}y{{end}} with {{.TotalStars}} total star{{if ne .TotalStars 1}}s{{end}}.</p>
-
-    {{if .Top}}
-    <h3>Top by stars</h3>
-    <ul class="enrichment-list">
-      {{range .Top}}
-      <li>
-        <a href="https://github.com/{{.Name}}" target="_blank" rel="noopener">{{.Name}}</a>
-        <span class="item-stars">{{.Stars}}&nbsp;&#9733;</span>
-        {{if .Language}}<span class="item-meta">{{.Language}}</span>{{end}}
-        {{if .Description}}<div class="item-desc">{{.Description}}</div>{{end}}
-      </li>
-      {{end}}
-    </ul>
-    {{end}}
-
-    {{if .Languages}}
-    <h3>Language footprint</h3>
-    <div class="category-bars">
-      {{range .Languages}}
-      <div class="category-bar">
-        <label>{{.Language}}</label>
-        <div class="bar-track">
-          <div class="bar-fill" style="width: {{printf "%.0f" (mul .Share 100.0)}}%"></div>
-        </div>
-        <span class="bar-value">{{.Repos}}</span>
-      </div>
-      {{end}}
-    </div>
-    {{end}}
-  </section>
-  {{end}}
-
   {{if or .LinkedAccounts .Emails}}
   <section class="enrichment-section enrichment-linked">
     <h2>Linked Accounts</h2>
@@ -330,6 +280,60 @@
       </div>
     </section>
   </div>
+
+  {{with .Enrichment}}
+
+  {{with .TopContributedRepos}}
+  <section class="enrichment-section enrichment-top-contrib">
+    <h2>Top Contributing To</h2>
+    <ul class="enrichment-list">
+      {{range .}}
+      <li>
+        <a href="https://github.com/{{.Repo}}" target="_blank" rel="noopener">{{.Repo}}</a>
+        <span class="item-meta">{{.Activities}} active hour{{if ne .Activities 1}}s{{end}}, last {{.LastContribution.Format "Jan 2006"}}</span>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+
+  {{with .OwnedRepos}}
+  <section class="enrichment-section enrichment-owned">
+    <h2>Owned Repositories</h2>
+    <p class="metric-desc">{{.TotalRepos}} non-fork repositor{{if ne .TotalRepos 1}}ies{{else}}y{{end}} with {{.TotalStars}} total star{{if ne .TotalStars 1}}s{{end}}.</p>
+
+    {{if .Top}}
+    <h3>Top by stars</h3>
+    <ul class="enrichment-list">
+      {{range .Top}}
+      <li>
+        <a href="https://github.com/{{.Name}}" target="_blank" rel="noopener">{{.Name}}</a>
+        <span class="item-stars">{{.Stars}}&nbsp;&#9733;</span>
+        {{if .Language}}<span class="item-meta">{{.Language}}</span>{{end}}
+        {{if .Description}}<div class="item-desc">{{.Description}}</div>{{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+
+    {{if .Languages}}
+    <h3>Language footprint</h3>
+    <div class="category-bars">
+      {{range .Languages}}
+      <div class="category-bar">
+        <label>{{.Language}}</label>
+        <div class="bar-track">
+          <div class="bar-fill" style="width: {{printf "%.0f" (mul .Share 100.0)}}%"></div>
+        </div>
+        <span class="bar-value">{{.Repos}}</span>
+      </div>
+      {{end}}
+    </div>
+    {{end}}
+  </section>
+  {{end}}
+
+  {{end}}{{/* /Enrichment */}}
 
   {{if .Upsell}}
   <div class="scorecard-upsell">
