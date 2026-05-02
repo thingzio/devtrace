@@ -14,10 +14,15 @@ import (
 
 // BehaviorStore provides behavioral signal data from contributor activity.
 // GetLifetimeActivity returns aggregate lifetime counts; nil when no data exists.
+// GetTopContributedRepos returns the top-N repos ranked by active-hour count.
 type BehaviorStore interface {
 	GetBehavioralSignals(ctx context.Context, username, provider string) (*model.Behavior, error)
 	GetLifetimeActivity(ctx context.Context, username, provider string) (*model.LifetimeActivity, error)
+	GetTopContributedRepos(ctx context.Context, username, provider string, limit int) ([]model.RepoContribution, error)
 }
+
+// topContributedRepoLimit caps the number of repos surfaced in enrichment.
+const topContributedRepoLimit = 5
 
 // ScoreService orchestrates signal fetching, scoring, and response enrichment.
 type ScoreService struct {
@@ -169,11 +174,7 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 
 	// Populate enrichment block (profile decoration, surfaced when caller
 	// requests detail view). Always cached; handler/plan layer decides exposure.
-	if s.behStore != nil {
-		if la, err := s.behStore.GetLifetimeActivity(ctx, username, string(model.ProviderGitHub)); err == nil && la != nil {
-			full.Enrichment = &model.Enrichment{LifetimeActivity: la}
-		}
-	}
+	full.Enrichment = s.buildEnrichment(ctx, username)
 
 	// Cache the full response.
 	s.cache.set(username, repo, full)
@@ -391,4 +392,31 @@ func generateRiskSummary(s *score.InputSignals, value float64, hasRepo bool) str
 	}
 
 	return summary
+}
+
+// buildEnrichment populates the optional Enrichment block from the
+// behavior store. Each sub-block is independent — a failure or absent
+// data in one does not suppress others. Returns nil when no sub-block
+// has data, so callers can rely on omitempty serialization.
+func (s *ScoreService) buildEnrichment(ctx context.Context, username string) *model.Enrichment {
+	if s.behStore == nil {
+		return nil
+	}
+	provider := string(model.ProviderGitHub)
+	enr := &model.Enrichment{}
+	populated := false
+
+	if la, err := s.behStore.GetLifetimeActivity(ctx, username, provider); err == nil && la != nil {
+		enr.LifetimeActivity = la
+		populated = true
+	}
+	if repos, err := s.behStore.GetTopContributedRepos(ctx, username, provider, topContributedRepoLimit); err == nil && len(repos) > 0 {
+		enr.TopContributedRepos = repos
+		populated = true
+	}
+
+	if !populated {
+		return nil
+	}
+	return enr
 }

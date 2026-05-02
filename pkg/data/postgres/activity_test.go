@@ -285,6 +285,84 @@ func TestGetLifetimeActivity(t *testing.T) {
 	}
 }
 
+func TestGetTopContributedRepos(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	const user = "topcontrib-test-user"
+	const provider = "github"
+
+	t.Cleanup(func() {
+		_, _ = store.DB().ExecContext(ctx,
+			`DELETE FROM devtrace_contributor_activity WHERE username = $1`, user)
+	})
+	_, _ = store.DB().ExecContext(ctx,
+		`DELETE FROM devtrace_contributor_activity WHERE username = $1`, user)
+
+	// No data: empty slice, no error.
+	got, err := store.GetTopContributedRepos(ctx, user, provider, 5)
+	if err != nil {
+		t.Fatalf("get (empty): %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected 0 results, got %d", len(got))
+	}
+
+	// Insert: r1 in 4 hours, r2 in 2 hours, r3 in 1 hour. Expected ranking: r1, r2, r3.
+	now := time.Now().UTC().Truncate(time.Hour)
+	rows := []postgres.HourlySummary{
+		{Username: user, Provider: provider, Hour: now.Add(-1 * time.Hour), PRsOpened: 1, Repos: []string{"o/r1", "o/r2"}},
+		{Username: user, Provider: provider, Hour: now.Add(-2 * time.Hour), PRsOpened: 1, Repos: []string{"o/r1"}},
+		{Username: user, Provider: provider, Hour: now.Add(-3 * time.Hour), PRsOpened: 1, Repos: []string{"o/r1", "o/r2", "o/r3"}},
+		{Username: user, Provider: provider, Hour: now.Add(-4 * time.Hour), PRsOpened: 1, Repos: []string{"o/r1"}},
+	}
+	if _, ierr := store.BatchUpsertActivity(ctx, rows); ierr != nil {
+		t.Fatalf("insert rows: %v", ierr)
+	}
+
+	got, err = store.GetTopContributedRepos(ctx, user, provider, 5)
+	if err != nil {
+		t.Fatalf("get top contributed: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected 3 repos, got %d: %+v", len(got), got)
+	}
+	if got[0].Repo != "o/r1" || got[0].Activities != 4 {
+		t.Errorf("rank 1: got %s/%d, want o/r1/4", got[0].Repo, got[0].Activities)
+	}
+	if got[1].Repo != "o/r2" || got[1].Activities != 2 {
+		t.Errorf("rank 2: got %s/%d, want o/r2/2", got[1].Repo, got[1].Activities)
+	}
+	if got[2].Repo != "o/r3" || got[2].Activities != 1 {
+		t.Errorf("rank 3: got %s/%d, want o/r3/1", got[2].Repo, got[2].Activities)
+	}
+	if got[0].LastContribution.IsZero() {
+		t.Error("LastContribution should not be zero")
+	}
+
+	// Limit honored.
+	got2, err := store.GetTopContributedRepos(ctx, user, provider, 2)
+	if err != nil {
+		t.Fatalf("get top with limit: %v", err)
+	}
+	if len(got2) != 2 {
+		t.Errorf("expected 2 with limit=2, got %d", len(got2))
+	}
+
+	// limit <= 0 falls back to default 5.
+	got3, err := store.GetTopContributedRepos(ctx, user, provider, 0)
+	if err != nil {
+		t.Fatalf("get top with limit=0: %v", err)
+	}
+	if len(got3) != 3 {
+		t.Errorf("expected 3 with default limit, got %d", len(got3))
+	}
+}
+
 func TestCompactActivity(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()

@@ -32,7 +32,18 @@ type ScoreResponse struct {
 // caller requests a detail view (?detail=true). All sub-blocks are
 // independently optional and may be absent without affecting the score.
 type Enrichment struct {
-	LifetimeActivity *LifetimeActivity `json:"lifetime_activity,omitempty"`
+	LifetimeActivity    *LifetimeActivity  `json:"lifetime_activity,omitempty"`
+	TopContributedRepos []RepoContribution `json:"top_contributed_repos,omitempty"`
+}
+
+// RepoContribution summarizes a contributor's footprint in a single repo.
+// Activities is the count of distinct active hours referencing this repo;
+// granular per-PR/per-review counts are not preserved by the GH Archive
+// aggregation, so this is the most precise metric available from current data.
+type RepoContribution struct {
+	Repo             string    `json:"repo"`
+	Activities       int       `json:"activities"`
+	LastContribution time.Time `json:"last_contribution"`
 }
 
 // LifetimeActivity holds aggregate counts derived from the entire

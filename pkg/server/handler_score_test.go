@@ -93,6 +93,7 @@ func TestScoreHandler(t *testing.T) {
 type stubBehaviorStore struct {
 	behavior *model.Behavior
 	lifetime *model.LifetimeActivity
+	topRepos []model.RepoContribution
 }
 
 func (s *stubBehaviorStore) GetBehavioralSignals(_ context.Context, _, _ string) (*model.Behavior, error) {
@@ -101,6 +102,10 @@ func (s *stubBehaviorStore) GetBehavioralSignals(_ context.Context, _, _ string)
 
 func (s *stubBehaviorStore) GetLifetimeActivity(_ context.Context, _, _ string) (*model.LifetimeActivity, error) {
 	return s.lifetime, nil
+}
+
+func (s *stubBehaviorStore) GetTopContributedRepos(_ context.Context, _, _ string, _ int) ([]model.RepoContribution, error) {
+	return s.topRepos, nil
 }
 
 func TestScoreHandlerDetailFlag(t *testing.T) {

@@ -16,6 +16,7 @@ import (
 type mockBehaviorStore struct {
 	behavior *model.Behavior
 	lifetime *model.LifetimeActivity
+	topRepos []model.RepoContribution
 }
 
 func (m *mockBehaviorStore) GetBehavioralSignals(_ context.Context, _, _ string) (*model.Behavior, error) {
@@ -24,6 +25,10 @@ func (m *mockBehaviorStore) GetBehavioralSignals(_ context.Context, _, _ string)
 
 func (m *mockBehaviorStore) GetLifetimeActivity(_ context.Context, _, _ string) (*model.LifetimeActivity, error) {
 	return m.lifetime, nil
+}
+
+func (m *mockBehaviorStore) GetTopContributedRepos(_ context.Context, _, _ string, _ int) ([]model.RepoContribution, error) {
+	return m.topRepos, nil
 }
 
 // mockClient implements ghclient.Client for testing.
@@ -368,6 +373,61 @@ func TestScoreEnrichmentLifetimeActivity(t *testing.T) {
 	}
 	if got.FirstActive == nil || got.LastActive == nil {
 		t.Error("expected populated FirstActive and LastActive")
+	}
+}
+
+func TestScoreEnrichmentTopContributedRepos(t *testing.T) {
+	store := &mockBehaviorStore{
+		topRepos: []model.RepoContribution{
+			{Repo: "o/r1", Activities: 10, LastContribution: time.Now().UTC()},
+			{Repo: "o/r2", Activities: 4, LastContribution: time.Now().UTC()},
+		},
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "free", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Enrichment == nil {
+		t.Fatal("expected enrichment block")
+	}
+	if len(resp.Enrichment.TopContributedRepos) != 2 {
+		t.Fatalf("expected 2 top repos, got %d", len(resp.Enrichment.TopContributedRepos))
+	}
+	if resp.Enrichment.TopContributedRepos[0].Repo != "o/r1" {
+		t.Errorf("top repo: got %s, want o/r1", resp.Enrichment.TopContributedRepos[0].Repo)
+	}
+}
+
+func TestScoreEnrichmentBlocksIndependent(t *testing.T) {
+	// Lifetime present, top repos absent — Enrichment populated with only lifetime.
+	store := &mockBehaviorStore{
+		lifetime: &model.LifetimeActivity{PRsOpened: 1},
+		topRepos: nil,
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "free", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Enrichment == nil {
+		t.Fatal("expected enrichment block when at least one sub-block has data")
+	}
+	if resp.Enrichment.LifetimeActivity == nil {
+		t.Error("expected LifetimeActivity")
+	}
+	if len(resp.Enrichment.TopContributedRepos) != 0 {
+		t.Errorf("expected empty TopContributedRepos, got %d", len(resp.Enrichment.TopContributedRepos))
 	}
 }
 

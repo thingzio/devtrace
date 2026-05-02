@@ -309,6 +309,42 @@ func (s *Store) GetLifetimeActivity(ctx context.Context, username, provider stri
 	return &la, nil
 }
 
+// GetTopContributedRepos returns the contributor's top repos ranked by
+// distinct active-hour count, limited to `limit` entries. Empty slice when
+// the contributor has no activity data. Uses the activity-table PK prefix
+// (username, provider) — no additional index required.
+func (s *Store) GetTopContributedRepos(ctx context.Context, username, provider string, limit int) ([]model.RepoContribution, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	const query = `
+		SELECT repo, COUNT(*)::int AS activities, MAX(hour) AS last_contribution
+		FROM devtrace_contributor_activity, jsonb_array_elements_text(repos) AS repo
+		WHERE username = $1 AND provider = $2
+		GROUP BY repo
+		ORDER BY activities DESC, repo ASC
+		LIMIT $3`
+
+	rows, err := s.db.QueryContext(ctx, query, username, provider, limit)
+	if err != nil {
+		return nil, fmt.Errorf("get top contributed repos: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []model.RepoContribution
+	for rows.Next() {
+		var rc model.RepoContribution
+		if err := rows.Scan(&rc.Repo, &rc.Activities, &rc.LastContribution); err != nil {
+			return nil, fmt.Errorf("scan top contributed repo: %w", err)
+		}
+		out = append(out, rc)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate top contributed repos: %w", err)
+	}
+	return out, nil
+}
+
 // CompactActivity aggregates hourly rows older than the given age into weekly
 // buckets (Monday 00:00 UTC), then deletes the originals. Runs in a single
 // transaction so a failure leaves data unchanged. Returns rows deleted.
