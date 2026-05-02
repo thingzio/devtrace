@@ -26,9 +26,6 @@ func oauthStartHandler(cfg *oauth.Config) http.HandlerFunc {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		// G124 false positive: Secure is set via middleware.IsSecure()
-		// which gosec cannot evaluate statically. HttpOnly + SameSite are
-		// also set; this cookie is fully secured under https.
 		http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124 false positive: middleware.IsSecure() is dynamic
 			Name:     oauthStateCookie,
 			Value:    state,
@@ -44,7 +41,6 @@ func oauthStartHandler(cfg *oauth.Config) http.HandlerFunc {
 
 func oauthCallbackHandler(db *sql.DB, cfg *oauth.Config) http.HandlerFunc {
 	clearAndRedirect := func(w http.ResponseWriter, r *http.Request, msg string) {
-		// G124 false positive: Secure set via middleware.IsSecure(); see oauthStartHandler.
 		http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124 false positive: middleware.IsSecure() is dynamic
 			Name: oauthStateCookie, Value: "", MaxAge: -1, Path: "/",
 			HttpOnly: true, Secure: middleware.IsSecure(), SameSite: http.SameSiteLaxMode,
@@ -64,7 +60,7 @@ func oauthCallbackHandler(db *sql.DB, cfg *oauth.Config) http.HandlerFunc {
 			clearAndRedirect(w, r, "auth_expired")
 			return
 		}
-		// Clear state cookie. G124 false positive: see oauthStartHandler.
+		// Clear state cookie.
 		http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124 false positive: middleware.IsSecure() is dynamic
 			Name: oauthStateCookie, Value: "", MaxAge: -1, Path: "/",
 			HttpOnly: true, Secure: middleware.IsSecure(), SameSite: http.SameSiteLaxMode,

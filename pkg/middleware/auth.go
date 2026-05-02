@@ -153,9 +153,6 @@ func WithTenantContext(ctx context.Context, tn *tenant.Tenant) context.Context {
 }
 
 func SetSessionCookie(w http.ResponseWriter, token string, maxAge int) {
-	// G124 false positive: Secure is the package-level `secure` variable
-	// driven by environment (true under https). gosec cannot evaluate
-	// the variable reference statically. HttpOnly + SameSite are set.
 	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124 false positive: secure is env-driven variable
 		Name:     SessionCookieName(),
 		Value:    token,
