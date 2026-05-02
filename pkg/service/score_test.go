@@ -1018,6 +1018,50 @@ func TestOSSFStrippedForFree(t *testing.T) {
 	}
 }
 
+// TestBuildScopeInfoMarksRepoFields ensures the response's Scope
+// block lists repo_context and enrichment.ossf_scorecard as repo-scoped
+// when a repo is provided, and as empty when not. Always-global fields
+// stay in the Global list either way. This is the API-side contract
+// for "which fields are repo vs profile" that consumers parse.
+func TestBuildScopeInfoMarksRepoFields(t *testing.T) {
+	withRepo := buildScopeInfo(true)
+	if withRepo == nil {
+		t.Fatal("buildScopeInfo(true) returned nil")
+	}
+	if !sliceContains(withRepo.RepoScoped, "repo_context") {
+		t.Errorf("repo_context missing from RepoScoped: %v", withRepo.RepoScoped)
+	}
+	if !sliceContains(withRepo.RepoScoped, "enrichment.ossf_scorecard") {
+		t.Errorf("enrichment.ossf_scorecard missing from RepoScoped: %v", withRepo.RepoScoped)
+	}
+	if !sliceContains(withRepo.Global, "enrichment.lifetime_activity") {
+		t.Errorf("enrichment.lifetime_activity missing from Global: %v", withRepo.Global)
+	}
+	// Repo-scoped paths must NOT appear in Global, and vice versa.
+	for _, p := range withRepo.RepoScoped {
+		if sliceContains(withRepo.Global, p) {
+			t.Errorf("path %q appears in both lists", p)
+		}
+	}
+
+	noRepo := buildScopeInfo(false)
+	if len(noRepo.RepoScoped) != 0 {
+		t.Errorf("RepoScoped should be empty without repo, got %v", noRepo.RepoScoped)
+	}
+	if !sliceContains(noRepo.Global, "enrichment.lifetime_activity") {
+		t.Errorf("Global list should not depend on hasRepo: %v", noRepo.Global)
+	}
+}
+
+func sliceContains(haystack []string, needle string) bool {
+	for _, h := range haystack {
+		if h == needle {
+			return true
+		}
+	}
+	return false
+}
+
 // TestSplitOwnerRepo covers the parser used by the OSSF helper to
 // reject malformed repo arguments before making any upstream call.
 func TestSplitOwnerRepo(t *testing.T) {

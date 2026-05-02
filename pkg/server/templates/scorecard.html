@@ -46,6 +46,13 @@
   </section>
   {{end}}
 
+  {{if .RepoContext}}
+  <p class="scope-legend">
+    Sections marked <span class="scope-badge scope-badge-repo">Repo</span> are scoped to <code>{{.RepoContext.Repo}}</code>;
+    sections marked <span class="scope-badge scope-badge-global">Global</span> cover this contributor's profile across GitHub.
+  </p>
+  {{end}}
+
   {{if .Categories}}
   <section class="categories">
     <h2>Category Breakdown</h2>
@@ -75,7 +82,7 @@
 
   {{with .LifetimeActivity}}
   <section class="enrichment-section enrichment-activity">
-    <h2>Activity</h2>
+    <h2>Activity <span class="scope-badge scope-badge-global">Global</span></h2>
     <div class="metric-cards">
       <div class="metric-card">
         <div class="metric-value">{{.PRsOpened}}</div>
@@ -116,7 +123,7 @@
 
   {{with .Reciprocity}}
   <section class="enrichment-section enrichment-reciprocity">
-    <h2>Reciprocity</h2>
+    <h2>Reciprocity <span class="scope-badge scope-badge-global">Global</span></h2>
     <p class="metric-desc" style="margin-bottom:0.75rem;">Give-vs-take pattern derived from lifetime activity. Higher reviews-per-PR and issue-resolver share indicate maintainer-style behavior; lower values suggest asker-style behavior.</p>
     <div class="metric-cards">
       <div class="metric-card">
@@ -137,7 +144,7 @@
 
   {{with .SecurityCredits}}
   <section class="enrichment-section enrichment-security">
-    <h2>Security Credits <span class="plan-badge">Starter+</span></h2>
+    <h2>Security Credits <span class="plan-badge">Starter+</span> <span class="scope-badge scope-badge-global">Global</span></h2>
     <p class="metric-desc" style="margin-bottom:0.75rem;">Published GitHub Security Advisories where this contributor is credited (reporter, fixer, analyst, or other roles). Credits are username-attested by GitHub itself.</p>
     <div class="metric-cards">
       <div class="metric-card">
@@ -186,7 +193,7 @@
 
   {{with .OSSFScorecard}}
   <section class="enrichment-section enrichment-ossf">
-    <h2>OSSF Scorecard <span class="plan-badge">Starter+</span></h2>
+    <h2>OSSF Scorecard <span class="plan-badge">Starter+</span> <span class="scope-badge scope-badge-repo">Repo</span></h2>
     <p class="metric-desc" style="margin-bottom:0.75rem;">Repository quality assessment from the <a href="https://openssf.org/projects/scorecard/" target="_blank" rel="noopener">OpenSSF Scorecard</a> project. Aggregate score is 0&ndash;10; individual checks score &minus;1 (not applicable) through 10. Higher is better.</p>
     <div class="metric-cards">
       <div class="metric-card">
@@ -226,7 +233,7 @@
 
   {{if or .LinkedAccounts .Emails}}
   <section class="enrichment-section enrichment-linked">
-    <h2>Linked Accounts</h2>
+    <h2>Linked Accounts <span class="scope-badge scope-badge-global">Global</span></h2>
     {{if .LinkedAccounts}}
     <ul class="enrichment-list">
       {{range .LinkedAccounts}}
@@ -252,7 +259,7 @@
 
   {{if .AISensing}}{{if .AISensing.Behavioral}}
   <section class="ai-sensing">
-    <h2>AI Sensing <span class="plan-badge">Pro</span></h2>
+    <h2>AI Sensing <span class="plan-badge">Pro</span> <span class="scope-badge scope-badge-global">Global</span></h2>
     {{if and (eq .AISensing.Behavioral.VelocityAnomalyRatio 0.0) (eq .AISensing.Behavioral.ActiveHourSpread 0) (eq .AISensing.Behavioral.BurstVanishScore 0.0)}}
     <p class="metric-desc" style="margin-bottom:0.75rem;">Behavioral metrics require contributor activity data (PRs, reviews, commits) ingested over time. Metrics will populate as data becomes available.</p>
     {{end}}
@@ -317,7 +324,7 @@
 
   {{if .Compliance}}
   <section class="compliance">
-    <h2>Regulatory Context <span class="plan-badge">Pro</span></h2>
+    <h2>Regulatory Context <span class="plan-badge">Pro</span> <span class="scope-badge scope-badge-global">Global</span></h2>
     <p class="metric-desc" style="margin-bottom:0.75rem;">NIST SP 800-218 (SSDF) practice mapping based on this contributor's signals. These are informational and do not constitute a compliance determination. <a href="/compliance">Full methodology &rarr;</a></p>
     <table class="signal-table">
       <tr><th>SSDF Practice</th><th>Evidence</th><th style="text-align:center;">Status</th></tr>
@@ -334,7 +341,7 @@
 
   {{if .Signals}}
   <section class="signals">
-    <h2>Input Signals</h2>
+    <h2>Input Signals <span class="scope-badge scope-badge-global">Global</span></h2>
     <table class="signal-table">
       <tr><th>Signal</th><th>Value</th></tr>
       <tr><td>Account age</td><td>{{.Signals.AccountAgeDays}} days</td></tr>
@@ -357,7 +364,7 @@
 
   {{if .RepoContext}}
   <section class="repo-context">
-    <h2>Repo Context: {{.RepoContext.Repo}}</h2>
+    <h2>Repo Context: {{.RepoContext.Repo}} <span class="scope-badge scope-badge-repo">Repo</span></h2>
     <table class="signal-table">
       <tr><td>Commits in repo</td><td>{{.RepoContext.Commits}}</td></tr>
       <tr><td>Total repo commits</td><td>{{.RepoContext.TotalCommits}}</td></tr>
@@ -371,7 +378,7 @@
 
   <div id="trend-section" style="display:none;">
     <section class="trend">
-      <h2>Score Trend</h2>
+      <h2>Score Trend <span class="scope-badge scope-badge-global">Global</span></h2>
       <div style="max-height: 200px;">
         <canvas id="trend-chart" data-username="{{.Username}}"></canvas>
       </div>
@@ -382,7 +389,7 @@
 
   {{with .TopContributedRepos}}
   <section class="enrichment-section enrichment-top-contrib">
-    <h2>Top Contributing To</h2>
+    <h2>Top Contributing To <span class="scope-badge scope-badge-global">Global</span></h2>
     <ul class="enrichment-list">
       {{range .}}
       <li>
@@ -396,7 +403,7 @@
 
   {{with .OwnedRepos}}
   <section class="enrichment-section enrichment-owned">
-    <h2>Owned Repositories</h2>
+    <h2>Owned Repositories <span class="scope-badge scope-badge-global">Global</span></h2>
     <p class="metric-desc">{{.TotalRepos}} non-fork repositor{{if ne .TotalRepos 1}}ies{{else}}y{{end}} with {{.TotalStars}} total star{{if ne .TotalStars 1}}s{{end}}.</p>
 
     {{if .Top}}

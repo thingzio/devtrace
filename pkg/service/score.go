@@ -178,6 +178,7 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, planName strin
 		Signals:     signalsFromInput(signals, profile),
 		RiskSummary: generateRiskSummary(signals, value, repo != ""),
 		ScoringMode: scoringMode(hasRepo),
+		Scope:       buildScopeInfo(hasRepo),
 		ScoredAt:    now,
 	}
 
@@ -248,6 +249,7 @@ func enrichForPlan(full *model.ScoreResponse, planName string) *model.ScoreRespo
 		resp.AISensing = nil
 		resp.Behavior = nil
 		resp.Enrichment = nil
+		resp.Scope = nil
 		resp.Detail = "Sign up for full signal breakdown -> devtrace.thingz.io"
 		now := time.Now().UTC()
 		resp.CachedAt = &now
@@ -309,6 +311,40 @@ func scoringMode(hasRepo bool) string {
 		return "repo" //nolint:goconst // distinct semantic from logKeyRepo (slog key); inlining a constant just to share spelling would obscure intent
 	}
 	return "global"
+}
+
+// buildScopeInfo enumerates which response fields are scoped to the
+// requested repo vs the contributor's profile. Always returns a
+// non-nil ScopeInfo so consumers can rely on its presence; RepoScoped
+// is empty when no repo was provided. The lists use JSON-path strings
+// rooted at the response (e.g. "enrichment.ossf_scorecard") so they
+// remain stable as the response struct evolves.
+func buildScopeInfo(hasRepo bool) *model.ScopeInfo {
+	global := []string{
+		"profile",
+		"signals",
+		"risk_summary",
+		"behavior",
+		"ai_sensing",
+		"enrichment.lifetime_activity",
+		"enrichment.reciprocity",
+		"enrichment.top_contributed_repos",
+		"enrichment.linked_accounts",
+		"enrichment.emails",
+		"enrichment.owned_repos",
+		"enrichment.security_credits",
+	}
+	repoScoped := []string{}
+	if hasRepo {
+		repoScoped = []string{
+			"repo_context",
+			"enrichment.ossf_scorecard",
+		}
+	}
+	return &model.ScopeInfo{
+		RepoScoped: repoScoped,
+		Global:     global,
+	}
 }
 
 // signalsFromInput maps InputSignals and UserProfile to global response signals.

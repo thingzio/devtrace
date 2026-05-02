@@ -23,9 +23,21 @@ type ScoreResponse struct {
 	Behavior    *Behavior    `json:"behavior,omitempty"`
 	Enrichment  *Enrichment  `json:"enrichment,omitempty"`
 	ScoringMode string       `json:"scoring_mode"` // "global" or "repo"
+	Scope       *ScopeInfo   `json:"scope,omitempty"`
 	ScoredAt    time.Time    `json:"scored_at"`
 	CachedAt    *time.Time   `json:"cached_at,omitempty"`
 	Detail      string       `json:"detail,omitempty"`
+}
+
+// ScopeInfo documents which response fields are scoped to the
+// requested repo vs the contributor's profile. Lets API consumers
+// distinguish "this contributor in NVIDIA/aicr" data from "this
+// contributor across all of GitHub" data without inferring scope
+// from naming or absence. Both lists are always populated when this
+// block is present (RepoScoped is empty when no repo was requested).
+type ScopeInfo struct {
+	RepoScoped []string `json:"repo_scoped"`
+	Global     []string `json:"global"`
 }
 
 // Enrichment holds optional profile-decoration data populated when the

@@ -202,9 +202,11 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 	mustContain := []string{
 		// Activity stat tiles (PRs Opened, PRs Merged, Reviews Given,
 		// Issues Opened, Issues Closed, Issue Comments, Active Days)
-		">Activity<", ">79<", ">50<", ">143<", ">12<", ">8<", ">106<", ">87<",
+		">Activity ", ">79<", ">50<", ">143<", ">12<", ">8<", ">106<", ">87<",
 		"Issues Opened", "Issues Closed",
 		"Tracked Jan 2026", "Apr 2026",
+		// Scope badges
+		"scope-badge-global", "scope-badge-repo",
 		// Reciprocity
 		"Reciprocity", "1.81", "67%", "1.34",
 		// Top contributed repos
@@ -250,7 +252,7 @@ func TestScorecardWithoutEnrichmentRenders(t *testing.T) {
 	}
 	body := rec.Body.String()
 	// The enrichment headings must NOT appear when no data is provided.
-	for _, mustNotContain := range []string{">Activity<", "Reciprocity", "Owned Repositories", "Linked Accounts", "Security Credits", "OSSF Scorecard"} {
+	for _, mustNotContain := range []string{">Activity ", "Reciprocity", "Owned Repositories", "Linked Accounts", "Security Credits", "OSSF Scorecard"} {
 		if strings.Contains(body, mustNotContain) {
 			t.Errorf("scorecard rendered %q despite nil Enrichment", mustNotContain)
 		}
