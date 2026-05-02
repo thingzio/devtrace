@@ -4,10 +4,27 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	ghclient "github.com/thingzio/devtrace/pkg/github"
+	"github.com/thingzio/devtrace/pkg/model"
 	"github.com/thingzio/devtrace/pkg/score"
 )
+
+// mockBehaviorStore implements service.BehaviorStore for testing the
+// enrichment pipeline without a real Postgres dependency.
+type mockBehaviorStore struct {
+	behavior *model.Behavior
+	lifetime *model.LifetimeActivity
+}
+
+func (m *mockBehaviorStore) GetBehavioralSignals(_ context.Context, _, _ string) (*model.Behavior, error) {
+	return m.behavior, nil
+}
+
+func (m *mockBehaviorStore) GetLifetimeActivity(_ context.Context, _, _ string) (*model.LifetimeActivity, error) {
+	return m.lifetime, nil
+}
 
 // mockClient implements ghclient.Client for testing.
 type mockClient struct {
@@ -309,6 +326,85 @@ func TestScoreTrustedOrgsNilNoOp(t *testing.T) {
 	}
 	if resp.Score.Value == 0 {
 		t.Error("should have non-zero score")
+	}
+}
+
+func TestScoreEnrichmentLifetimeActivity(t *testing.T) {
+	first := time.Now().UTC().Add(-400 * 24 * time.Hour)
+	last := time.Now().UTC().Add(-1 * 24 * time.Hour)
+	store := &mockBehaviorStore{
+		lifetime: &model.LifetimeActivity{
+			PRsOpened:    14,
+			PRsMerged:    8,
+			ReviewsGiven: 9,
+			IssuesOpened: 5,
+			ActiveDays:   3,
+			FirstActive:  &first,
+			LastActive:   &last,
+		},
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "free", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Enrichment == nil {
+		t.Fatal("expected enrichment block")
+	}
+	if resp.Enrichment.LifetimeActivity == nil {
+		t.Fatal("expected lifetime activity in enrichment")
+	}
+	got := resp.Enrichment.LifetimeActivity
+	if got.PRsOpened != 14 {
+		t.Errorf("PRsOpened: got %d, want 14", got.PRsOpened)
+	}
+	if got.ReviewsGiven != 9 {
+		t.Errorf("ReviewsGiven: got %d, want 9", got.ReviewsGiven)
+	}
+	if got.FirstActive == nil || got.LastActive == nil {
+		t.Error("expected populated FirstActive and LastActive")
+	}
+}
+
+func TestScoreEnrichmentNilOnNoData(t *testing.T) {
+	store := &mockBehaviorStore{lifetime: nil}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "free", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Enrichment != nil {
+		t.Errorf("expected nil enrichment when store returns nil, got %+v", resp.Enrichment)
+	}
+}
+
+func TestScoreEnrichmentStrippedForUnauthenticated(t *testing.T) {
+	store := &mockBehaviorStore{
+		lifetime: &model.LifetimeActivity{PRsOpened: 1},
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+
+	// Empty plan = unauthenticated; enrichment should be stripped per enrichForPlan.
+	resp, err := svc.Score(context.Background(), "testuser", "", "", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if resp.Enrichment != nil {
+		t.Errorf("unauthenticated callers should not see enrichment, got %+v", resp.Enrichment)
 	}
 }
 

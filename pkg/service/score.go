@@ -13,8 +13,10 @@ import (
 )
 
 // BehaviorStore provides behavioral signal data from contributor activity.
+// GetLifetimeActivity returns aggregate lifetime counts; nil when no data exists.
 type BehaviorStore interface {
 	GetBehavioralSignals(ctx context.Context, username, provider string) (*model.Behavior, error)
+	GetLifetimeActivity(ctx context.Context, username, provider string) (*model.LifetimeActivity, error)
 }
 
 // ScoreService orchestrates signal fetching, scoring, and response enrichment.
@@ -165,6 +167,14 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 	}
 	full.AISensing.Behavioral = tier2
 
+	// Populate enrichment block (profile decoration, surfaced when caller
+	// requests detail view). Always cached; handler/plan layer decides exposure.
+	if s.behStore != nil {
+		if la, err := s.behStore.GetLifetimeActivity(ctx, username, string(model.ProviderGitHub)); err == nil && la != nil {
+			full.Enrichment = &model.Enrichment{LifetimeActivity: la}
+		}
+	}
+
 	// Cache the full response.
 	s.cache.set(username, repo, full)
 
@@ -207,6 +217,14 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 		behCopy := *full.Behavior
 		resp.Behavior = &behCopy
 	}
+	if full.Enrichment != nil {
+		enrCopy := *full.Enrichment
+		if full.Enrichment.LifetimeActivity != nil {
+			laCopy := *full.Enrichment.LifetimeActivity
+			enrCopy.LifetimeActivity = &laCopy
+		}
+		resp.Enrichment = &enrCopy
+	}
 
 	switch plan {
 	case "": // unauthenticated — score only
@@ -221,6 +239,7 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 		resp.License = nil
 		resp.AISensing = nil
 		resp.Behavior = nil
+		resp.Enrichment = nil
 		resp.Detail = "Sign up for full signal breakdown -> devtrace.thingz.io"
 		now := time.Now().UTC()
 		resp.CachedAt = &now

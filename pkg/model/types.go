@@ -21,10 +21,33 @@ type ScoreResponse struct {
 	License     *License     `json:"license,omitempty"`
 	AISensing   *AISensing   `json:"ai_sensing,omitempty"`
 	Behavior    *Behavior    `json:"behavior,omitempty"`
+	Enrichment  *Enrichment  `json:"enrichment,omitempty"`
 	ScoringMode string       `json:"scoring_mode"` // "global" or "repo"
 	ScoredAt    time.Time    `json:"scored_at"`
 	CachedAt    *time.Time   `json:"cached_at,omitempty"`
 	Detail      string       `json:"detail,omitempty"`
+}
+
+// Enrichment holds optional profile-decoration data populated when the
+// caller requests a detail view (?detail=true). All sub-blocks are
+// independently optional and may be absent without affecting the score.
+type Enrichment struct {
+	LifetimeActivity *LifetimeActivity `json:"lifetime_activity,omitempty"`
+}
+
+// LifetimeActivity holds aggregate counts derived from the entire
+// devtrace_contributor_activity history (no time filter).
+type LifetimeActivity struct {
+	PRsOpened     int        `json:"prs_opened"`
+	PRsMerged     int        `json:"prs_merged"`
+	PRsClosed     int        `json:"prs_closed"`
+	ReviewsGiven  int        `json:"reviews_given"`
+	IssueComments int        `json:"issue_comments"`
+	IssuesOpened  int        `json:"issues_opened"`
+	IssuesClosed  int        `json:"issues_closed"`
+	ActiveDays    int        `json:"active_days"`
+	FirstActive   *time.Time `json:"first_active,omitempty"`
+	LastActive    *time.Time `json:"last_active,omitempty"`
 }
 
 // Profile holds public contributor metadata from GitHub.

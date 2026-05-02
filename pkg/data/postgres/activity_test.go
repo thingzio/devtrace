@@ -196,6 +196,95 @@ func TestGetBehavioralSignals(t *testing.T) {
 	}
 }
 
+func TestGetLifetimeActivity(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	const user = "lifetime-test-user"
+	const provider = "github"
+
+	t.Cleanup(func() {
+		_, _ = store.DB().ExecContext(ctx,
+			`DELETE FROM devtrace_contributor_activity WHERE username = $1`, user)
+	})
+	_, _ = store.DB().ExecContext(ctx,
+		`DELETE FROM devtrace_contributor_activity WHERE username = $1`, user)
+
+	// No data returns nil, no error.
+	la, err := store.GetLifetimeActivity(ctx, user, provider)
+	if err != nil {
+		t.Fatalf("get lifetime activity (empty): %v", err)
+	}
+	if la != nil {
+		t.Fatal("expected nil for unknown contributor")
+	}
+
+	// Insert across a wide time range to verify "lifetime" is not bounded.
+	now := time.Now().UTC().Truncate(time.Hour)
+	rows := []postgres.HourlySummary{
+		{
+			Username: user, Provider: provider, Hour: now.Add(-400 * 24 * time.Hour),
+			PRsOpened: 5, PRsMerged: 3, IssuesOpened: 2, IssuesClosed: 1,
+			ReviewsGiven: 1, IssueComments: 4, Repos: []string{"org/r1"},
+		},
+		{
+			Username: user, Provider: provider, Hour: now.Add(-100 * 24 * time.Hour),
+			PRsOpened: 7, PRsMerged: 4, PRsClosed: 1, IssuesOpened: 3,
+			ReviewsGiven: 2, IssueComments: 1, Repos: []string{"org/r2"},
+		},
+		{
+			Username: user, Provider: provider, Hour: now.Add(-1 * 24 * time.Hour),
+			PRsOpened: 2, PRsMerged: 1, IssuesClosed: 5,
+			ReviewsGiven: 6, IssueComments: 2, Repos: []string{"org/r3"},
+		},
+	}
+	if _, ierr := store.BatchUpsertActivity(ctx, rows); ierr != nil {
+		t.Fatalf("insert rows: %v", ierr)
+	}
+
+	la, err = store.GetLifetimeActivity(ctx, user, provider)
+	if err != nil {
+		t.Fatalf("get lifetime activity: %v", err)
+	}
+	if la == nil {
+		t.Fatal("expected non-nil lifetime activity")
+	}
+	if la.PRsOpened != 14 {
+		t.Errorf("prs_opened: got %d, want 14", la.PRsOpened)
+	}
+	if la.PRsMerged != 8 {
+		t.Errorf("prs_merged: got %d, want 8", la.PRsMerged)
+	}
+	if la.PRsClosed != 1 {
+		t.Errorf("prs_closed: got %d, want 1", la.PRsClosed)
+	}
+	if la.ReviewsGiven != 9 {
+		t.Errorf("reviews_given: got %d, want 9", la.ReviewsGiven)
+	}
+	if la.IssueComments != 7 {
+		t.Errorf("issue_comments: got %d, want 7", la.IssueComments)
+	}
+	if la.IssuesOpened != 5 {
+		t.Errorf("issues_opened: got %d, want 5", la.IssuesOpened)
+	}
+	if la.IssuesClosed != 6 {
+		t.Errorf("issues_closed: got %d, want 6", la.IssuesClosed)
+	}
+	if la.ActiveDays != 3 {
+		t.Errorf("active_days: got %d, want 3", la.ActiveDays)
+	}
+	if la.FirstActive == nil || la.LastActive == nil {
+		t.Fatal("first_active and last_active should be populated")
+	}
+	if !la.FirstActive.Before(*la.LastActive) {
+		t.Errorf("first_active %v should be before last_active %v", la.FirstActive, la.LastActive)
+	}
+}
+
 func TestCompactActivity(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()

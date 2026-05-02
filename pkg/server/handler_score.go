@@ -37,6 +37,8 @@ func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) 
 		}
 
 		trustedOrgs := r.URL.Query()["trusted_orgs"]
+		// detail accepts standard truthy values: "1", "t", "T", "true", "True", "TRUE".
+		detail, _ := strconv.ParseBool(r.URL.Query().Get("detail"))
 
 		planName := ""
 		tn := middleware.TenantFromContext(r.Context())
@@ -56,6 +58,12 @@ func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) 
 			slog.Error("scoring failed", "username", username, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "scoring failed"})
 			return
+		}
+
+		// Enrichment block is opt-in via ?detail=true. Strip otherwise to keep
+		// the default API response surface minimal.
+		if !detail && resp != nil {
+			resp.Enrichment = nil
 		}
 
 		// Record usage after successful scoring.

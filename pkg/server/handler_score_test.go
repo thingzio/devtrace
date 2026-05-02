@@ -8,9 +8,11 @@ import (
 	"testing"
 
 	ghclient "github.com/thingzio/devtrace/pkg/github"
+	"github.com/thingzio/devtrace/pkg/middleware"
 	"github.com/thingzio/devtrace/pkg/model"
 	"github.com/thingzio/devtrace/pkg/score"
 	"github.com/thingzio/devtrace/pkg/service"
+	"github.com/thingzio/devtrace/pkg/tenant"
 )
 
 type mockGH struct {
@@ -84,6 +86,74 @@ func TestScoreHandler(t *testing.T) {
 	}
 	if resp.Score.Value < 0 || resp.Score.Value > 1 {
 		t.Errorf("expected score in [0,1], got %f", resp.Score.Value)
+	}
+}
+
+// stubBehaviorStore is a test-only BehaviorStore that returns canned values.
+type stubBehaviorStore struct {
+	behavior *model.Behavior
+	lifetime *model.LifetimeActivity
+}
+
+func (s *stubBehaviorStore) GetBehavioralSignals(_ context.Context, _, _ string) (*model.Behavior, error) {
+	return s.behavior, nil
+}
+
+func (s *stubBehaviorStore) GetLifetimeActivity(_ context.Context, _, _ string) (*model.LifetimeActivity, error) {
+	return s.lifetime, nil
+}
+
+func TestScoreHandlerDetailFlag(t *testing.T) {
+	mock := &mockGH{
+		profile: &ghclient.UserProfile{Username: "testuser", PublicRepos: 5, Followers: 10},
+		signals: &score.InputSignals{AgeDays: 200, PublicRepos: 5, Followers: 10, PRsMerged: 2},
+	}
+	svc := service.NewScoreService(mock, "v0.0.1-test")
+	svc.SetBehaviorStore(&stubBehaviorStore{
+		lifetime: &model.LifetimeActivity{PRsOpened: 12, ReviewsGiven: 7, ActiveDays: 4},
+	})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/score/{username}", scoreHandler(nil, nil, svc))
+
+	// Inject a free-tier tenant context so enrichment isn't stripped by the
+	// unauthenticated path; gating between detail=true/false is then the only
+	// behavior under test.
+	tn := &tenant.Tenant{ID: "test-tenant", Plan: "free"}
+
+	cases := []struct {
+		name           string
+		url            string
+		wantEnrichment bool
+	}{
+		{"default omits enrichment", "/api/v1/score/testuser", false},
+		{"detail=true returns enrichment", "/api/v1/score/testuser?detail=true", true},
+		{"detail=1 returns enrichment", "/api/v1/score/testuser?detail=1", true},
+		{"detail=false omits enrichment", "/api/v1/score/testuser?detail=false", false},
+		{"detail=garbage omits enrichment (ParseBool fails closed)", "/api/v1/score/testuser?detail=yes", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := middleware.WithTenantContext(context.Background(), tn)
+			req := httptest.NewRequestWithContext(ctx, http.MethodGet, tc.url, nil)
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+			}
+			var resp model.ScoreResponse
+			if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			switch {
+			case tc.wantEnrichment && resp.Enrichment == nil:
+				t.Fatal("expected enrichment block")
+			case tc.wantEnrichment && resp.Enrichment.LifetimeActivity == nil:
+				t.Error("expected lifetime activity in enrichment")
+			case !tc.wantEnrichment && resp.Enrichment != nil:
+				t.Errorf("expected no enrichment, got %+v", resp.Enrichment)
+			}
+		})
 	}
 }
 

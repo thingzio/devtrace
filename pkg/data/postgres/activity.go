@@ -264,6 +264,51 @@ func (s *Store) GetBehavioralSignals(ctx context.Context, username, provider str
 	return result, nil
 }
 
+// GetLifetimeActivity returns aggregate counts across the entire activity
+// history for the contributor. Returns nil when no data exists.
+func (s *Store) GetLifetimeActivity(ctx context.Context, username, provider string) (*model.LifetimeActivity, error) {
+	const query = `
+		SELECT
+			COALESCE(SUM(prs_opened), 0),
+			COALESCE(SUM(prs_merged), 0),
+			COALESCE(SUM(prs_closed), 0),
+			COALESCE(SUM(reviews_given), 0),
+			COALESCE(SUM(issue_comments), 0),
+			COALESCE(SUM(issues_opened), 0),
+			COALESCE(SUM(issues_closed), 0),
+			COUNT(DISTINCT DATE(hour)),
+			MIN(hour),
+			MAX(hour)
+		FROM devtrace_contributor_activity
+		WHERE username = $1 AND provider = $2`
+
+	var (
+		la        model.LifetimeActivity
+		firstHour sql.NullTime
+		lastHour  sql.NullTime
+	)
+
+	err := s.db.QueryRowContext(ctx, query, username, provider).Scan(
+		&la.PRsOpened, &la.PRsMerged, &la.PRsClosed,
+		&la.ReviewsGiven, &la.IssueComments,
+		&la.IssuesOpened, &la.IssuesClosed,
+		&la.ActiveDays, &firstHour, &lastHour,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get lifetime activity: %w", err)
+	}
+
+	if !firstHour.Valid {
+		return nil, nil
+	}
+
+	first := firstHour.Time
+	last := lastHour.Time
+	la.FirstActive = &first
+	la.LastActive = &last
+	return &la, nil
+}
+
 // CompactActivity aggregates hourly rows older than the given age into weekly
 // buckets (Monday 00:00 UTC), then deletes the originals. Runs in a single
 // transaction so a failure leaves data unchanged. Returns rows deleted.
