@@ -124,14 +124,14 @@ func dashboardEventsHandler(store *postgres.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tn := middleware.TenantFromContext(r.Context())
 		if tn == nil {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 		filter, page := parseEventFilter(r)
 		resp, _, err := fetchEvents(r, store, tn.ID, filter, page)
 		if err != nil {
 			slog.Error("dashboard events: fetch", "tenant", tn.ID, "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to fetch events"})
+			writeError(w, http.StatusInternalServerError, "failed to fetch events")
 			return
 		}
 		writeJSON(w, http.StatusOK, resp)

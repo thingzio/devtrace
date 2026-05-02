@@ -51,7 +51,7 @@ func contactEnabled() bool {
 func helpPageHandler(db *sql.DB, opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		d := helpData{
-			Title:          "Help",
+			Title:          tmplHelp,
 			Version:        opts.Version,
 			Commit:         opts.Commit,
 			Date:           opts.Date,
@@ -113,7 +113,7 @@ func helpContactHandler(db *sql.DB, opts Options) http.HandlerFunc {
 		slog.Info("support email sent", "from", tn.Email, "username", tn.Username)
 
 		d := helpData{
-			Title:          "Help",
+			Title:          tmplHelp,
 			Version:        opts.Version,
 			Commit:         opts.Commit,
 			Date:           opts.Date,
@@ -133,7 +133,7 @@ func helpContactHandler(db *sql.DB, opts Options) http.HandlerFunc {
 
 func renderHelpWithError(w http.ResponseWriter, _ *http.Request, _ *sql.DB, tn *tenant.Tenant, opts Options, msg string) {
 	d := helpData{
-		Title:          "Help",
+		Title:          tmplHelp,
 		Version:        opts.Version,
 		Commit:         opts.Commit,
 		Date:           opts.Date,

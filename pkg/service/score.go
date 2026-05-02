@@ -193,70 +193,8 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 // enrichForPlan returns a deep copy of the response filtered for the caller's plan.
 // Deep-copying pointer fields prevents downstream mutations from corrupting the cache.
 func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse {
-	resp := *full
-
-	// Deep copy pointer fields so the caller cannot mutate cached data.
-	if full.Score != nil {
-		scoreCopy := *full.Score
-		if full.Score.Categories != nil {
-			scoreCopy.Categories = make(map[string]float64, len(full.Score.Categories))
-			for k, v := range full.Score.Categories {
-				scoreCopy.Categories[k] = v
-			}
-		}
-		resp.Score = &scoreCopy
-	}
-	if full.Profile != nil {
-		profileCopy := *full.Profile
-		resp.Profile = &profileCopy
-	}
-	if full.Signals != nil {
-		signalsCopy := *full.Signals
-		resp.Signals = &signalsCopy
-	}
-	if full.RepoContext != nil {
-		rcCopy := *full.RepoContext
-		resp.RepoContext = &rcCopy
-	}
-	if full.AISensing != nil {
-		aiCopy := *full.AISensing
-		resp.AISensing = &aiCopy
-	}
-	if full.Behavior != nil {
-		behCopy := *full.Behavior
-		resp.Behavior = &behCopy
-	}
-	if full.Enrichment != nil {
-		enrCopy := *full.Enrichment
-		if full.Enrichment.LifetimeActivity != nil {
-			laCopy := *full.Enrichment.LifetimeActivity
-			enrCopy.LifetimeActivity = &laCopy
-		}
-		if full.Enrichment.Reciprocity != nil {
-			rcCopy := *full.Enrichment.Reciprocity
-			enrCopy.Reciprocity = &rcCopy
-		}
-		if full.Enrichment.OwnedRepos != nil {
-			orCopy := *full.Enrichment.OwnedRepos
-			if full.Enrichment.OwnedRepos.Top != nil {
-				orCopy.Top = append([]model.OwnedRepo(nil), full.Enrichment.OwnedRepos.Top...)
-			}
-			if full.Enrichment.OwnedRepos.Languages != nil {
-				orCopy.Languages = append([]model.LanguageBucket(nil), full.Enrichment.OwnedRepos.Languages...)
-			}
-			enrCopy.OwnedRepos = &orCopy
-		}
-		if full.Enrichment.TopContributedRepos != nil {
-			enrCopy.TopContributedRepos = append([]model.RepoContribution(nil), full.Enrichment.TopContributedRepos...)
-		}
-		if full.Enrichment.LinkedAccounts != nil {
-			enrCopy.LinkedAccounts = append([]model.LinkedAccount(nil), full.Enrichment.LinkedAccounts...)
-		}
-		if full.Enrichment.Emails != nil {
-			enrCopy.Emails = append([]string(nil), full.Enrichment.Emails...)
-		}
-		resp.Enrichment = &enrCopy
-	}
+	respPtr := deepCopyResponse(full)
+	resp := *respPtr
 
 	switch plan {
 	case "": // unauthenticated — score only
@@ -427,6 +365,82 @@ func generateRiskSummary(s *score.InputSignals, value float64, hasRepo bool) str
 	}
 
 	return summary
+}
+
+// deepCopyResponse returns a copy of full with every pointer / slice /
+// map field independently allocated so that downstream mutation cannot
+// corrupt the cached source. Split out from enrichForPlan to keep that
+// function within the cyclomatic-complexity budget.
+func deepCopyResponse(full *model.ScoreResponse) *model.ScoreResponse {
+	resp := *full
+	if full.Score != nil {
+		sc := *full.Score
+		if full.Score.Categories != nil {
+			sc.Categories = make(map[string]float64, len(full.Score.Categories))
+			for k, v := range full.Score.Categories {
+				sc.Categories[k] = v
+			}
+		}
+		resp.Score = &sc
+	}
+	if full.Profile != nil {
+		p := *full.Profile
+		resp.Profile = &p
+	}
+	if full.Signals != nil {
+		s := *full.Signals
+		resp.Signals = &s
+	}
+	if full.RepoContext != nil {
+		rc := *full.RepoContext
+		resp.RepoContext = &rc
+	}
+	if full.AISensing != nil {
+		ai := *full.AISensing
+		resp.AISensing = &ai
+	}
+	if full.Behavior != nil {
+		b := *full.Behavior
+		resp.Behavior = &b
+	}
+	if full.Enrichment != nil {
+		resp.Enrichment = deepCopyEnrichment(full.Enrichment)
+	}
+	return &resp
+}
+
+// deepCopyEnrichment clones the Enrichment block including its nested
+// pointer / slice fields. Caller must guard against nil input.
+func deepCopyEnrichment(src *model.Enrichment) *model.Enrichment {
+	dst := *src
+	if src.LifetimeActivity != nil {
+		la := *src.LifetimeActivity
+		dst.LifetimeActivity = &la
+	}
+	if src.Reciprocity != nil {
+		r := *src.Reciprocity
+		dst.Reciprocity = &r
+	}
+	if src.OwnedRepos != nil {
+		or := *src.OwnedRepos
+		if src.OwnedRepos.Top != nil {
+			or.Top = append([]model.OwnedRepo(nil), src.OwnedRepos.Top...)
+		}
+		if src.OwnedRepos.Languages != nil {
+			or.Languages = append([]model.LanguageBucket(nil), src.OwnedRepos.Languages...)
+		}
+		dst.OwnedRepos = &or
+	}
+	if src.TopContributedRepos != nil {
+		dst.TopContributedRepos = append([]model.RepoContribution(nil), src.TopContributedRepos...)
+	}
+	if src.LinkedAccounts != nil {
+		dst.LinkedAccounts = append([]model.LinkedAccount(nil), src.LinkedAccounts...)
+	}
+	if src.Emails != nil {
+		dst.Emails = append([]string(nil), src.Emails...)
+	}
+	return &dst
 }
 
 // buildEnrichment populates the optional Enrichment block from the

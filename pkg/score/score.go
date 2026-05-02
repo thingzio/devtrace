@@ -49,6 +49,15 @@ var (
 	CategoryBehavioralWeight = consistencyWeight + reviewParticipWeight + repoDiversityWeight + burstWeight + forkOnlyWeight
 )
 
+// Category name constants used as keys in the per-category map.
+const (
+	CategoryIdentity       = "identity"
+	CategoryEngagement     = "engagement"
+	CategoryCommunity      = "community"
+	CategoryBehavioral     = "behavioral"
+	CategoryCodeProvenance = "code_provenance"
+)
+
 // InputSignals holds the raw inputs to the reputation model.
 type InputSignals struct {
 	// Identity
@@ -162,13 +171,13 @@ func Compute(s InputSignals, hasRepo bool, beh *model.Behavior) float64 {
 func Categories(s InputSignals, hasRepo bool, beh *model.Behavior) map[string]float64 {
 	if s.Suspended {
 		cats := map[string]float64{
-			"identity":   0,
-			"engagement": 0,
-			"community":  0,
-			"behavioral": 0,
+			CategoryIdentity:   0,
+			CategoryEngagement: 0,
+			CategoryCommunity:  0,
+			CategoryBehavioral: 0,
 		}
 		if hasRepo {
-			cats["code_provenance"] = 0
+			cats[CategoryCodeProvenance] = 0
 		}
 		return cats
 	}
@@ -188,7 +197,7 @@ func Categories(s InputSignals, hasRepo bool, beh *model.Behavior) map[string]fl
 			maturity := logCurve(float64(s.AgeDays), verificationMaturityCeil)
 			prov = verifiedRatio * maturity * provenanceWeight
 		}
-		cats["code_provenance"] = toFixed(prov, 4)
+		cats[CategoryCodeProvenance] = toFixed(prov, 4)
 	}
 
 	// Identity
@@ -197,7 +206,7 @@ func Categories(s InputSignals, hasRepo bool, beh *model.Behavior) map[string]fl
 		identity += associationScore(s.AuthorAssociation, s.OrgMember, s.TrustedOrgMember) * associationWeight
 	}
 	identity += profileScore(s) * profileWeight
-	cats["identity"] = toFixed(identity*scale, 4)
+	cats[CategoryIdentity] = toFixed(identity*scale, 4)
 
 	// Engagement — proportion and recency are repo-dependent
 	var engagement float64
@@ -211,7 +220,7 @@ func Categories(s InputSignals, hasRepo bool, beh *model.Behavior) map[string]fl
 		confidence := logCurve(float64(totalTerminalPRs), prCountCeil)
 		engagement += mergeRate * confidence * prAcceptWeight
 	}
-	cats["engagement"] = toFixed(engagement*scale, 4)
+	cats[CategoryEngagement] = toFixed(engagement*scale, 4)
 
 	// Community
 	var community float64
@@ -222,10 +231,10 @@ func Categories(s InputSignals, hasRepo bool, beh *model.Behavior) map[string]fl
 		community += followerWeight
 	}
 	community += logCurve(float64(s.PublicRepos), repoCountCeil) * repoCountWeight
-	cats["community"] = toFixed(community*scale, 4)
+	cats[CategoryCommunity] = toFixed(community*scale, 4)
 
 	// Behavioral
-	cats["behavioral"] = toFixed(behavioralScore(s, beh)*scale, 4)
+	cats[CategoryBehavioral] = toFixed(behavioralScore(s, beh)*scale, 4)
 
 	return cats
 }

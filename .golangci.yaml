@@ -76,8 +76,11 @@ linters:
       ignore-comments: true
 
     goconst:
-      min-len: 2
-      min-occurrences: 2
+      # min-occurrences=3 is the goconst default and industry norm; the prior
+      # setting of 2 over-fired on display-string repetition (plan tables,
+      # template field names) where extraction adds noise without value.
+      min-len: 3
+      min-occurrences: 3
 
     gocyclo:
       min-complexity: 20

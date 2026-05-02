@@ -331,7 +331,7 @@ func writeNewContributorEvent(ctx context.Context, store ingestStore, wl postgre
 	if details == nil {
 		return false // no relevant activity for this plan scope
 	}
-	if err := store.InsertNotificationEvent(ctx, wl.ID, "new_contributor", s.Username, details); err != nil {
+	if err := store.InsertNotificationEvent(ctx, wl.ID, postgres.EventTypeNewContributor, s.Username, details); err != nil {
 		slog.Debug("write notification event", "username", s.Username, "watchlist", wl.ID, "error", err)
 		return false
 	}

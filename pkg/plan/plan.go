@@ -5,6 +5,18 @@ import "fmt"
 const (
 	valDash = "\u2014"
 	valSoon = "Coming soon"
+
+	// Plan name canonical identifiers \u2014 use these instead of bare strings.
+	PlanFree       = "free"
+	PlanStarter    = "starter"
+	PlanPro        = "pro"
+	PlanEnterprise = "enterprise"
+)
+
+const (
+	settingsURL                 = "/settings"
+	descAIPowered               = "AI-powered"
+	descWeeklyEmailAndDashboard = "Weekly email + dashboard"
 )
 
 // Plan defines the capabilities and limits for a billing tier.
@@ -42,11 +54,11 @@ type Feature struct {
 	Span   bool     // if true, all values are the same — use colspan
 }
 
-var planOrder = []string{"free", "starter", "pro"}
+var planOrder = []string{PlanFree, PlanStarter, PlanPro}
 
 var plans = map[string]Plan{
-	"free": {
-		Name:               "free",
+	PlanFree: {
+		Name:               PlanFree,
 		DisplayName:        "Free",
 		MaxContributors:    50,
 		RateLimitPerHour:   60,
@@ -63,8 +75,8 @@ var plans = map[string]Plan{
 		AlertsLabel:        "Dashboard only",
 		ComplianceLabel:    valDash,
 	},
-	"starter": {
-		Name:               "starter",
+	PlanStarter: {
+		Name:               PlanStarter,
 		DisplayName:        "Starter",
 		PriceLabel:         "$0/mo*",
 		MaxContributors:    200,
@@ -77,14 +89,14 @@ var plans = map[string]Plan{
 		WatchlistScope:     "pr_review",
 		EventRetentionDays: 30,
 		MaxEventsPerTenant: 1000,
-		RiskSummary:        "AI-powered",
+		RiskSummary:        descAIPowered,
 		AISensingLabel:     "Metadata + PR authenticity",
 		APIKeysLabel:       "1",
-		AlertsLabel:        "Weekly email + dashboard",
+		AlertsLabel:        descWeeklyEmailAndDashboard,
 		ComplianceLabel:    valDash,
 	},
-	"pro": {
-		Name:               "pro",
+	PlanPro: {
+		Name:               PlanPro,
 		DisplayName:        "Pro",
 		PriceLabel:         "$0/mo*",
 		MaxContributors:    2000,
@@ -101,10 +113,10 @@ var plans = map[string]Plan{
 		WatchlistScope:     "pr_review_issue",
 		EventRetentionDays: 90,
 		MaxEventsPerTenant: 10000,
-		RiskSummary:        "AI-powered",
+		RiskSummary:        descAIPowered,
 		AISensingLabel:     "Full Context",
 		APIKeysLabel:       "10",
-		AlertsLabel:        "Weekly email + dashboard",
+		AlertsLabel:        descWeeklyEmailAndDashboard,
 		ComplianceLabel:    "SSDF + EU CRA",
 	},
 }
@@ -211,18 +223,18 @@ func Upsell(currentPlan string) *UpsellInfo {
 			CTA:     "Sign in with GitHub",
 			Link:    "/auth/github",
 		}
-	case "free":
+	case PlanFree:
 		return &UpsellInfo{
 			Message: "Upgrade to Starter for AI-powered risk summaries and PR authenticity analysis.",
 			CTA:     "Upgrade to Starter",
-			Link:    "/settings",
+			Link:    settingsURL,
 		}
-	case "starter":
+	case PlanStarter:
 		return &UpsellInfo{
 			Message: "Upgrade to Pro for behavioral heuristics, compliance reports, " +
 				"and 365-day score history.",
 			CTA:  "Upgrade to Pro",
-			Link: "/settings",
+			Link: settingsURL,
 		}
 	default:
 		return nil
@@ -236,4 +248,4 @@ func Get(name string) (Plan, bool) {
 }
 
 // Free returns the free tier plan.
-func Free() Plan { return plans["free"] }
+func Free() Plan { return plans[PlanFree] }

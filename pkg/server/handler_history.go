@@ -20,7 +20,7 @@ func historyHandler(store *postgres.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := r.PathValue("username")
 		if username == "" || len(username) > 39 || !usernameRE.MatchString(username) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid username"})
+			writeError(w, http.StatusBadRequest, "invalid username")
 			return
 		}
 
@@ -31,7 +31,7 @@ func historyHandler(store *postgres.Store) http.HandlerFunc {
 
 		entries, err := store.GetScoreHistory(r.Context(), username, "github", historyDays(planName))
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to fetch history"})
+			writeError(w, http.StatusInternalServerError, "failed to fetch history")
 			return
 		}
 		if entries == nil {

@@ -26,13 +26,13 @@ func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) 
 	return func(w http.ResponseWriter, r *http.Request) {
 		username := r.PathValue("username")
 		if username == "" || len(username) > 39 || !usernameRE.MatchString(username) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid username"})
+			writeError(w, http.StatusBadRequest, "invalid username")
 			return
 		}
 
 		repo := r.URL.Query().Get("repo")
 		if repo != "" && !repoRE.MatchString(repo) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid repo format, expected owner/repo"})
+			writeError(w, http.StatusBadRequest, "invalid repo format, expected owner/repo")
 			return
 		}
 
@@ -54,7 +54,7 @@ func scoreHandler(db *sql.DB, store *postgres.Store, svc *service.ScoreService) 
 		resp, err := svc.Score(r.Context(), username, repo, planName, trustedOrgs)
 		if err != nil {
 			slog.Error("scoring failed", "username", username, "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "scoring failed"})
+			writeError(w, http.StatusInternalServerError, "scoring failed")
 			return
 		}
 
@@ -88,7 +88,7 @@ func checkQuota(ctx context.Context, w http.ResponseWriter, db *sql.DB, tn *tena
 	used, err := tenant.GetUsageCount(ctx, db, tn.ID, periodStart)
 	if err != nil {
 		slog.Error("quota check failed", "tenant", tn.ID, "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "quota check failed"})
+		writeError(w, http.StatusInternalServerError, "quota check failed")
 		return true
 	}
 
@@ -100,7 +100,7 @@ func checkQuota(ctx context.Context, w http.ResponseWriter, db *sql.DB, tn *tena
 	if maxC > 0 && used >= maxC {
 		resetTime := tenant.NextBillingPeriodStart()
 		writeJSON(w, http.StatusForbidden, map[string]any{
-			"error":       "contributor quota exceeded",
+			tmplErrorKey:  "contributor quota exceeded",
 			"quota_limit": maxC,
 			"quota_used":  used,
 			"quota_reset": resetTime.Format("2006-01-02T15:04:05Z"),

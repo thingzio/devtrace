@@ -397,7 +397,7 @@ func notifyGradeChange(ctx context.Context, store scorerStore, username, provide
 		"new_grade": newGrade,
 	}
 	for _, wl := range watchlists {
-		if err := store.InsertNotificationEvent(ctx, wl.ID, "score_change", username, details); err != nil {
+		if err := store.InsertNotificationEvent(ctx, wl.ID, postgres.EventTypeScoreChange, username, details); err != nil {
 			slog.Debug("write grade change event", "username", username, "watchlist", wl.ID, "error", err)
 		}
 	}

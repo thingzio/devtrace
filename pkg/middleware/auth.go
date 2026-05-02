@@ -81,17 +81,17 @@ func RequireAPIToken(db *sql.DB) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := extractBearerToken(r)
 			if token == "" {
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing or invalid authorization header"})
+				writeError(w, http.StatusUnauthorized, "missing or invalid authorization header")
 				return
 			}
 			tn, err := tenant.ValidateAPIToken(r.Context(), db, token)
 			if err != nil {
 				slog.Debug("invalid api token", "error", err)
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid api token"})
+				writeError(w, http.StatusUnauthorized, "invalid api token")
 				return
 			}
 			if tn.Status == tenant.StatusSuspended {
-				writeJSON(w, http.StatusForbidden, map[string]string{"error": "account suspended"})
+				writeError(w, http.StatusForbidden, errAccountSuspended)
 				return
 			}
 			ctx := context.WithValue(r.Context(), tenantContextKey, tn)
@@ -110,7 +110,7 @@ func RequireAnyAuth(db *sql.DB) func(http.Handler) http.Handler {
 			if token := extractBearerToken(r); token != "" {
 				if tn, err := tenant.ValidateAPIToken(r.Context(), db, token); err == nil {
 					if tn.Status == tenant.StatusSuspended {
-						writeJSON(w, http.StatusForbidden, map[string]string{"error": "account suspended"})
+						writeError(w, http.StatusForbidden, errAccountSuspended)
 						return
 					}
 					ctx := context.WithValue(r.Context(), tenantContextKey, tn)
@@ -118,7 +118,7 @@ func RequireAnyAuth(db *sql.DB) func(http.Handler) http.Handler {
 					return
 				}
 				// Invalid token = 401 (they tried to auth and failed)
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid api token"})
+				writeError(w, http.StatusUnauthorized, "invalid api token")
 				return
 			}
 
@@ -126,7 +126,7 @@ func RequireAnyAuth(db *sql.DB) func(http.Handler) http.Handler {
 			if cookie, err := r.Cookie(SessionCookieName()); err == nil {
 				if tn, err := tenant.ValidateSession(r.Context(), db, cookie.Value); err == nil {
 					if tn.Status == tenant.StatusSuspended {
-						writeJSON(w, http.StatusForbidden, map[string]string{"error": "account suspended"})
+						writeError(w, http.StatusForbidden, errAccountSuspended)
 						return
 					}
 					ctx := context.WithValue(r.Context(), tenantContextKey, tn)
@@ -153,7 +153,10 @@ func WithTenantContext(ctx context.Context, tn *tenant.Tenant) context.Context {
 }
 
 func SetSessionCookie(w http.ResponseWriter, token string, maxAge int) {
-	http.SetCookie(w, &http.Cookie{
+	// G124 false positive: Secure is the package-level `secure` variable
+	// driven by environment (true under https). gosec cannot evaluate
+	// the variable reference statically. HttpOnly + SameSite are set.
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124 false positive: secure is env-driven variable
 		Name:     SessionCookieName(),
 		Value:    token,
 		Path:     "/",
@@ -183,3 +186,11 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
+
+// writeError responds with a JSON error envelope at the given status.
+// Centralizes the {"error": "..."} shape used across middleware.
+func writeError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+const errAccountSuspended = "account suspended"

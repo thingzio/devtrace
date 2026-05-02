@@ -8,9 +8,13 @@ import (
 	"github.com/thingzio/devtrace/pkg/data/postgres"
 )
 
+// Aliases to the canonical postgres event-type constants. Importing
+// pkg/data/postgres for these strings would be ergonomically heavy in
+// templating contexts, so we re-declare local consts that match.
 const (
-	eventTypeScoreChange = "score_change"
+	eventTypeScoreChange = postgres.EventTypeScoreChange
 	detailGradeChanged   = "Grade changed"
+	detailNewActivity    = "New activity"
 )
 
 // RenderDigest produces HTML and plain-text bodies for a weekly digest email.
@@ -120,7 +124,7 @@ func formatDetail(ev postgres.NotificationEvent) string {
 		parts = append(parts, fmt.Sprintf("%d comments", v))
 	}
 	if len(parts) == 0 {
-		return "New activity"
+		return detailNewActivity
 	}
 	return strings.Join(parts, ", ")
 }

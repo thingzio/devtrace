@@ -20,7 +20,7 @@ func createTokenHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tn := middleware.TenantFromContext(r.Context())
 		if tn == nil {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 
@@ -29,11 +29,11 @@ func createTokenHandler(db *sql.DB) http.HandlerFunc {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 1<<16) // 64 KB
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+			writeError(w, http.StatusBadRequest, "name is required")
 			return
 		}
 		if len(req.Name) > maxTokenNameLen || !tokenNameRE.MatchString(req.Name) {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name must be 1-64 alphanumeric characters, spaces, dots, hyphens, or underscores"})
+			writeError(w, http.StatusBadRequest, "name must be 1-64 alphanumeric characters, spaces, dots, hyphens, or underscores")
 			return
 		}
 
@@ -41,7 +41,7 @@ func createTokenHandler(db *sql.DB) http.HandlerFunc {
 		existing, err := tenant.ListAPITokens(r.Context(), db, tn.ID)
 		if err != nil {
 			slog.Error("list tokens for limit check", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to check token limit"})
+			writeError(w, http.StatusInternalServerError, "failed to check token limit")
 			return
 		}
 		p, ok := plan.Get(tn.Plan)
@@ -49,18 +49,18 @@ func createTokenHandler(db *sql.DB) http.HandlerFunc {
 			p = plan.Free()
 		}
 		if p.MaxAPIKeys > 0 && len(existing) >= p.MaxAPIKeys {
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "API key limit reached for your plan"})
+			writeError(w, http.StatusForbidden, "API key limit reached for your plan")
 			return
 		}
 
 		rawToken, err := tenant.CreateAPIToken(r.Context(), db, tn.ID, req.Name)
 		if err != nil {
 			slog.Error("create token", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create token"})
+			writeError(w, http.StatusInternalServerError, "failed to create token")
 			return
 		}
 
-		writeJSON(w, http.StatusCreated, map[string]string{"token": rawToken, "name": req.Name})
+		writeJSON(w, http.StatusCreated, map[string]string{"token": rawToken, tmplName: req.Name})
 	}
 }
 
@@ -68,14 +68,14 @@ func listTokensHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tn := middleware.TenantFromContext(r.Context())
 		if tn == nil {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 
 		tokens, err := tenant.ListAPITokens(r.Context(), db, tn.ID)
 		if err != nil {
 			slog.Error("list tokens", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list tokens"})
+			writeError(w, http.StatusInternalServerError, "failed to list tokens")
 			return
 		}
 
@@ -87,18 +87,18 @@ func revokeTokenHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tn := middleware.TenantFromContext(r.Context())
 		if tn == nil {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
 
 		tokenID := r.PathValue("id")
 		if tokenID == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "token id required"})
+			writeError(w, http.StatusBadRequest, "token id required")
 			return
 		}
 
 		if err := tenant.RevokeAPIToken(r.Context(), db, tn.ID, tokenID); err != nil {
-			writeJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
+			writeError(w, http.StatusNotFound, "token not found")
 			return
 		}
 
@@ -110,4 +110,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// writeError responds with a JSON error envelope at the given status code.
+// Centralizes the {"error": "..."} shape used across handlers.
+func writeError(w http.ResponseWriter, status int, msg string) {
+	writeJSON(w, status, map[string]string{tmplErrorKey: msg})
 }

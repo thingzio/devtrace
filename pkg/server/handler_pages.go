@@ -44,7 +44,7 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 		// Score card page always shows full data — it's the marketing showcase.
 		// Use "free" as minimum to get signals/categories/risk summary.
 		// The API endpoint (/api/v1/score) still gates by actual plan.
-		scorePlan := "free"
+		scorePlan := tmplPlanFree
 		tn := middleware.TenantFromContext(r.Context())
 		if tn != nil {
 			scorePlan = tn.Plan
@@ -54,8 +54,8 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 		if err != nil {
 			slog.Error("scoring for scorecard", "username", username, "error", err)
 			errData := map[string]any{
-				"Title": username, "Username": username,
-				"Grade": "?", "Value": 0.0, "ModelVersion": "?", "Version": opts.Version, "Commit": opts.Commit, "Date": opts.Date,
+				tmplTitle: username, "Username": username,
+				"Grade": "?", "Value": 0.0, "ModelVersion": "?", tmplVersion: opts.Version, tmplCommit: opts.Commit, tmplDate: opts.Date,
 				"GradeClass": "grade-f",
 			}
 			if tn != nil {
@@ -97,15 +97,15 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 		}
 
 		data := map[string]any{
-			"Title":        username,
+			tmplTitle:      username,
 			"Username":     username,
 			"Profile":      resp.Profile,
 			"Grade":        resp.Score.Grade,
 			"Value":        resp.Score.Value,
 			"ModelVersion": resp.Version,
-			"Version":      opts.Version,
-			"Commit":       opts.Commit,
-			"Date":         opts.Date,
+			tmplVersion:    opts.Version,
+			tmplCommit:     opts.Commit,
+			tmplDate:       opts.Date,
 			"ScoringMode":  resp.ScoringMode,
 			"GradeClass":   gradeClass,
 			"Categories":   resp.Score.Categories,
@@ -115,7 +115,7 @@ func scorecardHandler(store *postgres.Store, svc *service.ScoreService, opts Opt
 			"AISensing":    resp.AISensing,
 			"Upsell":       plan.Upsell(planName),
 		}
-		if scorePlan == "pro" {
+		if scorePlan == tmplPlanPro {
 			data["Compliance"] = compliance.EvaluatePractices(
 				resp.Signals, resp.RepoContext, resp.Score.Categories,
 				resp.Behavior, resp.AISensing)
@@ -180,7 +180,7 @@ func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := t.ExecuteTemplate(w, "home", map[string]any{
 			"username":           tn.Username,
-			"name":               tn.Name,
+			tmplName:             tn.Name,
 			"company":            tn.Company,
 			"location":           tn.Location,
 			"bio":                tn.Bio,
@@ -242,15 +242,15 @@ func settingsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 		canAddWatchlist := manualCount < limits.MaxWatchlists
 
 		renderTemplate(w, "settings.html", map[string]any{
-			"Title":             "Settings",
-			"Version":           opts.Version,
-			"Commit":            opts.Commit,
-			"Date":              opts.Date,
+			tmplTitle:           "Settings",
+			tmplVersion:         opts.Version,
+			tmplCommit:          opts.Commit,
+			tmplDate:            opts.Date,
 			"CSRFToken":         middleware.CSRFTokenFromContext(r.Context()),
 			"NavUser":           tn.Username,
 			"NavAvatar":         tn.AvatarURL,
 			"username":          tn.Username,
-			"name":              tn.Name,
+			tmplName:            tn.Name,
 			"email":             tn.Email,
 			"company":           tn.Company,
 			"location":          tn.Location,

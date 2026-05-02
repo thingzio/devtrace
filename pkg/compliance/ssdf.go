@@ -10,6 +10,21 @@ const (
 	msgNeedRepo     = "Requires repository context (?repo=owner/name)"
 	msgNoSignals    = "No signal data available"
 	msgNeedBehavior = "Requires behavioral data (ingested over time)"
+
+	// GitHub author_association values (subset used here).
+	assocOwner        = "OWNER"
+	assocMember       = "MEMBER"
+	assocCollaborator = "COLLABORATOR"
+
+	// SSDF practice identifiers (NIST SP 800-218).
+	practicePS1 = "PS.1"
+	practicePS2 = "PS.2"
+	practicePS3 = "PS.3"
+	practicePW4 = "PW.4"
+	practicePW6 = "PW.6"
+	practicePW7 = "PW.7"
+	practiceRV1 = "RV.1"
+	practicePO4 = "PO.4"
 )
 
 // PracticeResult maps a contributor's signals to a single SSDF practice.
@@ -43,7 +58,7 @@ func EvaluatePractices(
 // PS.1 — Protect code from unauthorized access.
 func evalPS1(repo *model.RepoContext) PracticeResult {
 	r := PracticeResult{
-		ID:   "PS.1",
+		ID:   practicePS1,
 		Name: "Protect Code from Unauthorized Access",
 	}
 	if repo == nil {
@@ -55,9 +70,9 @@ func evalPS1(repo *model.RepoContext) PracticeResult {
 	if repo.OrgMember || repo.TrustedOrgMember {
 		r.Signal += " (org member)"
 	}
-	if repo.OrgMember || repo.AuthorAssociation == "MEMBER" ||
-		repo.AuthorAssociation == "OWNER" ||
-		repo.AuthorAssociation == "COLLABORATOR" {
+	if repo.OrgMember || repo.AuthorAssociation == assocMember ||
+		repo.AuthorAssociation == assocOwner ||
+		repo.AuthorAssociation == assocCollaborator {
 		r.Status = StatusPresent
 	} else {
 		r.Status = StatusAbsent
@@ -68,7 +83,7 @@ func evalPS1(repo *model.RepoContext) PracticeResult {
 // PS.2 — Verify software release integrity.
 func evalPS2(repo *model.RepoContext) PracticeResult {
 	r := PracticeResult{
-		ID:   "PS.2",
+		ID:   practicePS2,
 		Name: "Verify Software Release Integrity",
 	}
 	if repo == nil {
@@ -89,7 +104,7 @@ func evalPS2(repo *model.RepoContext) PracticeResult {
 // PS.3 — Archive and provide software provenance.
 func evalPS3(signals *model.Signals) PracticeResult {
 	r := PracticeResult{
-		ID:   "PS.3",
+		ID:   practicePS3,
 		Name: "Archive and Provide Software Provenance",
 	}
 	if signals == nil {
@@ -138,7 +153,7 @@ func profileSignalText(n int) string {
 // PW.4 — Reuse well-secured software.
 func evalPW4(signals *model.Signals) PracticeResult {
 	r := PracticeResult{
-		ID:   "PW.4",
+		ID:   practicePW4,
 		Name: "Reuse Well-Secured Software",
 	}
 	if signals == nil {
@@ -165,7 +180,7 @@ func evalPW4(signals *model.Signals) PracticeResult {
 // PW.6 — Review human-readable code.
 func evalPW6(behavior *model.Behavior) PracticeResult {
 	r := PracticeResult{
-		ID:   "PW.6",
+		ID:   practicePW6,
 		Name: "Review Human-Readable Code",
 	}
 	if behavior == nil {
@@ -186,7 +201,7 @@ func evalPW6(behavior *model.Behavior) PracticeResult {
 // PW.7 — Test executable code (consistency as proxy).
 func evalPW7(behavior *model.Behavior) PracticeResult {
 	r := PracticeResult{
-		ID:   "PW.7",
+		ID:   practicePW7,
 		Name: "Test Executable Code",
 	}
 	if behavior == nil {
@@ -211,7 +226,7 @@ func evalPW7(behavior *model.Behavior) PracticeResult {
 // RV.1 — Identify vulnerabilities (anomaly detection).
 func evalRV1(aiSensing *model.AISensing) PracticeResult {
 	r := PracticeResult{
-		ID:   "RV.1",
+		ID:   practiceRV1,
 		Name: "Identify Vulnerabilities",
 	}
 	if aiSensing == nil || aiSensing.Behavioral == nil {
@@ -233,7 +248,7 @@ func evalRV1(aiSensing *model.AISensing) PracticeResult {
 // PO.4 — Security awareness (contributor maturity).
 func evalPO4(signals *model.Signals, categories map[string]float64) PracticeResult {
 	r := PracticeResult{
-		ID:   "PO.4",
+		ID:   practicePO4,
 		Name: "Security Awareness",
 	}
 	if signals == nil {

@@ -127,10 +127,10 @@ func adminBaseData(r *http.Request, opts Options) (map[string]any, *tenant.Tenan
 	}
 
 	data := map[string]any{
-		"Title":     "Admin",
-		"Version":   opts.Version,
-		"Commit":    opts.Commit,
-		"Date":      opts.Date,
+		tmplTitle:   tmplAdmin,
+		tmplVersion: opts.Version,
+		tmplCommit:  opts.Commit,
+		tmplDate:    opts.Date,
 		"NavUser":   tn.Username,
 		"NavAvatar": tn.AvatarURL,
 	}
@@ -232,12 +232,12 @@ func sampleDigestEvents() []postgres.NotificationEvent {
 	now := time.Now().UTC()
 	return []postgres.NotificationEvent{
 		{
-			ID: 0, EventType: "new_contributor", Username: "sample-dev",
+			ID: 0, EventType: postgres.EventTypeNewContributor, Username: "sample-dev",
 			Target: "example-org", CreatedAt: now.Add(-2 * time.Hour),
 			Details: map[string]any{"prs_opened": float64(3), "prs_merged": float64(1)},
 		},
 		{
-			ID: 0, EventType: "score_change", Username: "another-dev",
+			ID: 0, EventType: postgres.EventTypeScoreChange, Username: "another-dev",
 			Target: "example-org/repo", CreatedAt: now.Add(-1 * time.Hour),
 			Details: map[string]any{"old_grade": "C", "new_grade": "B"},
 		},

@@ -10,6 +10,15 @@ import (
 	"time"
 )
 
+// Watchlist notification event types. Exported so other packages writing
+// notification events use the same canonical strings.
+const (
+	EventTypeScoreChange    = "score_change"
+	EventTypeNewContributor = "new_contributor"
+)
+
+const detailFirstActivity = "first activity"
+
 // WatchlistEntry represents a single watchlist target with its metadata.
 type WatchlistEntry struct {
 	ID       string
@@ -44,14 +53,14 @@ type NotificationEvent struct {
 // known event types; falls back to "first activity" when no counts are present.
 func (e NotificationEvent) DetailSummary() string {
 	switch e.EventType {
-	case "score_change":
+	case EventTypeScoreChange:
 		old, _ := e.Details["old_grade"].(string)
 		newG, _ := e.Details["new_grade"].(string)
 		if old != "" && newG != "" {
 			return "grade " + old + " → " + newG
 		}
 		return "grade changed"
-	case "new_contributor":
+	case EventTypeNewContributor:
 		var phrases []string
 		if n := intDetail(e.Details, "prs_opened"); n > 0 {
 			phrases = append(phrases, fmt.Sprintf("opened %d %s", n, plural(n, "PR", "PRs")))
@@ -69,7 +78,7 @@ func (e NotificationEvent) DetailSummary() string {
 			phrases = append(phrases, fmt.Sprintf("%d %s", n, plural(n, "comment", "comments")))
 		}
 		if len(phrases) == 0 {
-			return "first activity"
+			return detailFirstActivity
 		}
 		// Cap at 2 phrases to keep the cell compact.
 		if len(phrases) > 2 {

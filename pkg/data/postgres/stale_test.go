@@ -15,6 +15,12 @@ func TestGetStaleContributorsEmpty(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 
+	// Clear reputation rows so the assertion isn't polluted by leftover
+	// state from prior test runs against a shared dev database.
+	if _, err := store.DB().ExecContext(ctx, `DELETE FROM devtrace_reputation`); err != nil {
+		t.Fatalf("clear reputation: %v", err)
+	}
+
 	stale, err := store.GetStaleContributors(ctx, 7, 30, 100)
 	if err != nil {
 		t.Fatalf("get stale: %v", err)
