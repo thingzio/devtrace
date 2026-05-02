@@ -175,6 +175,7 @@ Data flow: GitHub App webhook → tenant repos → background ingest worker → 
 - `DEVTRACE_REPO_LIST_LIMIT` — cap on repos fetched from GitHub per refresh (default 300)
 - `DEVTRACE_SECURITY_CREDIT_TTL` — GHSA credits cache freshness (Go duration, default 168h)
 - `DEVTRACE_SECURITY_CREDIT_LIMIT` — cap on GHSA credits fetched per refresh (default 100)
+- `DEVTRACE_SECURITY_CREDITS_ENABLED` — set to `true` to enable live GHSA-credit fetching (default off; v0.21 query hit a non-existent GraphQL field)
 - `ANTHROPIC_API_KEY` — optional, enables AI risk sensing
 - `SEND_API_KEY` — email service API key (enables contact form on help page)
 - `SUPPORT_EMAIL` — support email address for contact form

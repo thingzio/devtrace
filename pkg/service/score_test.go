@@ -673,7 +673,13 @@ func TestSecurityCreditsCacheHit(t *testing.T) {
 
 // TestSecurityCreditsStaleRefresh re-fetches from GitHub when the
 // cached row is older than config.SecurityCreditTTL.
+//
+// Live fetching is gated behind DEVTRACE_SECURITY_CREDITS_ENABLED — see
+// SecurityCreditsEnabled in pkg/config — so this test enables the flag
+// to exercise the refresh path. Production runs with the flag off until
+// a viable user→credits API exists.
 func TestSecurityCreditsStaleRefresh(t *testing.T) {
+	t.Setenv("DEVTRACE_SECURITY_CREDITS_ENABLED", "true")
 	store := &mockBehaviorStore{
 		credits:          &model.SecurityCredits{ReporterCount: 1},
 		creditsFetchedAt: time.Now().Add(-30 * 24 * time.Hour), // way past TTL
@@ -701,6 +707,39 @@ func TestSecurityCreditsStaleRefresh(t *testing.T) {
 	}
 	if store.savedCredits[0].AdvisoryID != "GHSA-fresh-1234" {
 		t.Errorf("saved advisory: got %q, want GHSA-fresh-1234", store.savedCredits[0].AdvisoryID)
+	}
+}
+
+// TestSecurityCreditsDisabledSuppressesFetch ensures the gate flag
+// short-circuits the refresh path when the cache is stale, returning
+// the (stale-or-nil) cached value without calling GitHub. This is the
+// production default — see SecurityCreditsEnabled in pkg/config — set
+// after v0.21 shipped a query against a non-existent GraphQL field.
+func TestSecurityCreditsDisabledSuppressesFetch(t *testing.T) {
+	// Flag is off by default; just confirm refresh is suppressed.
+	store := &mockBehaviorStore{
+		credits:          nil,
+		creditsFetchedAt: time.Time{}, // no cache → would normally fetch
+	}
+	mc := &mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+		credits: []ghclient.SecurityAdvisoryCredit{
+			{AdvisoryID: "GHSA-should-not-fetch", CreditType: "reporter", Severity: "high"},
+		},
+	}
+	svc := NewScoreService(mc, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment != nil && resp.Enrichment.SecurityCredits != nil {
+		t.Errorf("expected nil SecurityCredits with flag off, got %+v", resp.Enrichment.SecurityCredits)
+	}
+	if store.savedCredits != nil {
+		t.Errorf("expected no save with flag off, got %d", len(store.savedCredits))
 	}
 }
 

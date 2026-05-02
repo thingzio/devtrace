@@ -520,11 +520,21 @@ func (s *ScoreService) buildEnrichment(ctx context.Context, username string, pro
 	return enr
 }
 
-// securityCreditsEnrichment returns the cached GHSA credits aggregate,
-// refreshing from GitHub when the cache is missing or older than
-// config.SecurityCreditTTL. On fetch failure returns whatever is cached
-// (possibly stale) rather than failing the score request — same fallback
-// pattern as ownedReposEnrichment.
+// securityCreditsEnrichment returns the cached GHSA credits aggregate.
+//
+// Live fetching is gated by config.SecurityCreditsEnabled, which defaults
+// to OFF. v0.21.0 shipped a GraphQL query against `User.securityAdvisoryCredits`
+// — a field that does not exist on GitHub's User type (confirmed by
+// production logs returning `undefinedField` for every user). There is
+// no other cheap path: the REST `/advisories` endpoint silently ignores
+// `credit_user`, and iterating `Query.securityAdvisories` to filter
+// client-side is too expensive for a synchronous score request.
+//
+// Storage, model, and UI render path are kept in place so that flipping
+// the flag back on (when GitHub exposes a viable API, or we add a
+// background indexer) is a one-line change. The cache lookup runs even
+// when disabled so any pre-existing rows surface, but the fetch path is
+// short-circuited.
 func (s *ScoreService) securityCreditsEnrichment(ctx context.Context, username string) *model.SecurityCredits {
 	if s.behStore == nil {
 		return nil
@@ -536,12 +546,12 @@ func (s *ScoreService) securityCreditsEnrichment(ctx context.Context, username s
 		return cached
 	}
 
+	if !config.SecurityCreditsEnabled() {
+		return cached
+	}
+
 	credits, ferr := s.gh.FetchSecurityCredits(ctx, username, config.SecurityCreditLimit())
 	if ferr != nil {
-		// Surface fetch failures so operators can distinguish "user has
-		// no credits" (sentinel saved, silent path) from "we couldn't
-		// ask GitHub" (this branch). Don't escalate to Error: a single
-		// user's enrichment shouldn't drown logs in a deploy regression.
 		slog.Warn("fetch security credits",
 			"username", username,
 			"error", ferr,

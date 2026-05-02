@@ -60,6 +60,16 @@ func SecurityCreditLimit() int {
 	return GetEnvAsInt("DEVTRACE_SECURITY_CREDIT_LIMIT", defaultSecurityCreditLimit)
 }
 
+// SecurityCreditsEnabled gates live GHSA-credit fetching. Defaults OFF
+// because the v0.21 GraphQL query (User.securityAdvisoryCredits) hits
+// a non-existent field and there is no cheap alternative API yet. Flip
+// via DEVTRACE_SECURITY_CREDITS_ENABLED=true once a viable fetch path
+// exists. The cache lookup and UI render still run when disabled, so
+// pre-existing rows surface and re-enabling is a no-op for callers.
+func SecurityCreditsEnabled() bool {
+	return GetEnvBool("DEVTRACE_SECURITY_CREDITS_ENABLED")
+}
+
 // GetEnvAsDuration parses the env var as a Go duration; falls back to
 // the default on absent or invalid values.
 func GetEnvAsDuration(key string, fallback time.Duration) time.Duration {
