@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"testing"
+	"time"
 )
 
 func TestGetEnv(t *testing.T) {
@@ -100,6 +101,61 @@ func TestGetEnvAsFloat(t *testing.T) {
 		t.Setenv("TEST_FLOAT_BAD", "notafloat")
 		if got := GetEnvAsFloat("TEST_FLOAT_BAD", 2.71); got != 2.71 {
 			t.Errorf("GetEnvAsFloat() = %f, want %f", got, 2.71)
+		}
+	})
+}
+
+func TestGetEnvAsDuration(t *testing.T) {
+	t.Run("valid duration", func(t *testing.T) {
+		t.Setenv("TEST_DUR", "12h30m")
+		if got := GetEnvAsDuration("TEST_DUR", time.Hour); got != 12*time.Hour+30*time.Minute {
+			t.Errorf("got %v, want 12h30m", got)
+		}
+	})
+
+	t.Run("missing returns fallback", func(t *testing.T) {
+		os.Unsetenv("TEST_DUR_MISSING")
+		if got := GetEnvAsDuration("TEST_DUR_MISSING", 5*time.Second); got != 5*time.Second {
+			t.Errorf("got %v, want 5s fallback", got)
+		}
+	})
+
+	t.Run("invalid returns fallback", func(t *testing.T) {
+		t.Setenv("TEST_DUR_BAD", "notaduration")
+		if got := GetEnvAsDuration("TEST_DUR_BAD", time.Minute); got != time.Minute {
+			t.Errorf("got %v, want 1m fallback", got)
+		}
+	})
+}
+
+func TestRepoSummaryTTLOverride(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		os.Unsetenv("DEVTRACE_REPO_SUMMARY_TTL")
+		if got := RepoSummaryTTL(); got != 24*time.Hour {
+			t.Errorf("got %v, want 24h default", got)
+		}
+	})
+
+	t.Run("env override", func(t *testing.T) {
+		t.Setenv("DEVTRACE_REPO_SUMMARY_TTL", "6h")
+		if got := RepoSummaryTTL(); got != 6*time.Hour {
+			t.Errorf("got %v, want 6h from env", got)
+		}
+	})
+}
+
+func TestRepoListLimitOverride(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		os.Unsetenv("DEVTRACE_REPO_LIST_LIMIT")
+		if got := RepoListLimit(); got != 300 {
+			t.Errorf("got %d, want 300 default", got)
+		}
+	})
+
+	t.Run("env override", func(t *testing.T) {
+		t.Setenv("DEVTRACE_REPO_LIST_LIMIT", "100")
+		if got := RepoListLimit(); got != 100 {
+			t.Errorf("got %d, want 100 from env", got)
 		}
 	})
 }

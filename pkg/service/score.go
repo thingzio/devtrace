@@ -489,11 +489,11 @@ func (s *ScoreService) ownedReposEnrichment(ctx context.Context, username string
 	provider := string(model.ProviderGitHub)
 
 	cached, fetchedAt, err := s.behStore.GetRepoSummary(ctx, username, provider)
-	if err == nil && cached != nil && time.Since(fetchedAt) < config.RepoSummaryTTL {
+	if err == nil && cached != nil && time.Since(fetchedAt) < config.RepoSummaryTTL() {
 		return cached
 	}
 
-	repos, ferr := s.gh.ListUserRepos(ctx, username, config.RepoListLimit)
+	repos, ferr := s.gh.ListUserRepos(ctx, username, config.RepoListLimit())
 	if ferr != nil {
 		// On fetch failure return whatever we have cached even if stale.
 		return cached
