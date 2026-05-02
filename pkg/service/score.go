@@ -9,6 +9,7 @@ import (
 	"github.com/thingzio/devtrace/pkg/claude"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/model"
+	profilepkg "github.com/thingzio/devtrace/pkg/profile"
 	"github.com/thingzio/devtrace/pkg/score"
 )
 
@@ -174,7 +175,7 @@ func (s *ScoreService) Score(ctx context.Context, username, repo, plan string, t
 
 	// Populate enrichment block (profile decoration, surfaced when caller
 	// requests detail view). Always cached; handler/plan layer decides exposure.
-	full.Enrichment = s.buildEnrichment(ctx, username)
+	full.Enrichment = s.buildEnrichment(ctx, username, profile)
 
 	// Cache the full response.
 	s.cache.set(username, repo, full)
@@ -224,6 +225,15 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 			laCopy := *full.Enrichment.LifetimeActivity
 			enrCopy.LifetimeActivity = &laCopy
 		}
+		if full.Enrichment.TopContributedRepos != nil {
+			enrCopy.TopContributedRepos = append([]model.RepoContribution(nil), full.Enrichment.TopContributedRepos...)
+		}
+		if full.Enrichment.LinkedAccounts != nil {
+			enrCopy.LinkedAccounts = append([]model.LinkedAccount(nil), full.Enrichment.LinkedAccounts...)
+		}
+		if full.Enrichment.Emails != nil {
+			enrCopy.Emails = append([]string(nil), full.Enrichment.Emails...)
+		}
 		resp.Enrichment = &enrCopy
 	}
 
@@ -253,6 +263,10 @@ func enrichForPlan(full *model.ScoreResponse, plan string) *model.ScoreResponse 
 			resp.AISensing.Behavioral = nil     // Pro only
 		} else {
 			resp.AISensing = &model.AISensing{}
+		}
+		// Email extraction is Starter+ to deter scraping the API as a contact list.
+		if resp.Enrichment != nil {
+			resp.Enrichment.Emails = nil
 		}
 
 	case "starter":
@@ -395,24 +409,36 @@ func generateRiskSummary(s *score.InputSignals, value float64, hasRepo bool) str
 }
 
 // buildEnrichment populates the optional Enrichment block from the
-// behavior store. Each sub-block is independent — a failure or absent
-// data in one does not suppress others. Returns nil when no sub-block
-// has data, so callers can rely on omitempty serialization.
-func (s *ScoreService) buildEnrichment(ctx context.Context, username string) *model.Enrichment {
-	if s.behStore == nil {
-		return nil
-	}
-	provider := string(model.ProviderGitHub)
+// behavior store and the freshly-fetched profile. Each sub-block is
+// independent — a failure or absent data in one does not suppress others.
+// Returns nil when no sub-block has data, so callers can rely on
+// omitempty serialization.
+func (s *ScoreService) buildEnrichment(ctx context.Context, username string, profile *ghclient.UserProfile) *model.Enrichment {
 	enr := &model.Enrichment{}
 	populated := false
 
-	if la, err := s.behStore.GetLifetimeActivity(ctx, username, provider); err == nil && la != nil {
-		enr.LifetimeActivity = la
-		populated = true
+	if s.behStore != nil {
+		provider := string(model.ProviderGitHub)
+		if la, err := s.behStore.GetLifetimeActivity(ctx, username, provider); err == nil && la != nil {
+			enr.LifetimeActivity = la
+			populated = true
+		}
+		if repos, err := s.behStore.GetTopContributedRepos(ctx, username, provider, topContributedRepoLimit); err == nil && len(repos) > 0 {
+			enr.TopContributedRepos = repos
+			populated = true
+		}
 	}
-	if repos, err := s.behStore.GetTopContributedRepos(ctx, username, provider, topContributedRepoLimit); err == nil && len(repos) > 0 {
-		enr.TopContributedRepos = repos
-		populated = true
+
+	if profile != nil {
+		accts, emails := profilepkg.Extract(profile.Bio, profile.Website)
+		if len(accts) > 0 {
+			enr.LinkedAccounts = accts
+			populated = true
+		}
+		if len(emails) > 0 {
+			enr.Emails = emails
+			populated = true
+		}
 	}
 
 	if !populated {

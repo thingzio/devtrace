@@ -34,6 +34,19 @@ type ScoreResponse struct {
 type Enrichment struct {
 	LifetimeActivity    *LifetimeActivity  `json:"lifetime_activity,omitempty"`
 	TopContributedRepos []RepoContribution `json:"top_contributed_repos,omitempty"`
+	LinkedAccounts      []LinkedAccount    `json:"linked_accounts,omitempty"`
+	Emails              []string           `json:"emails,omitempty"`
+}
+
+// LinkedAccount is a URL that the contributor declared in their public
+// profile (bio or blog). v1 confidence is uniformly T4 ("declared link") —
+// later phases promote individual links to T1-T3 via cross-platform
+// verification (e.g. SSH key fingerprints, Keybase proofs).
+type LinkedAccount struct {
+	Platform string `json:"platform"`         // e.g. "twitter", "mastodon", "personal_site"
+	URL      string `json:"url"`
+	Source   string `json:"source"`           // "bio" or "blog"
+	Tier     string `json:"tier"`             // T1-T5 confidence; v1 is always "T4"
 }
 
 // RepoContribution summarizes a contributor's footprint in a single repo.

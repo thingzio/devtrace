@@ -404,6 +404,50 @@ func TestScoreEnrichmentTopContributedRepos(t *testing.T) {
 	}
 }
 
+func TestScoreEnrichmentLinkedAccountsAndEmails(t *testing.T) {
+	mock := &mockClient{
+		signals: establishedSignals(),
+		profile: &ghclient.UserProfile{
+			Username: "testuser",
+			Bio:      "Find me on https://x.com/testuser or email me at test@example.com",
+			Website:  "https://example.dev",
+		},
+	}
+	store := &mockBehaviorStore{}
+
+	tests := []struct {
+		plan        string
+		wantLinks   bool
+		wantEmails  bool
+	}{
+		{plan: "free", wantLinks: true, wantEmails: false},
+		{plan: "starter", wantLinks: true, wantEmails: true},
+		{plan: "pro", wantLinks: true, wantEmails: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.plan, func(t *testing.T) {
+			svc := NewScoreService(mock, "v0.0.1-test")
+			svc.SetBehaviorStore(store)
+			resp, err := svc.Score(context.Background(), "testuser", "", tc.plan, nil)
+			if err != nil {
+				t.Fatalf("score: %v", err)
+			}
+			if resp.Enrichment == nil {
+				t.Fatal("expected enrichment block")
+			}
+			if tc.wantLinks && len(resp.Enrichment.LinkedAccounts) == 0 {
+				t.Errorf("plan=%s: expected linked accounts, got 0", tc.plan)
+			}
+			if tc.wantEmails && len(resp.Enrichment.Emails) == 0 {
+				t.Errorf("plan=%s: expected emails, got 0", tc.plan)
+			}
+			if !tc.wantEmails && len(resp.Enrichment.Emails) > 0 {
+				t.Errorf("plan=%s: emails leaked: %v", tc.plan, resp.Enrichment.Emails)
+			}
+		})
+	}
+}
+
 func TestScoreEnrichmentBlocksIndependent(t *testing.T) {
 	// Lifetime present, top repos absent — Enrichment populated with only lifetime.
 	store := &mockBehaviorStore{
