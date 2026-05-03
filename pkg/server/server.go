@@ -449,7 +449,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	)
 
 	requireAny := middleware.RequireAnyAuth(db)
-	requireSession := middleware.RequireAuth(db, "/auth/github")
+	requireSession := middleware.RequireAuth(db, authGitHubPath)
 	csrf := middleware.InjectCSRF
 
 	mux := http.NewServeMux()

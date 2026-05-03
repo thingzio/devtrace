@@ -25,4 +25,8 @@ const (
 	tmplValue        = "Value"
 
 	msgRateLimitExceeded = "rate limit exceeded"
+
+	// authGitHubPath is the OAuth start URL. Hoisted because handlers,
+	// middleware, and ratelimit JSON envelopes all need to reference it.
+	authGitHubPath = "/auth/github"
 )

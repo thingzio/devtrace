@@ -63,6 +63,36 @@ func TestWebhookHandlerInvalidSignature(t *testing.T) {
 	}
 }
 
+func TestHandleInstallationEvent_BadJSON(t *testing.T) {
+	err := handleInstallationEvent(context.Background(), nil, nil, []byte("{not json"))
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+}
+
+func TestHandleInstallationEvent_UnknownActionIsNoop(t *testing.T) {
+	body := []byte(`{"action":"created_repository","installation":{"id":1}}`)
+	if err := handleInstallationEvent(context.Background(), nil, nil, body); err != nil {
+		t.Errorf("expected no-op for unknown action, got %v", err)
+	}
+}
+
+func TestNotifyInstallationChange_NilChannelSafe(t *testing.T) {
+	// Must not panic on nil — middleware sometimes passes a nil chan when
+	// installation change tracking is disabled.
+	notifyInstallationChange(nil)
+}
+
+func TestNotifyInstallationChange_NonBlocking(t *testing.T) {
+	ch := make(chan struct{}, 1)
+	// First send fills the buffer; second must not block (uses select-default).
+	notifyInstallationChange(ch)
+	notifyInstallationChange(ch)
+	if len(ch) != 1 {
+		t.Errorf("ch buffered = %d, want 1 (second send dropped via default)", len(ch))
+	}
+}
+
 func TestWebhookHandlerUnknownEvent(t *testing.T) {
 	handler := webhookHandler(nil, nil, "secret", nil)
 

@@ -164,6 +164,133 @@ STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:$SITE_
 [[ "$STATUS" == "404" || "$STATUS" == "401" ]] && pass "POST /webhook/github (no secret configured) → $STATUS" || err "POST /webhook/github → $STATUS (expected 404 or 401)"
 
 # ==========================================================================
+# Public pages — coverage extension
+# ==========================================================================
+
+# Changelog
+STATUS=$(curl -sf -o "$TMPDIR_E2E/changelog.html" -w "%{http_code}" "http://localhost:$SITE_PORT/changelog")
+if [[ "$STATUS" == "200" ]] && grep -qi "changelog" "$TMPDIR_E2E/changelog.html"; then
+  pass "GET /changelog → 200 with content"
+else
+  err "GET /changelog → $STATUS (expected 200 with changelog content)"
+fi
+
+# Terms of service
+STATUS=$(curl -sf -o "$TMPDIR_E2E/tos.html" -w "%{http_code}" "http://localhost:$SITE_PORT/tos")
+if [[ "$STATUS" == "200" ]] && grep -qi "terms" "$TMPDIR_E2E/tos.html"; then
+  pass "GET /tos → 200 with terms content"
+else
+  err "GET /tos → $STATUS (expected 200 with terms)"
+fi
+
+# HTML scorecard for a bot — exercises /score/{username} without burning
+# GitHub quota (bot detector short-circuits before any API call).
+STATUS=$(curl -sf -o "$TMPDIR_E2E/scorecard.html" -w "%{http_code}" "http://localhost:$SITE_PORT/score/dependabot%5Bbot%5D")
+if [[ "$STATUS" == "200" ]] && grep -qi "dependabot" "$TMPDIR_E2E/scorecard.html"; then
+  pass "GET /score/dependabot[bot] → 200 with bot scorecard"
+else
+  err "GET /score/dependabot[bot] → $STATUS (expected 200 with bot HTML)"
+fi
+
+# Unknown route — Go's mux returns 404 for unmatched paths.
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$SITE_PORT/this/does/not/exist")
+[[ "$STATUS" == "404" ]] && pass "GET unknown route → 404" || err "GET unknown route → $STATUS (expected 404)"
+
+# Method not allowed — POST against a GET-only route surfaces 405 from mux.
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:$SITE_PORT/health")
+[[ "$STATUS" == "405" ]] && pass "POST /health → 405 (method not allowed)" || err "POST /health → $STATUS (expected 405)"
+
+# JS static asset (the CSS test only covers one MIME type)
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$SITE_PORT/static/js/app.js")
+# 200 if app.js exists, 404 if not — both are acceptable, just not 5xx.
+[[ "$STATUS" == "200" || "$STATUS" == "404" ]] && pass "GET /static/js/app.js → $STATUS" || err "GET /static/js/app.js → $STATUS (expected 200 or 404)"
+
+# ==========================================================================
+# Security headers — recoverPanics and securityHeaders middleware
+# ==========================================================================
+
+HEADERS=$(curl -sf -D - -o /dev/null "http://localhost:$SITE_PORT/")
+if echo "$HEADERS" | grep -qi "^X-Content-Type-Options: nosniff"; then
+  pass "X-Content-Type-Options: nosniff present"
+else
+  err "X-Content-Type-Options header missing"
+fi
+if echo "$HEADERS" | grep -qi "^X-Frame-Options: DENY"; then
+  pass "X-Frame-Options: DENY present"
+else
+  err "X-Frame-Options header missing"
+fi
+if echo "$HEADERS" | grep -qi "^Content-Security-Policy:.*style-src 'self'"; then
+  pass "Content-Security-Policy locks style-src to 'self' (no unsafe-inline)"
+else
+  err "CSP missing or still allows 'unsafe-inline' on style-src"
+fi
+if echo "$HEADERS" | grep -qi "^Content-Security-Policy:.*style-src-attr 'unsafe-inline'"; then
+  pass "CSP carves out style-src-attr for inline style attributes"
+else
+  err "CSP missing style-src-attr carve-out"
+fi
+if echo "$HEADERS" | grep -qi "^Referrer-Policy: strict-origin-when-cross-origin"; then
+  pass "Referrer-Policy present"
+else
+  err "Referrer-Policy header missing"
+fi
+if echo "$HEADERS" | grep -qi "^Permissions-Policy:"; then
+  pass "Permissions-Policy present"
+else
+  err "Permissions-Policy header missing"
+fi
+
+# ==========================================================================
+# JSON error envelope shape
+# ==========================================================================
+
+# Score history — unauthenticated request accepted but rate-limited path; the
+# response is JSON either way. Use bot username so no GH API call is made.
+RESP=$(curl -s -o "$TMPDIR_E2E/history.json" -w "%{http_code}" "http://localhost:$SITE_PORT/api/v1/score/dependabot%5Bbot%5D/history")
+if [[ "$RESP" == "200" ]]; then
+  # Empty history is valid (bot has never been scored). Just confirm it
+  # parsed as JSON and didn't return an HTML 500.
+  if jq -e '.' "$TMPDIR_E2E/history.json" >/dev/null 2>&1; then
+    pass "GET /api/v1/score/{bot}/history → 200 JSON"
+  else
+    err "GET /api/v1/score/{bot}/history → 200 but body not JSON"
+  fi
+elif [[ "$RESP" == "429" ]]; then
+  pass "GET /api/v1/score/{bot}/history → 429 (rate-limited path)"
+else
+  err "GET /api/v1/score/{bot}/history → $RESP (expected 200 or 429)"
+fi
+
+# Digest unsubscribe — request with garbage token must reject, not 500.
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$SITE_PORT/digest/unsubscribe?tenant=nope&token=garbage")
+[[ "$STATUS" == "400" || "$STATUS" == "401" || "$STATUS" == "403" || "$STATUS" == "404" ]] && pass "GET /digest/unsubscribe (bad token) → $STATUS (rejected, not 5xx)" || err "GET /digest/unsubscribe (bad token) → $STATUS (expected 4xx)"
+
+# Digest unsubscribe — missing query params must reject as well.
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$SITE_PORT/digest/unsubscribe")
+[[ "$STATUS" == "400" || "$STATUS" == "404" ]] && pass "GET /digest/unsubscribe (no params) → $STATUS" || err "GET /digest/unsubscribe (no params) → $STATUS (expected 400/404)"
+
+# ==========================================================================
+# Admin gate — non-admin users should get 404 (admins config'd via env)
+# ==========================================================================
+
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$SITE_PORT/admin")
+[[ "$STATUS" == "404" || "$STATUS" == "302" ]] && pass "GET /admin (no admin auth) → $STATUS (gated)" || err "GET /admin → $STATUS (expected 404 or 302)"
+
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$SITE_PORT/admin/tenants")
+[[ "$STATUS" == "404" || "$STATUS" == "302" ]] && pass "GET /admin/tenants (no admin auth) → $STATUS (gated)" || err "GET /admin/tenants → $STATUS (expected 404 or 302)"
+
+# ==========================================================================
+# Panic recovery — sanity check that a normal request after a forced bad
+# input still returns a clean response (proves middleware didn't crash the
+# process). Use a path that exists but trigger a malformed query string.
+# ==========================================================================
+
+curl -s -o /dev/null "http://localhost:$SITE_PORT/api/v1/score/%00bad" || true
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$SITE_PORT/health")
+[[ "$STATUS" == "200" ]] && pass "GET /health after malformed prior request → 200 (process intact)" || err "site appears unhealthy after bad input: $STATUS"
+
+# ==========================================================================
 # Summary
 # ==========================================================================
 echo ""

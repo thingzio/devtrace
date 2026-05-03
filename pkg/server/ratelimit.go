@@ -187,7 +187,7 @@ func authAwareRateLimit(unauthRL, authRL *ipRateLimiter, htmlMode bool, version 
 					"version":     version,
 					tmplErrorKey:  msgRateLimitExceeded,
 					"retry_after": retryAfter,
-					"sign_in_url": "/auth/github",
+					"sign_in_url": authGitHubPath,
 				})
 				return
 			}

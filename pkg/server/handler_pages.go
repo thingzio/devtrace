@@ -133,7 +133,7 @@ func dashboardHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tn := middleware.TenantFromContext(r.Context())
 		if tn == nil {
-			http.Redirect(w, r, "/auth/github", http.StatusFound)
+			http.Redirect(w, r, authGitHubPath, http.StatusFound)
 			return
 		}
 
@@ -213,7 +213,7 @@ func settingsHandler(store *postgres.Store, opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tn := middleware.TenantFromContext(r.Context())
 		if tn == nil {
-			http.Redirect(w, r, "/auth/github", http.StatusFound)
+			http.Redirect(w, r, authGitHubPath, http.StatusFound)
 			return
 		}
 		db := store.DB()

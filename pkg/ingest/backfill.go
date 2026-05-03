@@ -185,11 +185,16 @@ func processBackfillBatch(ctx context.Context, store ingestStore, reader *Archiv
 	var wg sync.WaitGroup
 
 	for _, hour := range hours {
+		if ctx.Err() != nil {
+			break
+		}
 		select {
 		case <-ctx.Done():
-			wg.Wait()
-			return fmt.Errorf("batch canceled: %w", ctx.Err())
+			break
 		case sem <- struct{}{}: // acquire
+		}
+		if ctx.Err() != nil {
+			break
 		}
 		wg.Add(1)
 

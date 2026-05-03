@@ -220,15 +220,20 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client,
 	var wg sync.WaitGroup
 
 	for _, q := range queued {
+		// Explicit pre-check before the select: when the ctx is already
+		// canceled, Go's select non-deterministically picks between
+		// ctx.Done() and a ready sem send, so spawning would be a coin
+		// flip. The pre-check makes cancellation deterministic.
+		if ctx.Err() != nil {
+			break
+		}
 		select {
 		case <-ctx.Done():
-			wg.Wait()
-			s, e, h := int(scored.Load()), int(errCount.Load()), int(hints.Load())
-			if stats != nil {
-				stats.record(s, e, h)
-			}
-			return s
+			break
 		case sem <- struct{}{}:
+		}
+		if ctx.Err() != nil {
+			break
 		}
 		wg.Add(1)
 		go func() {
@@ -295,15 +300,16 @@ func rescoreStale(ctx context.Context, store scorerStore, gh ghclient.Client,
 	var wg sync.WaitGroup
 
 	for _, c := range stale {
+		if ctx.Err() != nil {
+			break
+		}
 		select {
 		case <-ctx.Done():
-			wg.Wait()
-			s, e := int(scored.Load()), int(errCount.Load())
-			if stats != nil {
-				stats.record(s, e, 0)
-			}
-			return s
+			break
 		case sem <- struct{}{}:
+		}
+		if ctx.Err() != nil {
+			break
 		}
 		wg.Add(1)
 		go func() {

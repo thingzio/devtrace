@@ -18,7 +18,7 @@ func addWatchlistHandler(store *postgres.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tn := middleware.TenantFromContext(r.Context())
 		if tn == nil {
-			http.Redirect(w, r, "/auth/github", http.StatusFound)
+			http.Redirect(w, r, authGitHubPath, http.StatusFound)
 			return
 		}
 
@@ -61,7 +61,7 @@ func deleteWatchlistHandler(store *postgres.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tn := middleware.TenantFromContext(r.Context())
 		if tn == nil {
-			http.Redirect(w, r, "/auth/github", http.StatusFound)
+			http.Redirect(w, r, authGitHubPath, http.StatusFound)
 			return
 		}
 
@@ -123,7 +123,7 @@ func toggleWatchlistEmailHandler(store *postgres.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		tn := middleware.TenantFromContext(r.Context())
 		if tn == nil {
-			http.Redirect(w, r, "/auth/github", http.StatusFound)
+			http.Redirect(w, r, authGitHubPath, http.StatusFound)
 			return
 		}
 
