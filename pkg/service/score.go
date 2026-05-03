@@ -11,6 +11,7 @@ import (
 	"github.com/thingzio/devtrace/pkg/bot"
 	"github.com/thingzio/devtrace/pkg/claude"
 	"github.com/thingzio/devtrace/pkg/config"
+	"github.com/thingzio/devtrace/pkg/forges"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/model"
 	"github.com/thingzio/devtrace/pkg/ossf"
@@ -43,6 +44,14 @@ type StackOverflowFetcher interface {
 	FetchUser(ctx context.Context, userID int64) (*stackoverflow.Profile, error)
 }
 
+// ForgesFetcher is the subset of the forges client used by the
+// score service. Defined here so tests can inject a mock without
+// spinning up an httptest server. Returns the SHA-256 SSH-key
+// fingerprints published by the user on the given forge.
+type ForgesFetcher interface {
+	FetchSSHFingerprints(ctx context.Context, forge forges.Forge, username string) ([]string, error)
+}
+
 // BehaviorStore provides behavioral signal data from contributor activity.
 // GetLifetimeActivity returns aggregate lifetime counts; nil when no data exists.
 // GetTopContributedRepos returns the top-N repos ranked by active-hour count.
@@ -64,6 +73,8 @@ type BehaviorStore interface {
 	SavePublisherProfile(ctx context.Context, provider, username, registry string, profile *model.RegistryProfile) error
 	GetStackOverflowProfile(ctx context.Context, provider, username string) (*model.StackOverflow, time.Time, error)
 	SaveStackOverflowProfile(ctx context.Context, provider, username string, profile *model.StackOverflow) error
+	GetCrossVCS(ctx context.Context, provider, username string) (*model.CrossVCS, time.Time, error)
+	SaveCrossVCS(ctx context.Context, provider, username string, summary *model.CrossVCS) error
 }
 
 // topContributedRepoLimit caps the number of repos surfaced in enrichment.
@@ -83,22 +94,23 @@ type ScoreService struct {
 	ossf     OSSFFetcher          // nil-safe; repo OSSF Scorecard enrichment omitted when nil
 	npm      NPMFetcher           // nil-safe; npm publisher enrichment omitted when nil
 	so       StackOverflowFetcher // nil-safe; SO enrichment omitted when nil
+	forges   ForgesFetcher        // nil-safe; cross-VCS enrichment omitted when nil
 	cache    *scoreCache
 	claude   *claude.Client // nil = fallback to templates
 	version  string         // DevTrace build version stamped on every response
 }
 
 // NewScoreService returns a ScoreService wired to the given GitHub client.
-// The OSSF Scorecard, npm publisher, and Stack Overflow fetchers are
-// initialized to defaults; pass SetOSSFFetcher / SetNPMFetcher /
-// SetStackOverflowFetcher to override (e.g., a test mock or to
-// disable entirely).
+// The OSSF Scorecard, npm publisher, Stack Overflow, and forges fetchers
+// are initialized to defaults; pass the matching SetXxxFetcher methods
+// to override (e.g., test mocks or to disable a fetcher entirely).
 func NewScoreService(gh ghclient.Client, version string) *ScoreService {
 	return &ScoreService{
 		gh:      gh,
 		ossf:    ossf.NewClient(config.OSSFTimeout()),
 		npm:     registry.NewNPMClient(config.PublisherTimeout()),
 		so:      stackoverflow.NewClient(config.StackOverflowTimeout(), config.StackOverflowAPIKey()),
+		forges:  forges.NewClient(config.CrossVCSTimeout()),
 		cache:   newScoreCache(),
 		version: version,
 	}
@@ -139,6 +151,12 @@ func (s *ScoreService) SetNPMFetcher(f NPMFetcher) {
 // client. Pass nil to disable SO enrichment entirely.
 func (s *ScoreService) SetStackOverflowFetcher(f StackOverflowFetcher) {
 	s.so = f
+}
+
+// SetForgesFetcher overrides the default forges client. Pass nil
+// to disable cross-VCS enrichment entirely.
+func (s *ScoreService) SetForgesFetcher(f ForgesFetcher) {
+	s.forges = f
 }
 
 // Score fetches signals, computes a reputation score, and builds a plan-aware response.
@@ -304,16 +322,17 @@ func enrichForPlan(full *model.ScoreResponse, planName string) *model.ScoreRespo
 			resp.AISensing = &model.AISensing{}
 		}
 		// Email extraction, security credits, OSSF Scorecard,
-		// publisher detection, and Stack Overflow are Starter+.
-		// Emails are gated to deter scraping; the others are
-		// paid-tier upgrade hooks (repo-quality, credibility,
-		// supply-chain, and cross-platform reputation signals).
+		// publisher detection, and Stack Overflow are Starter+;
+		// CrossVCS is Pro-only (T1 cryptographic identity is the
+		// strongest signal and reserved as the top-tier hook).
+		// Emails are gated to deter scraping.
 		if resp.Enrichment != nil {
 			resp.Enrichment.Emails = nil
 			resp.Enrichment.SecurityCredits = nil
 			resp.Enrichment.OSSFScorecard = nil
 			resp.Enrichment.Publisher = nil
 			resp.Enrichment.StackOverflow = nil
+			resp.Enrichment.CrossVCS = nil
 		}
 
 	case plan.PlanStarter:
@@ -323,6 +342,10 @@ func enrichForPlan(full *model.ScoreResponse, planName string) *model.ScoreRespo
 			resp.AISensing.Behavioral = nil // Tier 2 is Pro only
 		} else {
 			resp.AISensing = &model.AISensing{}
+		}
+		// CrossVCS is Pro-only — strip on Starter.
+		if resp.Enrichment != nil {
+			resp.Enrichment.CrossVCS = nil
 		}
 
 	case plan.PlanPro:
@@ -378,6 +401,7 @@ func buildScopeInfo(hasRepo bool) *model.ScopeInfo {
 		"enrichment.security_credits",
 		"enrichment.publisher",
 		"enrichment.stack_overflow",
+		"enrichment.cross_vcs",
 	}
 	repoScoped := []string{}
 	if hasRepo {
@@ -559,7 +583,19 @@ func deepCopyEnrichment(src *model.Enrichment) *model.Enrichment {
 	dst.OSSFScorecard = copyOSSFScorecard(src.OSSFScorecard)
 	dst.Publisher = copyPublisher(src.Publisher)
 	dst.StackOverflow = copyStackOverflow(src.StackOverflow)
+	dst.CrossVCS = copyCrossVCS(src.CrossVCS)
 	return &dst
+}
+
+func copyCrossVCS(src *model.CrossVCS) *model.CrossVCS {
+	if src == nil {
+		return nil
+	}
+	cv := *src
+	if src.Matches != nil {
+		cv.Matches = append([]model.ForgeMatch(nil), src.Matches...)
+	}
+	return &cv
 }
 
 func copyOwnedRepos(src *model.OwnedRepos) *model.OwnedRepos {
@@ -705,10 +741,111 @@ func (s *ScoreService) buildEnrichment(ctx context.Context, username, repo strin
 		populated = true
 	}
 
+	if cv := s.crossVCSEnrichment(ctx, username); cv != nil {
+		enr.CrossVCS = cv
+		populated = true
+	}
+
 	if !populated {
 		return nil
 	}
 	return enr
+}
+
+// crossVCSEnrichment compares the contributor's GitHub SSH key
+// fingerprints against their published keys on other forges (GitLab,
+// Codeberg, Sourcehut). A match means the same private key signs
+// operations on multiple forges — T1 cryptographic confidence, the
+// strongest cross-platform identity signal we can attest.
+//
+// Failure isolation: per-forge fetch failures are logged at WARN
+// and the forge is silently dropped from this run. A working forge
+// shouldn't be hidden because another one is down. Username is
+// assumed to match across forges (v1 limitation).
+//
+// Returns nil when no shared keys are found; the storage layer
+// records a sentinel so the TTL check suppresses re-asking. UI
+// render path treats nil / empty Matches as "no cross-VCS data".
+func (s *ScoreService) crossVCSEnrichment(ctx context.Context, username string) *model.CrossVCS {
+	if s.behStore == nil || s.forges == nil {
+		return nil
+	}
+	provider := string(model.ProviderGitHub)
+
+	cached, fetchedAt, err := s.behStore.GetCrossVCS(ctx, provider, username)
+	if err == nil && !fetchedAt.IsZero() && time.Since(fetchedAt) < config.CrossVCSTTL() {
+		return materializeCrossVCS(cached)
+	}
+
+	ghFingerprints, ferr := s.forges.FetchSSHFingerprints(ctx, forges.GitHub, username)
+	if ferr != nil {
+		// No GitHub keys means no anchor; can't compute matches.
+		// Log but don't error (other enrichment runs alongside).
+		slog.Warn("fetch github keys for cross-vcs",
+			"username", username, "error", ferr)
+		return materializeCrossVCS(cached)
+	}
+	if len(ghFingerprints) == 0 {
+		// User has no GitHub keys → cannot match anything. Save
+		// sentinel so TTL suppresses re-asking until they publish keys.
+		empty := &model.CrossVCS{}
+		if err := s.behStore.SaveCrossVCS(ctx, provider, username, empty); err != nil {
+			slog.Warn("save cross_vcs no-anchor sentinel",
+				"username", username, "error", err)
+		}
+		return nil
+	}
+	ghSet := make(map[string]bool, len(ghFingerprints))
+	for _, fp := range ghFingerprints {
+		ghSet[fp] = true
+	}
+
+	matches := make([]model.ForgeMatch, 0, len(forges.SupportedForges()))
+	for _, forge := range forges.SupportedForges() {
+		fps, err := s.forges.FetchSSHFingerprints(ctx, forge, username)
+		if errors.Is(err, forges.ErrNotFound) {
+			continue // user simply doesn't have an account on this forge
+		}
+		if err != nil {
+			slog.Warn("fetch forge keys for cross-vcs",
+				"forge", forge, "username", username, "error", err)
+			continue
+		}
+		matched := 0
+		for _, fp := range fps {
+			if ghSet[fp] {
+				matched++
+			}
+		}
+		if matched == 0 {
+			continue // forge has keys but none shared with GitHub
+		}
+		matches = append(matches, model.ForgeMatch{
+			Forge:       string(forge),
+			URL:         forges.ProfileURL(forge, username),
+			KeyCount:    len(fps),
+			MatchedKeys: matched,
+		})
+	}
+
+	out := &model.CrossVCS{
+		Matches:      matches,
+		TotalMatched: len(matches),
+	}
+	if err := s.behStore.SaveCrossVCS(ctx, provider, username, out); err != nil {
+		slog.Warn("save cross_vcs", "username", username, "error", err)
+	}
+	return materializeCrossVCS(out)
+}
+
+// materializeCrossVCS converts a cached row into a renderable
+// result. An empty Matches slice (the sentinel for "no shared
+// keys") collapses to nil so the UI render path falls through.
+func materializeCrossVCS(card *model.CrossVCS) *model.CrossVCS {
+	if card == nil || len(card.Matches) == 0 {
+		return nil
+	}
+	return card
 }
 
 // stackOverflowEnrichment surfaces the contributor's Stack Overflow

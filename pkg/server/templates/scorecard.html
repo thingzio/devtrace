@@ -286,6 +286,22 @@
   </section>
   {{end}}{{end}}
 
+  {{with .CrossVCS}}{{if .Matches}}
+  <section class="enrichment-section enrichment-cross-vcs">
+    <h2>Cross-Platform Identity <span class="plan-badge">Pro</span> <span class="scope-badge scope-badge-global">Global</span></h2>
+    <p class="metric-desc" style="margin-bottom:0.75rem;">Forges where the contributor publishes the same SSH public key as on GitHub. Same private key signs operations on multiple platforms &mdash; T1 cryptographic confidence, the strongest cross-platform identity signal available. Same handle assumed across forges.</p>
+    <ul class="enrichment-list">
+      {{range .Matches}}
+      <li>
+        <span class="platform-badge">{{.Forge}}</span>
+        <a href="{{.URL}}" target="_blank" rel="noopener">{{.URL}}</a>
+        <span class="item-meta">{{.MatchedKeys}} of {{.KeyCount}} key{{if ne .KeyCount 1}}s{{end}} matches GitHub</span>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}{{end}}
+
   {{if or .LinkedAccounts .Emails}}
   <section class="enrichment-section enrichment-linked">
     <h2>Linked Accounts <span class="scope-badge scope-badge-global">Global</span></h2>

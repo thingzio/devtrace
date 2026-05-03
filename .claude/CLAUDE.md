@@ -184,6 +184,8 @@ Data flow: GitHub App webhook → tenant repos → background ingest worker → 
 - `DEVTRACE_SO_TTL` — Stack Overflow profile cache freshness (Go duration, default 168h)
 - `DEVTRACE_SO_TIMEOUT` — per-call timeout for the Stack Exchange Data API client (Go duration, default 10s)
 - `DEVTRACE_SO_API_KEY` — optional Stack Exchange API key; lifts unauthenticated 300/day per-IP quota to 10000/day
+- `DEVTRACE_CROSS_VCS_TTL` — cross-VCS fingerprint-match cache freshness (Go duration, default 168h)
+- `DEVTRACE_CROSS_VCS_TIMEOUT` — per-call timeout for the forges (.keys) client (Go duration, default 10s)
 - `ANTHROPIC_API_KEY` — optional, enables AI risk sensing
 - `SEND_API_KEY` — email service API key (enables contact form on help page)
 - `SUPPORT_EMAIL` — support email address for contact form

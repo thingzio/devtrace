@@ -211,6 +211,13 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 				CreatedAt:   &created,
 			}
 		}(),
+		CrossVCS: &model.CrossVCS{
+			TotalMatched: 2,
+			Matches: []model.ForgeMatch{
+				{Forge: "gitlab", URL: "https://gitlab.com/jane", KeyCount: 3, MatchedKeys: 2},
+				{Forge: "codeberg", URL: "https://codeberg.org/jane", KeyCount: 1, MatchedKeys: 1},
+			},
+		},
 	}
 
 	data := scorecardTestData(enrichment)
@@ -264,6 +271,11 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 		"Stack Overflow", "Jon Skeet",
 		"Sep 2008", // CreatedAt formatted as "Member Since"
 		"https://stackoverflow.com/users/22656/jon-skeet",
+		// Cross-VCS T1 fingerprint matches
+		"Cross-Platform Identity",
+		">gitlab<", ">codeberg<",
+		"https://gitlab.com/jane", "https://codeberg.org/jane",
+		"2 of 3 keys matches GitHub",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(body, want) {
@@ -291,7 +303,12 @@ func TestScorecardWithoutEnrichmentRenders(t *testing.T) {
 	}
 	body := rec.Body.String()
 	// The enrichment headings must NOT appear when no data is provided.
-	for _, mustNotContain := range []string{">Activity ", "Reciprocity", "Owned Repositories", "Linked Accounts", "Security Credits", "OSSF Scorecard", "Package Publisher", "Stack Overflow"} {
+	mustNotRender := []string{
+		">Activity ", "Reciprocity", "Owned Repositories", "Linked Accounts",
+		"Security Credits", "OSSF Scorecard", "Package Publisher",
+		"Stack Overflow", "Cross-Platform Identity",
+	}
+	for _, mustNotContain := range mustNotRender {
 		if strings.Contains(body, mustNotContain) {
 			t.Errorf("scorecard rendered %q despite nil Enrichment", mustNotContain)
 		}

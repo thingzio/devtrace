@@ -157,6 +157,28 @@ func StackOverflowAPIKey() string {
 	return GetEnv("DEVTRACE_SO_API_KEY", "")
 }
 
+const (
+	// defaultCrossVCSTTL is the freshness window for cached cross-VCS
+	// match summaries. Public SSH keys change infrequently and a
+	// match across forges is durable — a week is plenty.
+	defaultCrossVCSTTL = 7 * 24 * time.Hour
+
+	// defaultCrossVCSTimeout bounds a single forge `.keys` HTTP call.
+	defaultCrossVCSTimeout = 10 * time.Second
+)
+
+// CrossVCSTTL returns the freshness window for cached cross-VCS
+// match summaries. Override via DEVTRACE_CROSS_VCS_TTL.
+func CrossVCSTTL() time.Duration {
+	return GetEnvAsDuration("DEVTRACE_CROSS_VCS_TTL", defaultCrossVCSTTL)
+}
+
+// CrossVCSTimeout returns the per-call timeout for the forges client.
+// Override via DEVTRACE_CROSS_VCS_TIMEOUT.
+func CrossVCSTimeout() time.Duration {
+	return GetEnvAsDuration("DEVTRACE_CROSS_VCS_TIMEOUT", defaultCrossVCSTimeout)
+}
+
 // GetEnvAsDuration parses the env var as a Go duration; falls back to
 // the default on absent or invalid values.
 func GetEnvAsDuration(key string, fallback time.Duration) time.Duration {

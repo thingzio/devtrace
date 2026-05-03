@@ -11,6 +11,13 @@
   <div style="max-width:700px;margin:0 auto">
 
     <div class="landing-feature" style="margin-bottom:24px">
+      <h3>May 3, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.26</span></h3>
+      <ul>
+        <li><strong>Cross-platform identity (Pro)</strong> &mdash; the scorecard now surfaces forges where the contributor publishes the same SSH public key as on GitHub: GitLab, Codeberg, Sourcehut. Same private key signs operations on multiple platforms, so this is T1 cryptographic confidence &mdash; the strongest cross-platform identity signal available, far stronger than declared-link or username matches. Same handle assumed across forges (v1 limitation). Bitbucket has no public keys endpoint; GPG fingerprint matching deferred. Cached weekly.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:24px">
       <h3>May 3, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.25</span></h3>
       <ul>
         <li><strong>Stack Overflow reputation (Starter+)</strong> &mdash; when the contributor's GitHub bio or blog declares a <code>stackoverflow.com/users/{id}</code> link, the scorecard now surfaces their SO reputation, badge counts (gold / silver / bronze), and account age. Cross-platform credibility signal at T2 confidence (declared link). Cached weekly to stay well under the SE Data API's 300/day per-IP quota; optional <code>DEVTRACE_SO_API_KEY</code> lifts that to 10000/day.</li>

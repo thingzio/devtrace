@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/thingzio/devtrace/pkg/config"
+	"github.com/thingzio/devtrace/pkg/forges"
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/model"
 	"github.com/thingzio/devtrace/pkg/ossf"
@@ -41,6 +42,10 @@ type mockBehaviorStore struct {
 	soProfile   *model.StackOverflow
 	soFetchedAt time.Time
 	savedSO     *model.StackOverflow
+
+	crossVCS          *model.CrossVCS
+	crossVCSFetchedAt time.Time
+	savedCrossVCS     *model.CrossVCS
 }
 
 func (m *mockBehaviorStore) GetBehavioralSignals(_ context.Context, _, _ string) (*model.Behavior, error) {
@@ -98,6 +103,15 @@ func (m *mockBehaviorStore) GetStackOverflowProfile(_ context.Context, _, _ stri
 
 func (m *mockBehaviorStore) SaveStackOverflowProfile(_ context.Context, _, _ string, profile *model.StackOverflow) error {
 	m.savedSO = profile
+	return nil
+}
+
+func (m *mockBehaviorStore) GetCrossVCS(_ context.Context, _, _ string) (*model.CrossVCS, time.Time, error) {
+	return m.crossVCS, m.crossVCSFetchedAt, nil
+}
+
+func (m *mockBehaviorStore) SaveCrossVCS(_ context.Context, _, _ string, summary *model.CrossVCS) error {
+	m.savedCrossVCS = summary
 	return nil
 }
 
@@ -1421,6 +1435,220 @@ func TestStackOverflowStrippedForFree(t *testing.T) {
 			has := resp.Enrichment.StackOverflow != nil
 			if has != tc.wantSet {
 				t.Errorf("plan=%s SO present=%v, want %v", tc.plan, has, tc.wantSet)
+			}
+		})
+	}
+}
+
+// mockForges implements service.ForgesFetcher for testing the
+// cross-VCS enrichment path. Per-forge stubs let tests express
+// "GitHub returns these fingerprints, GitLab returns those, the
+// rest are 404."
+type mockForges struct {
+	byForge map[forges.Forge][]string
+	errBy   map[forges.Forge]error
+	calls   int
+}
+
+func (m *mockForges) FetchSSHFingerprints(_ context.Context, forge forges.Forge, _ string) ([]string, error) {
+	m.calls++
+	if err, ok := m.errBy[forge]; ok {
+		return nil, err
+	}
+	return m.byForge[forge], nil
+}
+
+// TestCrossVCSEnrichmentMatchesAcrossForges: keys overlap with
+// GitHub on two forges → both surface as ForgeMatch entries.
+func TestCrossVCSEnrichmentMatchesAcrossForges(t *testing.T) {
+	const fp1 = "SHA256:aaa"
+	const fp2 = "SHA256:bbb"
+	const fp3 = "SHA256:ccc"
+	store := &mockBehaviorStore{}
+	mc := &mockForges{
+		byForge: map[forges.Forge][]string{
+			forges.GitHub:    {fp1, fp2},
+			forges.GitLab:    {fp1, fp3}, // fp1 matches GitHub; fp3 is GL-only (work key)
+			forges.Codeberg:  {fp2},      // fp2 matches GitHub
+			forges.Sourcehut: {fp3},      // none match GitHub
+		},
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetForgesFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "pro", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment == nil || resp.Enrichment.CrossVCS == nil {
+		t.Fatal("expected CrossVCS in enrichment")
+	}
+	cv := resp.Enrichment.CrossVCS
+	if cv.TotalMatched != 2 {
+		t.Errorf("TotalMatched: got %d, want 2 (gitlab + codeberg)", cv.TotalMatched)
+	}
+	// Sourcehut has fingerprints but none match GitHub → NOT in Matches.
+	for _, m := range cv.Matches {
+		if m.Forge == "sourcehut" {
+			t.Error("sourcehut should not appear (no matching keys)")
+		}
+	}
+	// Verify per-forge counts.
+	want := map[string]struct{ keyCount, matched int }{
+		"gitlab":   {2, 1},
+		"codeberg": {1, 1},
+	}
+	for _, m := range cv.Matches {
+		w, ok := want[m.Forge]
+		if !ok {
+			t.Errorf("unexpected forge: %s", m.Forge)
+			continue
+		}
+		if m.KeyCount != w.keyCount || m.MatchedKeys != w.matched {
+			t.Errorf("%s: got %+v, want keyCount=%d matched=%d",
+				m.Forge, m, w.keyCount, w.matched)
+		}
+	}
+}
+
+// TestCrossVCSEnrichmentNoGitHubKeysSavesSentinel: contributor has
+// no GitHub SSH keys → no anchor → save zero-match sentinel and
+// return nil.
+func TestCrossVCSEnrichmentNoGitHubKeysSavesSentinel(t *testing.T) {
+	store := &mockBehaviorStore{}
+	mc := &mockForges{
+		byForge: map[forges.Forge][]string{
+			forges.GitHub: {}, // no anchor keys
+		},
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetForgesFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "pro", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment != nil && resp.Enrichment.CrossVCS != nil {
+		t.Errorf("expected nil CrossVCS without anchor keys, got %+v", resp.Enrichment.CrossVCS)
+	}
+	if store.savedCrossVCS == nil {
+		t.Fatal("expected sentinel save when no anchor keys")
+	}
+	if store.savedCrossVCS.TotalMatched != 0 || len(store.savedCrossVCS.Matches) != 0 {
+		t.Errorf("sentinel shape: %+v", store.savedCrossVCS)
+	}
+}
+
+// TestCrossVCSEnrichmentForgeNotFoundIgnored: a forge returning
+// ErrNotFound (user has no account there) is silently skipped;
+// other forges' matches still surface.
+func TestCrossVCSEnrichmentForgeNotFoundIgnored(t *testing.T) {
+	store := &mockBehaviorStore{}
+	mc := &mockForges{
+		byForge: map[forges.Forge][]string{
+			forges.GitHub: {"SHA256:X"},
+			forges.GitLab: {"SHA256:X"},
+		},
+		errBy: map[forges.Forge]error{
+			forges.Codeberg:  forges.ErrNotFound,
+			forges.Sourcehut: forges.ErrNotFound,
+		},
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetForgesFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "pro", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment == nil || resp.Enrichment.CrossVCS == nil {
+		t.Fatal("expected CrossVCS with the one forge that matches")
+	}
+	if resp.Enrichment.CrossVCS.TotalMatched != 1 {
+		t.Errorf("expected 1 match (gitlab), got %d", resp.Enrichment.CrossVCS.TotalMatched)
+	}
+}
+
+// TestCrossVCSEnrichmentCacheHit: fresh cached row → no upstream
+// fetches.
+func TestCrossVCSEnrichmentCacheHit(t *testing.T) {
+	cached := &model.CrossVCS{
+		TotalMatched: 1,
+		Matches:      []model.ForgeMatch{{Forge: "gitlab", MatchedKeys: 1, KeyCount: 1}},
+	}
+	store := &mockBehaviorStore{
+		crossVCS:          cached,
+		crossVCSFetchedAt: time.Now().Add(-1 * time.Hour),
+	}
+	mc := &mockForges{} // would error on any actual call (empty maps)
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetForgesFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "pro", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment == nil || resp.Enrichment.CrossVCS == nil {
+		t.Fatal("expected cached CrossVCS")
+	}
+	if mc.calls != 0 {
+		t.Errorf("expected 0 forge calls on cache hit, got %d", mc.calls)
+	}
+}
+
+// TestCrossVCSPlanGating: CrossVCS is Pro-only — Free and Starter
+// strip the block; Pro retains it.
+func TestCrossVCSPlanGating(t *testing.T) {
+	store := &mockBehaviorStore{
+		crossVCS: &model.CrossVCS{
+			TotalMatched: 1,
+			Matches:      []model.ForgeMatch{{Forge: "gitlab", MatchedKeys: 1, KeyCount: 1}},
+		},
+		crossVCSFetchedAt: time.Now().Add(-1 * time.Hour),
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetForgesFetcher(&mockForges{})
+
+	tests := []struct {
+		plan    string
+		wantSet bool
+	}{
+		{"free", false},
+		{"starter", false}, // Pro-only — stricter than other Starter+ blocks
+		{"pro", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.plan, func(t *testing.T) {
+			resp, err := svc.Score(context.Background(), "testuser", "", tc.plan, nil)
+			if err != nil {
+				t.Fatalf("score: %v", err)
+			}
+			if resp.Enrichment == nil {
+				t.Fatal("expected enrichment block")
+			}
+			has := resp.Enrichment.CrossVCS != nil
+			if has != tc.wantSet {
+				t.Errorf("plan=%s CrossVCS present=%v, want %v", tc.plan, has, tc.wantSet)
 			}
 		})
 	}

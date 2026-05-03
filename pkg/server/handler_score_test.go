@@ -159,6 +159,14 @@ func (s *stubBehaviorStore) SaveStackOverflowProfile(_ context.Context, _, _ str
 	return nil
 }
 
+func (s *stubBehaviorStore) GetCrossVCS(_ context.Context, _, _ string) (*model.CrossVCS, time.Time, error) {
+	return nil, time.Time{}, nil
+}
+
+func (s *stubBehaviorStore) SaveCrossVCS(_ context.Context, _, _ string, _ *model.CrossVCS) error {
+	return nil
+}
+
 func TestScoreHandlerEnrichmentByPlan(t *testing.T) {
 	mock := &mockGH{
 		profile: &ghclient.UserProfile{Username: "testuser", PublicRepos: 5, Followers: 10},

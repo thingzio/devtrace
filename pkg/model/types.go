@@ -54,6 +54,34 @@ type Enrichment struct {
 	OSSFScorecard       *OSSFScorecard     `json:"ossf_scorecard,omitempty"`
 	Publisher           *Publisher         `json:"publisher,omitempty"`
 	StackOverflow       *StackOverflow     `json:"stack_overflow,omitempty"`
+	CrossVCS            *CrossVCS          `json:"cross_vcs,omitempty"`
+}
+
+// CrossVCS records cross-platform identity matches anchored on
+// shared SSH public-key fingerprints. T1 cryptographic confidence:
+// the same private key signs operations on multiple forges, which
+// is far stronger than declared-link or username-collision matches.
+//
+// Only forges where at least one fingerprint is shared with the
+// contributor's GitHub keys appear in Matches. Forges in scope for
+// v1: GitLab, Codeberg, Sourcehut. Bitbucket has no public keys
+// endpoint; GPG fingerprints are deferred (needs OpenPGP parsing).
+type CrossVCS struct {
+	Matches      []ForgeMatch `json:"matches,omitempty"`
+	TotalMatched int          `json:"total_matched"`
+}
+
+// ForgeMatch is a single forge with at least one SSH-fingerprint
+// match against the contributor's GitHub keys. KeyCount is the
+// total keys published at that forge for the user; MatchedKeys is
+// the subset that also appears on GitHub. KeyCount can exceed
+// MatchedKeys (the user has work-only keys on the forge that
+// aren't shared with GitHub) but MatchedKeys >= 1 is the T1 anchor.
+type ForgeMatch struct {
+	Forge       string `json:"forge"`
+	URL         string `json:"url"`
+	KeyCount    int    `json:"key_count"`
+	MatchedKeys int    `json:"matched_keys"`
 }
 
 // StackOverflow surfaces the contributor's Stack Overflow presence as
