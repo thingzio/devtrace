@@ -14,14 +14,23 @@ import (
 )
 
 // InstallationClient implements Client using GitHub App installation tokens.
-// Tokens are cached and auto-refreshed before expiry.
+// Tokens are cached and auto-refreshed before expiry. Mint operations are
+// serialized through a separate mint mutex so concurrent requesters block
+// at most one minter — the data mutex (RWMutex) stays free for readers.
 type InstallationClient struct {
 	appCfg         *tenant.GitHubAppConfig
 	installationID int64
 
-	mu        sync.Mutex
+	mu        sync.RWMutex
 	token     string
 	expiresAt time.Time
+
+	// mintMu serializes mint operations without holding the data mutex
+	// across the network call. Concurrent goroutines that arrive at a
+	// stale token coalesce on this lock; the first to acquire it mints,
+	// stores, and releases — peers re-check under read lock and skip
+	// minting if the freshly-stored token is now usable.
+	mintMu sync.Mutex
 }
 
 // NewInstallationClient returns a Client backed by auto-refreshing installation tokens.
@@ -35,12 +44,18 @@ func NewInstallationClient(cfg *tenant.GitHubAppConfig, installationID int64) *I
 // ghClient returns a go-github client with a valid installation token.
 // Mints a new token if the cached one is expired or about to expire (5 min buffer).
 func (c *InstallationClient) ghClient(ctx context.Context) (*gh.Client, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	if token, ok := c.cachedTokenIfFresh(); ok {
+		return c.buildClient(ctx, token), nil
+	}
 
-	if c.token != "" && time.Now().Add(5*time.Minute).Before(c.expiresAt) {
-		ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: c.token})
-		return gh.NewClient(oauth2.NewClient(ctx, ts)), nil
+	// Serialize minters; under load, all goroutines that arrived at a
+	// stale token funnel here. The first holder mints; subsequent
+	// holders re-check and short-circuit.
+	c.mintMu.Lock()
+	defer c.mintMu.Unlock()
+
+	if token, ok := c.cachedTokenIfFresh(); ok {
+		return c.buildClient(ctx, token), nil
 	}
 
 	slog.Debug("minting new installation token", "installation_id", c.installationID)
@@ -50,11 +65,26 @@ func (c *InstallationClient) ghClient(ctx context.Context) (*gh.Client, error) {
 		return nil, fmt.Errorf("mint installation token: %w", err)
 	}
 
+	c.mu.Lock()
 	c.token = it.Token
 	c.expiresAt = it.ExpiresAt
+	c.mu.Unlock()
 
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: c.token})
-	return gh.NewClient(oauth2.NewClient(ctx, ts)), nil
+	return c.buildClient(ctx, it.Token), nil
+}
+
+func (c *InstallationClient) cachedTokenIfFresh() (string, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.token != "" && time.Now().Add(5*time.Minute).Before(c.expiresAt) {
+		return c.token, true
+	}
+	return "", false
+}
+
+func (c *InstallationClient) buildClient(ctx context.Context, token string) *gh.Client {
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
+	return gh.NewClient(oauth2.NewClient(ctx, ts))
 }
 
 // FetchUser retrieves a GitHub user profile.

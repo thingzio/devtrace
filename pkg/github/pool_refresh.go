@@ -14,12 +14,17 @@ const (
 // RefreshFunc loads current installations and returns pool entries.
 type RefreshFunc func(ctx context.Context) ([]PoolEntry, error)
 
+// DroppedTokenObserver is called with the set of tokens dropped from the
+// pool on each refresh, so per-token caches (e.g., PoolClient's *gh.Client
+// memoization) can be invalidated. Optional — nil is safe.
+type DroppedTokenObserver func(tokens []string)
+
 // StartPoolRefresh runs a background goroutine that refreshes the token pool
 // when tokens are near expiry or when signaled via notifyCh.
 // Pass tickInterval=0 to use the default (1 minute).
 // Returns a stop function that cancels the goroutine and waits for it to exit.
 func StartPoolRefresh(ctx context.Context, pool *TokenPool, refreshFn RefreshFunc,
-	notifyCh <-chan struct{}, tickInterval time.Duration) func() {
+	notifyCh <-chan struct{}, tickInterval time.Duration, onDropped DroppedTokenObserver) func() {
 	if tickInterval == 0 {
 		tickInterval = defaultRefreshInterval
 	}
@@ -29,7 +34,7 @@ func StartPoolRefresh(ctx context.Context, pool *TokenPool, refreshFn RefreshFun
 
 	go func() {
 		defer close(done)
-		runRefreshLoop(ctx, pool, refreshFn, notifyCh, tickInterval)
+		runRefreshLoop(ctx, pool, refreshFn, notifyCh, tickInterval, onDropped)
 	}()
 
 	return func() {
@@ -39,7 +44,7 @@ func StartPoolRefresh(ctx context.Context, pool *TokenPool, refreshFn RefreshFun
 }
 
 func runRefreshLoop(ctx context.Context, pool *TokenPool, refreshFn RefreshFunc,
-	notifyCh <-chan struct{}, tickInterval time.Duration) {
+	notifyCh <-chan struct{}, tickInterval time.Duration, onDropped DroppedTokenObserver) {
 	ticker := time.NewTicker(tickInterval)
 	defer ticker.Stop()
 
@@ -56,15 +61,15 @@ func runRefreshLoop(ctx context.Context, pool *TokenPool, refreshFn RefreshFunc,
 			return
 		case <-ticker.C:
 			if pool.NeedsRefresh() {
-				doRefresh(ctx, pool, refreshFn, &lastRefresh)
+				doRefresh(ctx, pool, refreshFn, &lastRefresh, onDropped)
 			}
 		case <-notifyCh:
-			doRefresh(ctx, pool, refreshFn, &lastRefresh)
+			doRefresh(ctx, pool, refreshFn, &lastRefresh, onDropped)
 		}
 	}
 }
 
-func doRefresh(ctx context.Context, pool *TokenPool, refreshFn RefreshFunc, lastRefresh *time.Time) {
+func doRefresh(ctx context.Context, pool *TokenPool, refreshFn RefreshFunc, lastRefresh *time.Time, onDropped DroppedTokenObserver) {
 	if time.Since(*lastRefresh) < refreshDedup {
 		slog.Debug("pool refresh deduped", "last_refresh", lastRefresh)
 		return
@@ -80,7 +85,10 @@ func doRefresh(ctx context.Context, pool *TokenPool, refreshFn RefreshFunc, last
 		return
 	}
 
-	pool.Replace(entries)
+	dropped := pool.Replace(entries)
+	if onDropped != nil && len(dropped) > 0 {
+		onDropped(dropped)
+	}
 	*lastRefresh = time.Now()
-	slog.Info("pool refreshed", "entries", len(entries))
+	slog.Info("pool refreshed", "entries", len(entries), "dropped", len(dropped))
 }

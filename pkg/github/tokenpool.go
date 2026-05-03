@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -10,7 +11,10 @@ import (
 	"time"
 )
 
-const tokenResetWindow = 50 * time.Minute // GitHub rate limits reset after 1 hour
+// tokenResetFallback is the default reset window when GitHub does not return
+// a Reset header (or it's malformed). The real cap is 1 hour; we expire a
+// little early so we re-probe before GitHub does.
+const tokenResetFallback = 50 * time.Minute
 
 const tokenExpiryBuffer = 5 * time.Minute
 
@@ -30,17 +34,18 @@ type poolEntry struct {
 }
 
 // TokenPool manages a pool of GitHub API tokens using round-robin selection.
-// Thread-safe. Supports marking tokens as exhausted after rate limit errors.
-// Exhausted tokens auto-reset after the rate limit window (1 hour).
+// Thread-safe. Supports marking tokens as exhausted after rate limit errors;
+// each exhaustion records the actual reset time GitHub returned (or a
+// fallback) so the token only re-enters rotation when it is genuinely usable.
 // Adapted from DevPulse pkg/data/ghutil/tokenpool.go.
 type TokenPool struct {
-	mu          sync.Mutex
-	entries     []poolEntry
-	counts      []int
-	exhausted   []bool
-	exhaustedAt []time.Time
-	current     int
-	refreshCh   chan<- struct{} // optional; signaled when a near-expiry token is selected
+	mu             sync.Mutex
+	entries        []poolEntry
+	counts         []int
+	exhausted      []bool
+	exhaustedUntil []time.Time
+	current        int
+	refreshCh      chan<- struct{} // optional; signaled when a near-expiry token is selected
 }
 
 // NewTokenPool creates a pool from one or more tokens. Tokens can be passed
@@ -56,10 +61,10 @@ func NewTokenPool(tokens ...string) *TokenPool {
 		}
 	}
 	return &TokenPool{
-		entries:     list,
-		counts:      make([]int, len(list)),
-		exhausted:   make([]bool, len(list)),
-		exhaustedAt: make([]time.Time, len(list)),
+		entries:        list,
+		counts:         make([]int, len(list)),
+		exhausted:      make([]bool, len(list)),
+		exhaustedUntil: make([]time.Time, len(list)),
 	}
 }
 
@@ -75,16 +80,21 @@ func NewTokenPoolFromEntries(entries []PoolEntry) *TokenPool {
 		}
 	}
 	return &TokenPool{
-		entries:     list,
-		counts:      make([]int, len(list)),
-		exhausted:   make([]bool, len(list)),
-		exhaustedAt: make([]time.Time, len(list)),
+		entries:        list,
+		counts:         make([]int, len(list)),
+		exhausted:      make([]bool, len(list)),
+		exhaustedUntil: make([]time.Time, len(list)),
 	}
 }
 
-// Replace atomically swaps the pool entries. Resets cursor, counts, and exhaustion state.
-func (p *TokenPool) Replace(entries []PoolEntry) {
+// Replace atomically swaps the pool entries. Resets cursor, counts, and
+// exhaustion state. Returns the set of token strings that were dropped so
+// callers can invalidate any per-token caches (e.g., PoolClient's *gh.Client
+// memoization). The returned slice contains only tokens that no longer
+// appear in the new entries — tokens that survived the swap stay valid.
+func (p *TokenPool) Replace(entries []PoolEntry) []string {
 	pe := make([]poolEntry, len(entries))
+	survivors := make(map[string]bool, len(entries))
 	for i, e := range entries {
 		pe[i] = poolEntry{
 			installationID: e.InstallationID,
@@ -92,16 +102,25 @@ func (p *TokenPool) Replace(entries []PoolEntry) {
 			token:          e.Token,
 			expiresAt:      e.ExpiresAt,
 		}
+		survivors[e.Token] = true
 	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	var dropped []string
+	for _, old := range p.entries {
+		if !survivors[old.token] {
+			dropped = append(dropped, old.token)
+		}
+	}
+
 	p.entries = pe
 	p.counts = make([]int, len(pe))
 	p.exhausted = make([]bool, len(pe))
-	p.exhaustedAt = make([]time.Time, len(pe))
+	p.exhaustedUntil = make([]time.Time, len(pe))
 	p.current = 0
+	return dropped
 }
 
 // SetRefreshCh sets a channel that Token() will signal (non-blocking) when it
@@ -129,8 +148,8 @@ func (p *TokenPool) Token() string {
 	for range n {
 		idx := p.current
 		p.current = (idx + 1) % n
-		// Auto-reset tokens whose rate limit window has passed.
-		if p.exhausted[idx] && now.Sub(p.exhaustedAt[idx]) > tokenResetWindow {
+		// Auto-reset tokens whose rate-limit reset time has passed.
+		if p.exhausted[idx] && now.After(p.exhaustedUntil[idx]) {
 			p.exhausted[idx] = false
 		}
 		if p.exhausted[idx] {
@@ -154,16 +173,25 @@ func (p *TokenPool) Token() string {
 	return ""
 }
 
-// Exhaust marks the given token as exhausted so Token() skips it.
-func (p *TokenPool) Exhaust(token string) {
+// Exhaust marks the given token as exhausted so Token() skips it until
+// resetAt. A zero resetAt falls back to tokenResetFallback from now; a
+// resetAt in the past is treated as the fallback (defensive against clock
+// skew between this host and GitHub).
+func (p *TokenPool) Exhaust(token string, resetAt time.Time) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	now := time.Now()
+	until := resetAt
+	if until.IsZero() || !until.After(now) {
+		until = now.Add(tokenResetFallback)
+	}
 
 	for i, e := range p.entries {
 		if e.token == token {
 			p.exhausted[i] = true
-			p.exhaustedAt[i] = time.Now()
-			slog.Warn("token exhausted", "label", e.label)
+			p.exhaustedUntil[i] = until
+			slog.Warn("token exhausted", "label", e.label, "until", until.Format(time.RFC3339))
 			return
 		}
 	}
@@ -177,7 +205,7 @@ func (p *TokenPool) ActiveCount() int {
 	now := time.Now()
 	count := 0
 	for i, e := range p.entries {
-		exhausted := p.exhausted[i] && now.Sub(p.exhaustedAt[i]) <= tokenResetWindow
+		exhausted := p.exhausted[i] && !now.After(p.exhaustedUntil[i])
 		expired := !e.expiresAt.IsZero() && now.After(e.expiresAt)
 		if !exhausted && !expired {
 			count++
@@ -228,15 +256,26 @@ func (p *TokenPool) Labels() []string {
 	return labels
 }
 
-// TokenQuota holds rate limit info for a single GitHub API token.
+// TokenQuota holds rate limit info for a single GitHub API token. Limit /
+// Remaining / Reset describe the core (REST) family; the Search* and
+// GraphQL* fields cover the secondary families that the scoring path
+// actually burns through (3 search calls per signal fetch, GraphQL for
+// security credits). Empty values for a family mean GitHub didn't return
+// it (rare; older endpoints).
 type TokenQuota struct {
-	Index          int
-	Label          string
-	InstallationID int64
-	Limit          int
-	Remaining      int
-	Reset          time.Time
-	Error          string
+	Index            int
+	Label            string
+	InstallationID   int64
+	Limit            int
+	Remaining        int
+	Reset            time.Time
+	SearchLimit      int
+	SearchRemaining  int
+	SearchReset      time.Time
+	GraphQLLimit     int
+	GraphQLRemaining int
+	GraphQLReset     time.Time
+	Error            string
 }
 
 // CheckQuotas calls the GitHub rate_limit API for each token in the pool.
@@ -258,17 +297,44 @@ func (p *TokenPool) CheckQuotas(ctx context.Context) []TokenQuota {
 }
 
 // AggregateQuota returns the aggregate remaining percentage and earliest reset
-// time across all tokens. Returns 100 if quotas is empty or all errored.
+// time across all tokens, for the core (REST) rate-limit family. Returns
+// 100 if quotas is empty or all errored.
 func AggregateQuota(quotas []TokenQuota) (pctRemaining int, earliestReset time.Time) {
+	return aggregate(quotas, func(q TokenQuota) (int, int, time.Time) {
+		return q.Limit, q.Remaining, q.Reset
+	})
+}
+
+// AggregateSearchQuota mirrors AggregateQuota for the search-API rate-limit
+// family. The scoring path issues three search calls per contributor
+// (merged/closed/recent PRs) so the search quota is exhausted long before
+// the core quota under load.
+func AggregateSearchQuota(quotas []TokenQuota) (pctRemaining int, earliestReset time.Time) {
+	return aggregate(quotas, func(q TokenQuota) (int, int, time.Time) {
+		return q.SearchLimit, q.SearchRemaining, q.SearchReset
+	})
+}
+
+// AggregateGraphQLQuota mirrors AggregateQuota for the GraphQL rate-limit
+// family. Used by enrichment paths that fetch GHSA security credits.
+func AggregateGraphQLQuota(quotas []TokenQuota) (pctRemaining int, earliestReset time.Time) {
+	return aggregate(quotas, func(q TokenQuota) (int, int, time.Time) {
+		return q.GraphQLLimit, q.GraphQLRemaining, q.GraphQLReset
+	})
+}
+
+func aggregate(quotas []TokenQuota, pick func(TokenQuota) (int, int, time.Time)) (int, time.Time) {
 	var totalLimit, totalRemaining int
+	var earliestReset time.Time
 	for _, q := range quotas {
 		if q.Error != "" {
 			continue
 		}
-		totalLimit += q.Limit
-		totalRemaining += q.Remaining
-		if !q.Reset.IsZero() && (earliestReset.IsZero() || q.Reset.Before(earliestReset)) {
-			earliestReset = q.Reset
+		limit, remaining, reset := pick(q)
+		totalLimit += limit
+		totalRemaining += remaining
+		if !reset.IsZero() && (earliestReset.IsZero() || reset.Before(earliestReset)) {
+			earliestReset = reset
 		}
 	}
 	if totalLimit == 0 {
@@ -291,15 +357,17 @@ func checkTokenRateLimit(ctx context.Context, token string) TokenQuota {
 	if err != nil {
 		return TokenQuota{Error: "rate limit check failed"}
 	}
-	defer resp.Body.Close()
+	defer func() {
+		// Drain any remaining body so the connection can be reused.
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
 
 	var rl struct {
 		Resources struct {
-			Core struct {
-				Limit     int   `json:"limit"`
-				Remaining int   `json:"remaining"`
-				Reset     int64 `json:"reset"`
-			} `json:"core"`
+			Core    rateLimitFamily `json:"core"`
+			Search  rateLimitFamily `json:"search"`
+			GraphQL rateLimitFamily `json:"graphql"`
 		} `json:"resources"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&rl); err != nil {
@@ -308,8 +376,20 @@ func checkTokenRateLimit(ctx context.Context, token string) TokenQuota {
 
 	core := rl.Resources.Core
 	return TokenQuota{
-		Limit:     core.Limit,
-		Remaining: core.Remaining,
-		Reset:     time.Unix(core.Reset, 0).UTC(),
+		Limit:            core.Limit,
+		Remaining:        core.Remaining,
+		Reset:            time.Unix(core.Reset, 0).UTC(),
+		SearchLimit:      rl.Resources.Search.Limit,
+		SearchRemaining:  rl.Resources.Search.Remaining,
+		SearchReset:      time.Unix(rl.Resources.Search.Reset, 0).UTC(),
+		GraphQLLimit:     rl.Resources.GraphQL.Limit,
+		GraphQLRemaining: rl.Resources.GraphQL.Remaining,
+		GraphQLReset:     time.Unix(rl.Resources.GraphQL.Reset, 0).UTC(),
 	}
+}
+
+type rateLimitFamily struct {
+	Limit     int   `json:"limit"`
+	Remaining int   `json:"remaining"`
+	Reset     int64 `json:"reset"`
 }

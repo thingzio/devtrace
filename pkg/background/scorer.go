@@ -108,8 +108,25 @@ func StartBackgroundScorer(ctx context.Context, store *postgres.Store, gh ghclie
 func runContinuousScorer(ctx context.Context, store scorerStore, gh ghclient.Client,
 	qc quotaChecker, version string, batchSize, minQuotaPct, concurrency int) {
 	stats := &scorerStats{}
-	statsTicker := time.NewTicker(5 * time.Minute)
-	defer statsTicker.Stop()
+
+	// Stats reporter runs in its own goroutine so reports fire on a real
+	// schedule even when the main loop is mid-batch or in a sleepCtx.
+	// (The previous select-with-default pattern silently dropped ticks.)
+	reporterDone := make(chan struct{})
+	go func() {
+		defer close(reporterDone)
+		statsTicker := time.NewTicker(5 * time.Minute)
+		defer statsTicker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-statsTicker.C:
+				logScorerStats(ctx, store, stats)
+			}
+		}
+	}()
+	defer func() { <-reporterDone }()
 
 	for {
 		if ctx.Err() != nil {
@@ -120,22 +137,33 @@ func runContinuousScorer(ctx context.Context, store scorerStore, gh ghclient.Cli
 			return
 		}
 
-		// Emit periodic stats (non-blocking check).
-		select {
-		case <-statsTicker.C:
-			logScorerStats(ctx, store, stats)
-		default:
-		}
-
-		// Check quota before each batch.
+		// Check quota before each batch. We gate on whichever family is
+		// most depleted: core (REST), search, or GraphQL. Each scoring
+		// run burns ~3 search calls and 1 GraphQL call per contributor,
+		// so search exhausts long before core under load.
 		if qc != nil {
 			quotas := qc.CheckQuotas(ctx)
-			pct, earliestReset := ghclient.AggregateQuota(quotas)
-			if pct < minQuotaPct {
+			corePct, coreReset := ghclient.AggregateQuota(quotas)
+			searchPct, searchReset := ghclient.AggregateSearchQuota(quotas)
+			graphqlPct, graphqlReset := ghclient.AggregateGraphQLQuota(quotas)
+
+			lowest, family, reset := corePct, "core", coreReset
+			if searchPct < lowest {
+				lowest, family, reset = searchPct, "search", searchReset
+			}
+			if graphqlPct < lowest {
+				lowest, family, reset = graphqlPct, "graphql", graphqlReset
+			}
+
+			if lowest < minQuotaPct {
 				logScorerStats(ctx, store, stats)
-				wait := max(time.Until(earliestReset)+jitter(), time.Minute)
+				wait := max(time.Until(reset)+jitter(), time.Minute)
 				slog.Warn("scorer quota paused",
-					"aggregate_pct", pct,
+					"family", family,
+					"aggregate_pct", lowest,
+					"core_pct", corePct,
+					"search_pct", searchPct,
+					"graphql_pct", graphqlPct,
 					"threshold_pct", minQuotaPct,
 					"resume_in", wait,
 				)
@@ -192,10 +220,16 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client,
 	var wg sync.WaitGroup
 
 	for _, q := range queued {
-		if ctx.Err() != nil {
-			break
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			s, e, h := int(scored.Load()), int(errCount.Load()), int(hints.Load())
+			if stats != nil {
+				stats.record(s, e, h)
+			}
+			return s
+		case sem <- struct{}{}:
 		}
-		sem <- struct{}{}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -261,10 +295,16 @@ func rescoreStale(ctx context.Context, store scorerStore, gh ghclient.Client,
 	var wg sync.WaitGroup
 
 	for _, c := range stale {
-		if ctx.Err() != nil {
-			break
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			s, e := int(scored.Load()), int(errCount.Load())
+			if stats != nil {
+				stats.record(s, e, 0)
+			}
+			return s
+		case sem <- struct{}{}:
 		}
-		sem <- struct{}{}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -364,15 +404,21 @@ func scoreContributor(ctx context.Context, store scorerStore, gh ghclient.Client
 	value := score.Compute(*signals, false, behavior)
 	grade := score.Grade(value)
 
+	// Partial fetches mean one or more sub-calls (search/contrib-stats/
+	// repos) failed — the score is best-effort. Persist with deep=false
+	// so the next ingest tick sees a stale row and re-scores when the
+	// upstream is healthy again.
+	deep := !signals.Partial
+
 	if err := store.UpsertContributor(ctx, username, provider); err != nil {
 		slog.Warn("upsert contributor", "username", username, "error", err)
 	}
 
-	if err := store.SaveScoreHistory(ctx, username, provider, value, grade, true); err != nil {
+	if err := store.SaveScoreHistory(ctx, username, provider, value, grade, deep); err != nil {
 		slog.Warn("save history", "username", username, "error", err)
 	}
 
-	if err := store.UpdateReputation(ctx, username, provider, value, grade, version, true, signals); err != nil {
+	if err := store.UpdateReputation(ctx, username, provider, value, grade, version, deep, signals); err != nil {
 		return fmt.Errorf("update reputation: %w", err)
 	}
 

@@ -254,19 +254,39 @@ func fetchSignals(ctx context.Context, api *gh.Client, username, repo string, hi
 		close(results)
 	}()
 
-	var searchFailed bool
+	var anyFailed bool
+	var searchFamilyFailed int
+	var fatalErr error
 	for r := range results {
 		slog.Warn("partial signal fetch failure",
 			"field", r.field,
 			"username", username,
 			"error", r.err,
 		)
-		searchFailed = true
+		anyFailed = true
+		switch r.field {
+		case "merged_prs", "closed_prs", "recent_prs":
+			searchFamilyFailed++
+		}
+		// If a search call failed because the token was rate limited,
+		// surface that error so the PoolClient retry loop can rotate
+		// tokens. Without this, search-API exhaustion silently degrades
+		// every score until the search quota window resets.
+		if fatalErr == nil && isRateLimited(r.err) {
+			fatalErr = r.err
+		}
+	}
+
+	// All three search calls failed and at least one was rate-limited:
+	// bubble it up so the caller (PoolClient) can rotate to a fresh
+	// token instead of silently caching zeros for this contributor.
+	if searchFamilyFailed == 3 && fatalErr != nil {
+		return nil, fatalErr
 	}
 
 	// When the Search API failed and archive hints are available, use them as a floor.
 	// Partial archive data is better than zero when the API is unreachable.
-	if searchFailed && hints != nil && !hints.Trusted {
+	if anyFailed && hints != nil && !hints.Trusted {
 		if mergedPRs == 0 && hints.PRsMerged > 0 {
 			mergedPRs = hints.PRsMerged
 		}
@@ -277,6 +297,8 @@ func fetchSignals(ctx context.Context, api *gh.Client, username, repo string, hi
 			recentRepos = hints.RecentPRRepoCount
 		}
 	}
+
+	signals.Partial = anyFailed
 
 	signals.PRsMerged = mergedPRs
 	signals.PRsClosed = closedPRs
@@ -318,10 +340,12 @@ func fetchContributorStats(ctx context.Context, api *gh.Client, org, repo, usern
 			return false
 		}
 		wait := time.Duration(2<<attempt) * time.Second
+		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return false
-		case <-time.After(wait):
+		case <-timer.C:
 		}
 	}
 

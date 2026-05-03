@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -249,7 +250,20 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("init store: %w", err)
 	}
-	defer store.Close()
+	defer func() {
+		// Drain fire-and-forget goroutines (persistScore, etc.) before
+		// closing the pool. Without this, a goroutine in flight when
+		// the process receives SIGTERM races against Close and panics
+		// on "use of closed pool". Bounded wait so a stuck goroutine
+		// doesn't block shutdown indefinitely.
+		drainCtx, drainCancel := context.WithTimeout(context.Background(),
+			time.Duration(config.GetEnvAsInt("BACKGROUND_DRAIN_TIMEOUT_SEC", 10))*time.Second)
+		defer drainCancel()
+		if waitErr := store.WaitBackground(drainCtx); waitErr != nil {
+			slog.Warn("background drain timed out", "error", waitErr)
+		}
+		_ = store.Close()
+	}()
 
 	if migrateErr := store.Migrate(ctx); migrateErr != nil {
 		return fmt.Errorf("run migrations: %w", migrateErr)
@@ -267,11 +281,13 @@ func Run(ctx context.Context, opts Options) error {
 		pool = pc.Pool()
 		pool.SetRefreshCh(installNotify)
 
-		// Start background token refresh.
+		// Start background token refresh. When tokens are rotated out of
+		// the pool, drop their cached *gh.Client from PoolClient so the
+		// underlying TLS / connection pool doesn't pin a now-invalid token.
 		appCfg, _ := tenant.LoadGitHubAppConfig()
 		refreshStop := ghclient.StartPoolRefresh(ctx, pool, func(ctx context.Context) ([]ghclient.PoolEntry, error) {
 			return mintPoolEntries(ctx, store, appCfg)
-		}, installNotify, 0)
+		}, installNotify, 0, pc.InvalidateTokens)
 		defer refreshStop()
 	}
 
@@ -318,7 +334,7 @@ func Run(ctx context.Context, opts Options) error {
 	port := config.GetEnv("PORT", "8080")
 	srv := &http.Server{
 		Addr:              net.JoinHostPort("", port),
-		Handler:           securityHeaders(mux),
+		Handler:           recoverPanics(securityHeaders(mux)),
 		ReadTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      60 * time.Second,
@@ -517,14 +533,57 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	return mux, cleanup
 }
 
+// recoverPanics is a top-level middleware that turns a handler panic into
+// a 500 instead of crashing the process. Without it, a single nil-deref in
+// any handler drops every in-flight request, every background worker, and
+// every queued scoring job — Cloud Run respawns but the disruption is
+// avoidable. Logs the panic with stack so the failure is still actionable.
+func recoverPanics(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			rec := recover()
+			if rec == nil {
+				return
+			}
+			// http.ErrAbortHandler is the documented escape hatch for
+			// handlers that want to abruptly terminate the connection
+			// (e.g. websocket hijack); preserve the original panic so
+			// the server framework handles it normally. Compare via
+			// errors.Is in case anything wrapped it on the way up.
+			if errAbort, ok := rec.(error); ok && errors.Is(errAbort, http.ErrAbortHandler) {
+				panic(rec)
+			}
+			slog.Error("handler panic",
+				"path", r.URL.Path,
+				"method", r.Method,
+				"panic", rec,
+				"stack", string(debug.Stack()),
+			)
+			// Best-effort 500. If the response was already partially
+			// written, http.Error will fail silently — that's fine; the
+			// log entry is the durable record.
+			http.Error(w, "internal error", http.StatusInternalServerError)
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
 func securityHeaders(next http.Handler) http.Handler {
 	secure := strings.HasPrefix(os.Getenv("BASE_URL"), "https://")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		// CSP3: split style-src into the strict family (locks down <style>
+		// blocks and <link rel=stylesheet>) and style-src-attr (allows
+		// `style="..."` attributes on elements). Templates render dynamic
+		// values into element-level style attributes (progress widths,
+		// flexible grids); static styles live in app.css. The
+		// attribute-only relaxation removes the broad XSS surface that
+		// `unsafe-inline` on style-src would have created.
 		w.Header().Set("Content-Security-Policy",
-			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
+			"default-src 'self'; script-src 'self'; "+
+				"style-src 'self'; style-src-attr 'unsafe-inline'; "+
 				"img-src 'self' https://avatars.githubusercontent.com data:; "+
 				"connect-src 'self'; frame-ancestors 'none'")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")

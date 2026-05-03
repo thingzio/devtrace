@@ -16,20 +16,9 @@
   {{end}}
 
   {{with .Target}}
-  <style>
-    .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem 1.5rem;margin-bottom:1.5rem;font-size:0.85rem;}
-    .detail-grid dt{color:var(--text-secondary,#8b949e);}
-    .detail-grid dd{margin:0;}
-    .badge-active{display:inline-block;padding:1px 8px;border-radius:10px;font-size:0.75rem;background:rgba(63,185,80,0.15);color:#3fb950;}
-    .badge-suspended{display:inline-block;padding:1px 8px;border-radius:10px;font-size:0.75rem;background:rgba(248,81,73,0.15);color:#f85149;}
-    .icon-ok{color:#3fb950;font-weight:bold;}
-    .icon-warn{color:#f85149;font-weight:bold;}
-    /* .btn-action / .btn-danger now live in app.css so they apply
-       consistently across the admin templates. */
-    .admin-form-row{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;}
-    .admin-form-row label{min-width:60px;font-size:0.85rem;color:var(--text-secondary,#8b949e);}
-    .admin-form-row select{background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:3px;padding:0.15rem 0.3rem;font-size:0.8rem;}
-  </style>
+  {{/* admin badge / icon / detail-grid / admin-form-row styles now live
+       in static/css/app.css so the page CSP can drop 'unsafe-inline'
+       for <style> blocks. */}}
 
   <section class="settings-section">
     <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">

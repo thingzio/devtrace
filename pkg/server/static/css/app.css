@@ -3145,3 +3145,18 @@ section h2 {
     grid-template-columns: 1fr;
   }
 }
+
+/* Admin status badges and icons (moved from inline <style> blocks in
+   admin_tenants.html and admin_tenant_detail.html so the CSP can drop
+   'unsafe-inline' for <style> blocks). */
+.icon-ok{color:#3fb950;font-weight:bold;}
+.icon-no{color:var(--text-secondary,#8b949e);}
+.icon-warn{color:#f85149;font-weight:bold;}
+.badge-active{display:inline-block;padding:1px 8px;border-radius:10px;font-size:0.75rem;background:rgba(63,185,80,0.15);color:#3fb950;}
+.badge-suspended{display:inline-block;padding:1px 8px;border-radius:10px;font-size:0.75rem;background:rgba(248,81,73,0.15);color:#f85149;}
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.5rem 1.5rem;margin-bottom:1.5rem;font-size:0.85rem;}
+.detail-grid dt{color:var(--text-secondary,#8b949e);}
+.detail-grid dd{margin:0;}
+.admin-form-row{display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;}
+.admin-form-row label{min-width:60px;font-size:0.85rem;color:var(--text-secondary,#8b949e);}
+.admin-form-row select{background:var(--page-content-blockColor);color:var(--page-content-txtColor);border:1px solid var(--border-color);border-radius:3px;padding:0.15rem 0.3rem;font-size:0.8rem;}

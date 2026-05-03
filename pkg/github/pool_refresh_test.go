@@ -25,7 +25,7 @@ func TestRefreshOnTimer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stop := StartPoolRefresh(ctx, pool, refreshFn, nil, 50*time.Millisecond)
+	stop := StartPoolRefresh(ctx, pool, refreshFn, nil, 50*time.Millisecond, nil)
 	defer stop()
 
 	time.Sleep(200 * time.Millisecond)
@@ -56,7 +56,7 @@ func TestRefreshOnNotify(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stop := StartPoolRefresh(ctx, pool, refreshFn, notifyCh, time.Hour)
+	stop := StartPoolRefresh(ctx, pool, refreshFn, notifyCh, time.Hour, nil)
 	defer stop()
 
 	notifyCh <- struct{}{}
@@ -85,7 +85,7 @@ func TestRefreshDedup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stop := StartPoolRefresh(ctx, pool, refreshFn, notifyCh, time.Hour)
+	stop := StartPoolRefresh(ctx, pool, refreshFn, notifyCh, time.Hour, nil)
 	defer stop()
 
 	notifyCh <- struct{}{}
@@ -111,7 +111,7 @@ func TestRefreshFailureKeepsOldTokens(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stop := StartPoolRefresh(ctx, pool, refreshFn, nil, 50*time.Millisecond)
+	stop := StartPoolRefresh(ctx, pool, refreshFn, nil, 50*time.Millisecond, nil)
 	defer stop()
 
 	time.Sleep(200 * time.Millisecond)
@@ -136,7 +136,7 @@ func TestRefreshAllMintsFail(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stop := StartPoolRefresh(ctx, pool, refreshFn, nil, 50*time.Millisecond)
+	stop := StartPoolRefresh(ctx, pool, refreshFn, nil, 50*time.Millisecond, nil)
 	defer stop()
 
 	time.Sleep(200 * time.Millisecond)
@@ -162,7 +162,7 @@ func TestRefreshEmptyResult(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stop := StartPoolRefresh(ctx, pool, refreshFn, nil, 50*time.Millisecond)
+	stop := StartPoolRefresh(ctx, pool, refreshFn, nil, 50*time.Millisecond, nil)
 	defer stop()
 
 	time.Sleep(200 * time.Millisecond)
@@ -183,7 +183,7 @@ func TestRefreshContextCancel(t *testing.T) {
 	pool := NewTokenPool("a")
 	ctx, cancel := context.WithCancel(context.Background())
 
-	stop := StartPoolRefresh(ctx, pool, refreshFn, nil, 50*time.Millisecond)
+	stop := StartPoolRefresh(ctx, pool, refreshFn, nil, 50*time.Millisecond, nil)
 	cancel()
 	stop()
 

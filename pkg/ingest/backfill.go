@@ -13,6 +13,22 @@ import (
 
 const backfillCursorKey = "gharchive_backfill_cursor"
 
+// backfillQueueDepthGate caps how full the scoring queue can get before the
+// backfill loop pauses. Backfill enqueues many tenant-touching contributors
+// per hour; without a gate the queue grows unbounded relative to scorer
+// throughput. Pause-and-poll lets the scorer drain before more work piles
+// on. Below the gate, backfill runs at full speed.
+const (
+	backfillQueueDepthGate = 50_000
+	backfillQueuePauseWait = 60 * time.Second
+)
+
+// nonTenantPurgedOnce gates the PurgeNonTenantQueue cleanup so it runs at
+// most once per process. The legacy priority-2 entries it removes are a
+// migration artifact; doing the table scan on every backfill tick was
+// wasteful with no recurring source of new entries.
+var nonTenantPurgedOnce sync.Once
+
 var (
 	backfillBatchSize = config.GetEnvAsInt("GHARCHIVE_BACKFILL_BATCH_SIZE", 18)
 	backfillWorkers   = config.GetEnvAsInt("GHARCHIVE_BACKFILL_WORKERS", 3)
@@ -28,12 +44,16 @@ func Backfill(ctx context.Context, store *postgres.Store, days int) error {
 
 	totalStart := time.Now()
 
-	// Purge queued entries for non-tenant contributors (legacy priority 2).
-	if purged, err := store.PurgeNonTenantQueue(ctx); err != nil {
-		slog.Error("purge non-tenant queue", "error", err)
-	} else if purged > 0 {
-		slog.Info("purged non-tenant queue entries", "count", purged)
-	}
+	// Purge legacy priority-2 (non-tenant) queue entries. Runs once per
+	// process: there is no source of new priority-2 entries, so repeating
+	// the table scan on every backfill tick is wasteful.
+	nonTenantPurgedOnce.Do(func() {
+		if purged, err := store.PurgeNonTenantQueue(ctx); err != nil {
+			slog.Error("purge non-tenant queue", "error", err)
+		} else if purged > 0 {
+			slog.Info("purged non-tenant queue entries", "count", purged)
+		}
+	})
 
 	cursor, err := store.GetSyncState(ctx, backfillCursorKey)
 	if err != nil {
@@ -63,6 +83,28 @@ func Backfill(ctx context.Context, store *postgres.Store, days int) error {
 	for i := 0; i < len(hours); i += backfillBatchSize {
 		if ctx.Err() != nil {
 			return fmt.Errorf("backfill canceled: %w", ctx.Err())
+		}
+
+		// Pause backfill if the scoring queue is over its high-water mark
+		// so the scorer can drain. Without this, backfill enqueues faster
+		// than the scorer drains and queue depth grows unbounded.
+		for {
+			depth, err := store.QueueDepth(ctx)
+			if err != nil || depth < backfillQueueDepthGate {
+				break
+			}
+			slog.Info("backfill paused, queue depth above gate",
+				"depth", depth,
+				"gate", backfillQueueDepthGate,
+				"wait", backfillQueuePauseWait,
+			)
+			timer := time.NewTimer(backfillQueuePauseWait)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return fmt.Errorf("backfill canceled while paused: %w", ctx.Err())
+			case <-timer.C:
+			}
 		}
 
 		end := min(i+backfillBatchSize, len(hours))
@@ -143,11 +185,12 @@ func processBackfillBatch(ctx context.Context, store ingestStore, reader *Archiv
 	var wg sync.WaitGroup
 
 	for _, hour := range hours {
-		if ctx.Err() != nil {
-			break
+		select {
+		case <-ctx.Done():
+			wg.Wait()
+			return fmt.Errorf("batch canceled: %w", ctx.Err())
+		case sem <- struct{}{}: // acquire
 		}
-
-		sem <- struct{}{} // acquire
 		wg.Add(1)
 
 		go func(h time.Time) {

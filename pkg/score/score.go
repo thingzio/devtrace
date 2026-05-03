@@ -93,6 +93,13 @@ type InputSignals struct {
 	Suspended        bool
 	OrgMember        bool
 	TrustedOrgMember bool
+
+	// Partial is true when one or more sub-fetches failed during signal
+	// collection (e.g., a Search-API rate-limit hit). It is transient
+	// (not persisted via JSON) so the scorer can decide whether to mark
+	// the score as non-deep / shorten its cache lifetime without
+	// polluting the historical signals record.
+	Partial bool `json:"-"`
 }
 
 // Compute returns a reputation score in [0.0, 1.0] using the v3 weighted model.

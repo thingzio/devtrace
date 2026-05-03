@@ -86,7 +86,7 @@ func TestTokenPoolRoundRobin(t *testing.T) {
 func TestTokenPoolExhaustSingle(t *testing.T) {
 	t.Parallel()
 	pool := NewTokenPool("a", "b", "c")
-	pool.Exhaust("b")
+	pool.Exhaust("b", time.Time{})
 	if pool.ActiveCount() != 2 {
 		t.Fatalf("active: got %d, want 2", pool.ActiveCount())
 	}
@@ -107,8 +107,8 @@ func TestTokenPoolExhaustSingle(t *testing.T) {
 func TestTokenPoolExhaustAll(t *testing.T) {
 	t.Parallel()
 	pool := NewTokenPool("a", "b")
-	pool.Exhaust("a")
-	pool.Exhaust("b")
+	pool.Exhaust("a", time.Time{})
+	pool.Exhaust("b", time.Time{})
 	if pool.ActiveCount() != 0 {
 		t.Fatalf("active: got %d, want 0", pool.ActiveCount())
 	}
@@ -123,7 +123,7 @@ func TestTokenPoolExhaustMidRotation(t *testing.T) {
 	if got := pool.Token(); got != "a" {
 		t.Fatalf("first: got %q, want a", got)
 	}
-	pool.Exhaust("b")
+	pool.Exhaust("b", time.Time{})
 	if got := pool.Token(); got != "c" {
 		t.Errorf("should skip b: got %q, want c", got)
 	}
@@ -135,7 +135,7 @@ func TestTokenPoolExhaustMidRotation(t *testing.T) {
 func TestTokenPoolExhaustUnknown(t *testing.T) {
 	t.Parallel()
 	pool := NewTokenPool("a")
-	pool.Exhaust("unknown") // should not panic
+	pool.Exhaust("unknown", time.Time{}) // should not panic
 	if pool.ActiveCount() != 1 {
 		t.Error("unknown exhaust should not affect pool")
 	}
@@ -364,8 +364,8 @@ func TestPoolReplaceEmpty(t *testing.T) {
 func TestPoolReplaceClearsExhaustion(t *testing.T) {
 	t.Parallel()
 	pool := NewTokenPool("a", "b")
-	pool.Exhaust("a")
-	pool.Exhaust("b")
+	pool.Exhaust("a", time.Time{})
+	pool.Exhaust("b", time.Time{})
 	if pool.ActiveCount() != 0 {
 		t.Fatal("expected 0 active before replace")
 	}

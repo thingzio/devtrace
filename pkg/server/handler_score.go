@@ -119,14 +119,19 @@ func checkQuota(ctx context.Context, w http.ResponseWriter, db *sql.DB, tn *tena
 	return false
 }
 
-// persistScore saves score data to the contributor and reputation tables in a
-// fire-and-forget goroutine. Used by both the API and scorecard handlers.
-// Uses WithoutCancel so the write outlives the HTTP request without losing trace baggage.
+// persistScore saves score data to the contributor and reputation tables
+// in a fire-and-forget goroutine tracked by the Store. Tracking matters
+// for shutdown: srv.Shutdown waits for handlers to return, not for
+// goroutines they spawned, so without Store.Go an in-flight write could
+// hit the connection pool after Close() runs.
+//
+// WithoutCancel so the write outlives the HTTP request lifetime while
+// keeping any trace baggage attached.
 func persistScore(store *postgres.Store, username string, value float64, grade, version string, reqCtx context.Context) {
 	if store == nil {
 		return
 	}
-	go func() {
+	store.Go(func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(reqCtx), 10*time.Second)
 		defer cancel()
 		if err := store.UpsertContributor(ctx, username, "github"); err != nil {
@@ -139,5 +144,5 @@ func persistScore(store *postgres.Store, username string, value float64, grade, 
 		if err := store.SaveScoreHistory(ctx, username, "github", value, grade, false); err != nil {
 			slog.Error("save score history", "username", username, "error", err)
 		}
-	}()
+	})
 }

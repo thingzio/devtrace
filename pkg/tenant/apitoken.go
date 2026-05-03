@@ -41,18 +41,25 @@ func CreateAPIToken(ctx context.Context, db *sql.DB, tenantID, name string) (str
 	return rawToken, nil
 }
 
-// ValidateAPIToken hashes the raw token, looks it up, and returns the owning tenant.
-// It updates last_used_at as a fire-and-forget side effect.
+// ValidateAPIToken hashes the raw token, looks it up, and returns the
+// owning tenant. The last_used_at update is folded into the same CTE
+// query so validation is a single round-trip — previously the update
+// shipped as a fire-and-forget goroutine that could outlive the request
+// and race the connection pool on shutdown.
 func ValidateAPIToken(ctx context.Context, db *sql.DB, rawToken string) (*Tenant, error) {
 	hashed := HashToken(rawToken)
 
 	row := db.QueryRowContext(ctx, `
+		WITH used AS (
+			UPDATE devtrace_api_token SET last_used_at = NOW()
+			WHERE token_hash = $1
+			RETURNING tenant_id
+		)
 		SELECT t.id, t.github_id, t.username, COALESCE(t.email,''), COALESCE(t.avatar_url,''),
 		       COALESCE(t.name,''), COALESCE(t.company,''), COALESCE(t.location,''), COALESCE(t.bio,''),
 		       t.plan, t.status, t.max_contributors, t.tos_accepted_at, t.created_at, t.updated_at
-		FROM devtrace_api_token at
-		JOIN devtrace_tenant t ON t.id = at.tenant_id
-		WHERE at.token_hash = $1`, hashed)
+		FROM used u
+		JOIN devtrace_tenant t ON t.id = u.tenant_id`, hashed)
 
 	t, err := scanTenant(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -61,17 +68,6 @@ func ValidateAPIToken(ctx context.Context, db *sql.DB, rawToken string) (*Tenant
 	if err != nil {
 		return nil, fmt.Errorf("validating api token: %w", err)
 	}
-
-	// Fire-and-forget: update last_used_at. Uses background context intentionally
-	// so the update completes even if the request context is canceled.
-	go func() { //nolint:gosec // intentional background context for fire-and-forget
-		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		//nolint:errcheck // best-effort timestamp update, failure is non-critical
-		db.ExecContext(bgCtx,
-			`UPDATE devtrace_api_token SET last_used_at = NOW() WHERE token_hash = $1`, hashed)
-	}()
-
 	return t, nil
 }
 
