@@ -127,3 +127,49 @@ func (s *Store) PrunePREvents(ctx context.Context, retention time.Duration) (int
 	}
 	return res.RowsAffected()
 }
+
+// PREventsStats holds operational metrics for the merge-graph table.
+// AuthorAttributionPct is the share of rows where author IS NOT NULL,
+// in [0, 100]. A value near zero means we're capturing merge events
+// but missing the corresponding opened events — the merge graph
+// would technically grow without becoming useful for author-attributed
+// queries. Watch this on the admin dashboard.
+type PREventsStats struct {
+	TotalRows            int
+	Last24hRows          int
+	AuthorAttributionPct float64
+	LastEventAt          time.Time
+}
+
+// PREventsStats returns aggregate state of the merge-graph table for
+// the admin dashboard. Three numbers tell most of the operational
+// story: total rows, rows touched in the last 24 hours, and the
+// author-attribution percentage. All three are computed in a single
+// pass to keep the dashboard query cheap.
+func (s *Store) PREventsStats(ctx context.Context) (*PREventsStats, error) {
+	const query = `
+		SELECT
+			COUNT(*) AS total,
+			COUNT(*) FILTER (WHERE last_event_at > NOW() - INTERVAL '24 hours') AS last_24h,
+			COUNT(*) FILTER (WHERE author IS NOT NULL) AS with_author,
+			MAX(last_event_at) AS last_event_at
+		FROM devtrace_pr_events`
+
+	var (
+		out         PREventsStats
+		withAuthor  int
+		lastEventAt sql.NullTime
+	)
+	if err := s.db.QueryRowContext(ctx, query).Scan(
+		&out.TotalRows, &out.Last24hRows, &withAuthor, &lastEventAt,
+	); err != nil {
+		return nil, fmt.Errorf("pr events stats: %w", err)
+	}
+	if out.TotalRows > 0 {
+		out.AuthorAttributionPct = float64(withAuthor) / float64(out.TotalRows) * 100
+	}
+	if lastEventAt.Valid {
+		out.LastEventAt = lastEventAt.Time
+	}
+	return &out, nil
+}

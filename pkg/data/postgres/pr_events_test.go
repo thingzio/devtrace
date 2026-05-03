@@ -200,6 +200,99 @@ func TestPREventsCountOnlyMergedPRs(t *testing.T) {
 	}
 }
 
+// TestPREventsStatsAggregates pins the admin-dashboard metrics:
+// total rows, last-24h rows, and the author-attribution percentage.
+// The percentage is the most operationally meaningful — a near-zero
+// value would mean we're capturing merges but missing opens, which
+// renders the merge graph useless even as the table grows.
+func TestPREventsStatsAggregates(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	const (
+		provider = "github"
+		repo     = "pr-events-stats-test"
+	)
+	t.Cleanup(func() {
+		_, _ = store.DB().ExecContext(ctx,
+			`DELETE FROM devtrace_pr_events WHERE provider=$1 AND repo=$2`, provider, repo)
+	})
+	_, _ = store.DB().ExecContext(ctx,
+		`DELETE FROM devtrace_pr_events WHERE provider=$1 AND repo=$2`, provider, repo)
+
+	// Capture baseline (other rows from earlier tests may exist).
+	baseline, err := store.PREventsStats(ctx)
+	if err != nil {
+		t.Fatalf("baseline stats: %v", err)
+	}
+
+	// Insert four rows: 3 with authors, 1 without (pure merge action).
+	now := time.Now()
+	rows := []postgres.PREventRow{
+		{Provider: provider, Repo: repo, Number: 1, Action: "opened", Author: "alice", OccurAt: now},
+		{Provider: provider, Repo: repo, Number: 2, Action: "opened", Author: "bob", OccurAt: now},
+		{Provider: provider, Repo: repo, Number: 3, Action: "opened", Author: "carol", OccurAt: now},
+		{Provider: provider, Repo: repo, Number: 4, Action: "merged", Author: "", OccurAt: now}, // bot-merged orphan
+	}
+	if _, uerr := store.BatchUpsertPREvents(ctx, rows); uerr != nil {
+		t.Fatalf("upsert: %v", uerr)
+	}
+
+	got, err := store.PREventsStats(ctx)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if got.TotalRows != baseline.TotalRows+4 {
+		t.Errorf("TotalRows: got %d, want %d", got.TotalRows, baseline.TotalRows+4)
+	}
+	// All four rows are within the last 24h window.
+	if got.Last24hRows < baseline.Last24hRows+4 {
+		t.Errorf("Last24hRows: got %d, want >=%d",
+			got.Last24hRows, baseline.Last24hRows+4)
+	}
+	// Author-attribution % must be in (0, 100].
+	if got.AuthorAttributionPct <= 0 || got.AuthorAttributionPct > 100 {
+		t.Errorf("AuthorAttributionPct out of range: %v", got.AuthorAttributionPct)
+	}
+	if got.LastEventAt.IsZero() {
+		t.Error("LastEventAt should be non-zero after upsert")
+	}
+}
+
+// TestPREventsStatsEmptyTable: stats query handles an empty (or
+// near-empty) table without divide-by-zero on the percentage.
+func TestPREventsStatsEmptyTable(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	// Nuke all rows for a clean baseline (avoid contention with parallel
+	// tests; this ONE test picks an exclusive cleanup window).
+	if _, err := store.DB().ExecContext(ctx,
+		`DELETE FROM devtrace_pr_events`); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	got, err := store.PREventsStats(ctx)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	if got.TotalRows != 0 {
+		t.Errorf("TotalRows on empty: got %d, want 0", got.TotalRows)
+	}
+	if got.AuthorAttributionPct != 0 {
+		t.Errorf("AuthorAttributionPct on empty: got %v, want 0 (no div-by-zero)",
+			got.AuthorAttributionPct)
+	}
+	if !got.LastEventAt.IsZero() {
+		t.Errorf("LastEventAt on empty: got %v, want zero", got.LastEventAt)
+	}
+}
+
 func TestPREventsPruneByLastEvent(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()

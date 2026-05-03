@@ -2301,6 +2301,30 @@ a.link {
 .ossf-score-na     { color: var(--fgColor-muted, #6a737d); font-style: italic; }
 .ossf-checks li    { margin-bottom: 0.5rem; }
 
+/* Admin action buttons. Used in admin.html and admin_tenant_detail.html
+   for inline form submits ("Save", "Send Test Digest", etc.). Outline
+   style keeps the surface light next to the dark settings sections. */
+.btn-action {
+  padding: 3px 10px;
+  border: 1px solid #3fb950;
+  border-radius: 4px;
+  background: transparent;
+  color: #3fb950;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.btn-action:hover { background: rgba(63, 185, 80, 0.15); }
+.btn-danger {
+  padding: 3px 10px;
+  border: 1px solid #f85149;
+  border-radius: 4px;
+  background: transparent;
+  color: #f85149;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.btn-danger:hover { background: rgba(248, 81, 73, 0.15); }
+
 /* Scope badges distinguish data scoped to the requested repo from
    profile-wide / lifetime data. Visually distinct from .plan-badge
    so they stack next to it without color collision. */

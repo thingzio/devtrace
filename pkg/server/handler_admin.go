@@ -393,7 +393,7 @@ func loadPipelineMetrics(ctx context.Context, store *postgres.Store, data map[st
 		mu.Unlock()
 	}
 
-	wg.Add(7)
+	wg.Add(8)
 
 	go func() {
 		defer wg.Done()
@@ -445,6 +445,16 @@ func loadPipelineMetrics(ctx context.Context, store *postgres.Store, data map[st
 		defer wg.Done()
 		if ac, err := store.HourlyActivityCounts(ctx, 24); err == nil {
 			set("ActivityBars", hourlyCountBars(ac))
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if ps, err := store.PREventsStats(ctx); err == nil {
+			mu.Lock()
+			data["PREventsStats"] = ps
+			data["PREventsLastEventAge"] = timeSince(ps.LastEventAt)
+			mu.Unlock()
 		}
 	}()
 
