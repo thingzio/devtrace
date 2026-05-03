@@ -94,6 +94,40 @@ func OSSFTimeout() time.Duration {
 	return GetEnvAsDuration("DEVTRACE_OSSF_TIMEOUT", defaultOSSFTimeout)
 }
 
+const (
+	// defaultPublisherTTL is the freshness window for cached
+	// publisher-package rows. Publishers don't churn rapidly; a week
+	// keeps registry traffic well below any per-IP rate limits.
+	defaultPublisherTTL = 7 * 24 * time.Hour
+
+	// defaultPublisherTimeout bounds a single registry call.
+	defaultPublisherTimeout = 10 * time.Second
+
+	// defaultPublisherTopLimit caps how many packages we surface in
+	// the API and UI top list. Prolific publishers (Sindre Sorhus
+	// has 1200+ npm packages) would otherwise dominate the response
+	// payload. Aggregate count is preserved regardless of cap.
+	defaultPublisherTopLimit = 5
+)
+
+// PublisherTTL returns the freshness window for cached publisher
+// profiles. Override via DEVTRACE_PUBLISHER_TTL.
+func PublisherTTL() time.Duration {
+	return GetEnvAsDuration("DEVTRACE_PUBLISHER_TTL", defaultPublisherTTL)
+}
+
+// PublisherTimeout returns the per-call timeout for the publisher
+// HTTP clients. Override via DEVTRACE_PUBLISHER_TIMEOUT.
+func PublisherTimeout() time.Duration {
+	return GetEnvAsDuration("DEVTRACE_PUBLISHER_TIMEOUT", defaultPublisherTimeout)
+}
+
+// PublisherTopLimit returns the cap on packages surfaced in the top
+// list. Override via DEVTRACE_PUBLISHER_TOP_LIMIT.
+func PublisherTopLimit() int {
+	return GetEnvAsInt("DEVTRACE_PUBLISHER_TOP_LIMIT", defaultPublisherTopLimit)
+}
+
 // GetEnvAsDuration parses the env var as a Go duration; falls back to
 // the default on absent or invalid values.
 func GetEnvAsDuration(key string, fallback time.Duration) time.Duration {

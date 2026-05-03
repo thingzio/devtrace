@@ -11,6 +11,7 @@ import (
 	ghclient "github.com/thingzio/devtrace/pkg/github"
 	"github.com/thingzio/devtrace/pkg/model"
 	"github.com/thingzio/devtrace/pkg/ossf"
+	"github.com/thingzio/devtrace/pkg/registry"
 	"github.com/thingzio/devtrace/pkg/score"
 )
 
@@ -31,6 +32,10 @@ type mockBehaviorStore struct {
 	ossfCard         *model.OSSFScorecard
 	ossfFetchedAt    time.Time
 	savedOSSFCard    *model.OSSFScorecard
+
+	publisherProfile   *model.RegistryProfile
+	publisherFetchedAt time.Time
+	savedPublisher     *model.RegistryProfile
 }
 
 func (m *mockBehaviorStore) GetBehavioralSignals(_ context.Context, _, _ string) (*model.Behavior, error) {
@@ -70,6 +75,15 @@ func (m *mockBehaviorStore) GetOSSFScorecard(_ context.Context, _, _, _ string) 
 
 func (m *mockBehaviorStore) SaveOSSFScorecard(_ context.Context, _, _, _ string, card *model.OSSFScorecard) error {
 	m.savedOSSFCard = card
+	return nil
+}
+
+func (m *mockBehaviorStore) GetPublisherProfile(_ context.Context, _, _, _ string) (*model.RegistryProfile, time.Time, error) {
+	return m.publisherProfile, m.publisherFetchedAt, nil
+}
+
+func (m *mockBehaviorStore) SavePublisherProfile(_ context.Context, _, _, _ string, profile *model.RegistryProfile) error {
+	m.savedPublisher = profile
 	return nil
 }
 
@@ -809,6 +823,198 @@ func (m *mockOSSF) Fetch(_ context.Context, _, _ string) (*ossf.Scorecard, error
 	return m.card, m.err
 }
 
+// mockNPM implements service.NPMFetcher for testing the publisher
+// enrichment path without an httptest server.
+type mockNPM struct {
+	total int
+	top   []registry.Package
+	err   error
+	calls int
+}
+
+func (m *mockNPM) FetchUserPackages(_ context.Context, _ string, _ int) (int, []registry.Package, error) {
+	m.calls++
+	return m.total, m.top, m.err
+}
+
+// TestPublisherEnrichmentCacheHit: fresh cached profile → no upstream
+// call; returned counts match cached.
+func TestPublisherEnrichmentCacheHit(t *testing.T) {
+	cached := &model.RegistryProfile{
+		PackageCount: 7,
+		Top: []model.Package{
+			{Name: "alpha", Role: "write", URL: "https://www.npmjs.com/package/alpha"},
+		},
+	}
+	store := &mockBehaviorStore{
+		publisherProfile:   cached,
+		publisherFetchedAt: time.Now().Add(-1 * time.Hour),
+	}
+	mc := &mockNPM{total: 99, top: []registry.Package{{Name: "would-not-want"}}}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetNPMFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment == nil || resp.Enrichment.Publisher == nil || resp.Enrichment.Publisher.NPM == nil {
+		t.Fatal("expected NPM publisher in enrichment")
+	}
+	if resp.Enrichment.Publisher.NPM.PackageCount != 7 {
+		t.Errorf("NPM count: got %d, want 7 (cache hit)", resp.Enrichment.Publisher.NPM.PackageCount)
+	}
+	if resp.Enrichment.Publisher.TotalPackages != 7 {
+		t.Errorf("TotalPackages: got %d, want 7", resp.Enrichment.Publisher.TotalPackages)
+	}
+	if mc.calls != 0 {
+		t.Errorf("expected 0 upstream fetches on cache hit, got %d", mc.calls)
+	}
+}
+
+// TestPublisherEnrichmentStaleRefresh: stale row triggers upstream
+// fetch and persists the new profile.
+func TestPublisherEnrichmentStaleRefresh(t *testing.T) {
+	store := &mockBehaviorStore{
+		publisherProfile: &model.RegistryProfile{
+			PackageCount: 1,
+			Top:          []model.Package{{Name: "old-pkg"}},
+		},
+		publisherFetchedAt: time.Now().Add(-30 * 24 * time.Hour),
+	}
+	mc := &mockNPM{
+		total: 4,
+		top: []registry.Package{
+			{Name: "new-a", Role: "write", URL: "https://www.npmjs.com/package/new-a"},
+			{Name: "new-b", Role: "write", URL: "https://www.npmjs.com/package/new-b"},
+		},
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetNPMFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if mc.calls != 1 {
+		t.Errorf("expected 1 upstream call, got %d", mc.calls)
+	}
+	if resp.Enrichment == nil || resp.Enrichment.Publisher == nil || resp.Enrichment.Publisher.NPM == nil {
+		t.Fatal("expected publisher in enrichment after refresh")
+	}
+	if resp.Enrichment.Publisher.NPM.PackageCount != 4 {
+		t.Errorf("count after refresh: got %d, want 4", resp.Enrichment.Publisher.NPM.PackageCount)
+	}
+	if store.savedPublisher == nil || store.savedPublisher.PackageCount != 4 {
+		t.Errorf("expected saved profile with count 4, got %+v", store.savedPublisher)
+	}
+}
+
+// TestPublisherEnrichmentNotFoundSavesSentinel: ErrNotFound saves a
+// zero-count sentinel and surfaces nil to the caller — short-circuits
+// future fetches for users who don't have an npm publisher account.
+func TestPublisherEnrichmentNotFoundSavesSentinel(t *testing.T) {
+	store := &mockBehaviorStore{}
+	mc := &mockNPM{err: registry.ErrNotFound}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetNPMFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment != nil && resp.Enrichment.Publisher != nil {
+		t.Errorf("expected nil Publisher on not-found, got %+v", resp.Enrichment.Publisher)
+	}
+	if store.savedPublisher == nil {
+		t.Fatal("expected sentinel save on not-found")
+	}
+	if store.savedPublisher.PackageCount != 0 || len(store.savedPublisher.Top) != 0 {
+		t.Errorf("sentinel shape: count=%d top=%d", store.savedPublisher.PackageCount, len(store.savedPublisher.Top))
+	}
+}
+
+// TestPublisherEnrichmentSentinelSuppressesFetch: a previously-saved
+// zero-count sentinel within TTL must NOT trigger a re-fetch and must
+// surface as nil to the caller (consistent with "no publisher data").
+func TestPublisherEnrichmentSentinelSuppressesFetch(t *testing.T) {
+	store := &mockBehaviorStore{
+		publisherProfile:   &model.RegistryProfile{}, // sentinel
+		publisherFetchedAt: time.Now().Add(-1 * time.Hour),
+	}
+	mc := &mockNPM{total: 5, top: []registry.Package{{Name: "x"}}}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetNPMFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment != nil && resp.Enrichment.Publisher != nil {
+		t.Error("zero-count sentinel must surface as nil")
+	}
+	if mc.calls != 0 {
+		t.Errorf("sentinel must suppress refetch, got %d calls", mc.calls)
+	}
+}
+
+// TestPublisherStrippedForFree: Free-tier callers don't see Publisher.
+func TestPublisherStrippedForFree(t *testing.T) {
+	store := &mockBehaviorStore{
+		publisherProfile: &model.RegistryProfile{
+			PackageCount: 5,
+			Top:          []model.Package{{Name: "p"}},
+		},
+		publisherFetchedAt: time.Now().Add(-1 * time.Hour),
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: establishedProfile(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetNPMFetcher(&mockNPM{})
+
+	tests := []struct {
+		plan    string
+		wantSet bool
+	}{
+		{"free", false},
+		{"starter", true},
+		{"pro", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.plan, func(t *testing.T) {
+			resp, err := svc.Score(context.Background(), "testuser", "", tc.plan, nil)
+			if err != nil {
+				t.Fatalf("score: %v", err)
+			}
+			if resp.Enrichment == nil {
+				t.Fatal("expected enrichment block")
+			}
+			has := resp.Enrichment.Publisher != nil
+			if has != tc.wantSet {
+				t.Errorf("plan=%s Publisher present=%v, want %v", tc.plan, has, tc.wantSet)
+			}
+		})
+	}
+}
+
 // TestOSSFEnrichmentCacheHit: fresh cached row → no upstream call,
 // returned card matches cached.
 func TestOSSFEnrichmentCacheHit(t *testing.T) {
@@ -1036,6 +1242,9 @@ func TestBuildScopeInfoMarksRepoFields(t *testing.T) {
 	}
 	if !sliceContains(withRepo.Global, "enrichment.lifetime_activity") {
 		t.Errorf("enrichment.lifetime_activity missing from Global: %v", withRepo.Global)
+	}
+	if !sliceContains(withRepo.Global, "enrichment.publisher") {
+		t.Errorf("enrichment.publisher missing from Global: %v", withRepo.Global)
 	}
 	// Repo-scoped paths must NOT appear in Global, and vice versa.
 	for _, p := range withRepo.RepoScoped {

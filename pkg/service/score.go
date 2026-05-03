@@ -16,6 +16,7 @@ import (
 	"github.com/thingzio/devtrace/pkg/ossf"
 	"github.com/thingzio/devtrace/pkg/plan"
 	profilepkg "github.com/thingzio/devtrace/pkg/profile"
+	"github.com/thingzio/devtrace/pkg/registry"
 	"github.com/thingzio/devtrace/pkg/score"
 )
 
@@ -24,6 +25,14 @@ import (
 // spinning up an httptest server.
 type OSSFFetcher interface {
 	Fetch(ctx context.Context, owner, repo string) (*ossf.Scorecard, error)
+}
+
+// NPMFetcher is the subset of the npm registry client used by the
+// score service. Defined here so tests can inject a mock without
+// spinning up an httptest server. Returns (total, top, err) where
+// total is the unbounded count and top is the display-capped list.
+type NPMFetcher interface {
+	FetchUserPackages(ctx context.Context, username string, topLimit int) (int, []registry.Package, error)
 }
 
 // BehaviorStore provides behavioral signal data from contributor activity.
@@ -43,6 +52,8 @@ type BehaviorStore interface {
 	SaveSecurityCredits(ctx context.Context, username, provider string, credits []model.SecurityCredit) error
 	GetOSSFScorecard(ctx context.Context, provider, owner, repo string) (*model.OSSFScorecard, time.Time, error)
 	SaveOSSFScorecard(ctx context.Context, provider, owner, repo string, card *model.OSSFScorecard) error
+	GetPublisherProfile(ctx context.Context, provider, username, registry string) (*model.RegistryProfile, time.Time, error)
+	SavePublisherProfile(ctx context.Context, provider, username, registry string, profile *model.RegistryProfile) error
 }
 
 // topContributedRepoLimit caps the number of repos surfaced in enrichment.
@@ -60,18 +71,21 @@ type ScoreService struct {
 	gh       ghclient.Client
 	behStore BehaviorStore // nil-safe; behavioral signals omitted when nil
 	ossf     OSSFFetcher   // nil-safe; repo OSSF Scorecard enrichment omitted when nil
+	npm      NPMFetcher    // nil-safe; npm publisher enrichment omitted when nil
 	cache    *scoreCache
 	claude   *claude.Client // nil = fallback to templates
 	version  string         // DevTrace build version stamped on every response
 }
 
 // NewScoreService returns a ScoreService wired to the given GitHub client.
-// The OSSF Scorecard fetcher is initialized to a default *ossf.Client; pass
-// SetOSSFFetcher to override (e.g., a test mock or to disable entirely).
+// The OSSF Scorecard fetcher and the npm publisher fetcher are initialized
+// to defaults; pass SetOSSFFetcher / SetNPMFetcher to override (e.g., a
+// test mock or to disable entirely).
 func NewScoreService(gh ghclient.Client, version string) *ScoreService {
 	return &ScoreService{
 		gh:      gh,
 		ossf:    ossf.NewClient(config.OSSFTimeout()),
+		npm:     registry.NewNPMClient(config.PublisherTimeout()),
 		cache:   newScoreCache(),
 		version: version,
 	}
@@ -99,6 +113,13 @@ func (s *ScoreService) SetClaudeClient(c *claude.Client) {
 // environments where the OSSF API is unreachable.
 func (s *ScoreService) SetOSSFFetcher(f OSSFFetcher) {
 	s.ossf = f
+}
+
+// SetNPMFetcher overrides the default npm registry client. Pass nil
+// to disable npm-publisher enrichment entirely; useful for tests
+// and for environments where the npm registry is unreachable.
+func (s *ScoreService) SetNPMFetcher(f NPMFetcher) {
+	s.npm = f
 }
 
 // Score fetches signals, computes a reputation score, and builds a plan-aware response.
@@ -263,14 +284,15 @@ func enrichForPlan(full *model.ScoreResponse, planName string) *model.ScoreRespo
 		} else {
 			resp.AISensing = &model.AISensing{}
 		}
-		// Email extraction, security credits, and OSSF Scorecard are
-		// Starter+. Emails are gated to deter scraping; security
-		// credits and OSSF Scorecard are paid-tier upgrade hooks
-		// (repo-quality and credibility signals respectively).
+		// Email extraction, security credits, OSSF Scorecard, and
+		// publisher detection are Starter+. Emails are gated to deter
+		// scraping; the others are paid-tier upgrade hooks
+		// (repo-quality, credibility, and supply-chain signals).
 		if resp.Enrichment != nil {
 			resp.Enrichment.Emails = nil
 			resp.Enrichment.SecurityCredits = nil
 			resp.Enrichment.OSSFScorecard = nil
+			resp.Enrichment.Publisher = nil
 		}
 
 	case plan.PlanStarter:
@@ -333,6 +355,7 @@ func buildScopeInfo(hasRepo bool) *model.ScopeInfo {
 		"enrichment.emails",
 		"enrichment.owned_repos",
 		"enrichment.security_credits",
+		"enrichment.publisher",
 	}
 	repoScoped := []string{}
 	if hasRepo {
@@ -539,6 +562,24 @@ func deepCopyEnrichment(src *model.Enrichment) *model.Enrichment {
 		}
 		dst.OSSFScorecard = &o
 	}
+	if src.Publisher != nil {
+		p := *src.Publisher
+		if src.Publisher.NPM != nil {
+			n := *src.Publisher.NPM
+			if src.Publisher.NPM.Top != nil {
+				n.Top = append([]model.Package(nil), src.Publisher.NPM.Top...)
+			}
+			p.NPM = &n
+		}
+		if src.Publisher.PyPI != nil {
+			py := *src.Publisher.PyPI
+			if src.Publisher.PyPI.Top != nil {
+				py.Top = append([]model.Package(nil), src.Publisher.PyPI.Top...)
+			}
+			p.PyPI = &py
+		}
+		dst.Publisher = &p
+	}
 	return &dst
 }
 
@@ -596,10 +637,88 @@ func (s *ScoreService) buildEnrichment(ctx context.Context, username, repo strin
 		populated = true
 	}
 
+	if pub := s.publisherEnrichment(ctx, username); pub != nil {
+		enr.Publisher = pub
+		populated = true
+	}
+
 	if !populated {
 		return nil
 	}
 	return enr
+}
+
+// publisherEnrichment returns the cached publisher profile aggregate
+// (currently npm only), refreshing from the registry when the row is
+// missing or older than config.PublisherTTL. Returns nil when the
+// behavior store / npm fetcher is unconfigured, or when the
+// contributor publishes nothing — the UI render path treats a
+// zero-package profile as absent so empty tiles don't appear.
+//
+// PyPI is reserved as a future registry; the schema and model
+// already accommodate it. v1 covers npm only because PyPI has no
+// public reverse-lookup API.
+func (s *ScoreService) publisherEnrichment(ctx context.Context, username string) *model.Publisher {
+	if s.behStore == nil || s.npm == nil {
+		return nil
+	}
+	provider := string(model.ProviderGitHub)
+
+	npmProfile := s.npmPublisherProfile(ctx, provider, username)
+	if npmProfile == nil || npmProfile.PackageCount == 0 {
+		return nil
+	}
+	return &model.Publisher{
+		NPM:           npmProfile,
+		TotalPackages: npmProfile.PackageCount,
+	}
+}
+
+// npmPublisherProfile fetches (or returns cached) the npm publisher
+// profile. A non-nil zero-count return is the sentinel for "we
+// looked, found nothing" so the publisherEnrichment caller can
+// short-circuit and the cache TTL suppresses repeated re-fetching.
+func (s *ScoreService) npmPublisherProfile(ctx context.Context, provider, username string) *model.RegistryProfile {
+	const registryName = "npm"
+	cached, fetchedAt, err := s.behStore.GetPublisherProfile(ctx, provider, username, registryName)
+	if err == nil && !fetchedAt.IsZero() && time.Since(fetchedAt) < config.PublisherTTL() {
+		return cached
+	}
+
+	total, top, ferr := s.npm.FetchUserPackages(ctx, username, config.PublisherTopLimit())
+	switch {
+	case errors.Is(ferr, registry.ErrNotFound):
+		// Sentinel: zero count, no packages. Suppresses re-fetching
+		// for users without an npm publisher account.
+		empty := &model.RegistryProfile{}
+		if err := s.behStore.SavePublisherProfile(ctx, provider, username, registryName, empty); err != nil {
+			slog.Warn("save npm sentinel", "username", username, "error", err)
+		}
+		return empty
+	case ferr != nil:
+		slog.Warn("fetch npm publisher",
+			"username", username,
+			"error", ferr,
+			"had_cache", cached != nil,
+		)
+		return cached
+	}
+
+	out := &model.RegistryProfile{
+		PackageCount: total,
+		Top:          make([]model.Package, 0, len(top)),
+	}
+	for _, p := range top {
+		out.Top = append(out.Top, model.Package{
+			Name: p.Name,
+			Role: p.Role,
+			URL:  p.URL,
+		})
+	}
+	if err := s.behStore.SavePublisherProfile(ctx, provider, username, registryName, out); err != nil {
+		slog.Warn("save npm publisher", "username", username, "error", err)
+	}
+	return out
 }
 
 // ossfScorecardEnrichment returns the cached OSSF Scorecard for the

@@ -238,6 +238,26 @@
   </section>
   {{end}}
 
+  {{with .Publisher}}
+  <section class="enrichment-section enrichment-publisher">
+    <h2>Package Publisher <span class="plan-badge">Starter+</span> <span class="scope-badge scope-badge-global">Global</span></h2>
+    <p class="metric-desc" style="margin-bottom:0.75rem;">Packages this contributor publishes to public registries under their handle. A publisher relationship on widely-used packages is a strong supply-chain credibility signal.</p>
+    {{with .NPM}}
+    <h3>npm <span class="item-meta">{{.PackageCount}} package{{if ne .PackageCount 1}}s{{end}}</span></h3>
+    {{if .Top}}
+    <ul class="enrichment-list">
+      {{range .Top}}
+      <li>
+        <a href="{{.URL}}" target="_blank" rel="noopener">{{.Name}}</a>
+        {{if .Role}}<span class="platform-badge">{{.Role}}</span>{{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+    {{end}}
+  </section>
+  {{end}}
+
   {{if or .LinkedAccounts .Emails}}
   <section class="enrichment-section enrichment-linked">
     <h2>Linked Accounts <span class="scope-badge scope-badge-global">Global</span></h2>

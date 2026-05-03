@@ -11,6 +11,13 @@
   <div style="max-width:700px;margin:0 auto">
 
     <div class="landing-feature" style="margin-bottom:24px">
+      <h3>May 3, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.23</span></h3>
+      <ul>
+        <li><strong>Package Publisher detection (Starter+)</strong> &mdash; the contributor scorecard now surfaces npm packages this contributor publishes under their handle, including aggregate count and a top-N list with package names, roles, and registry links. Strong supply-chain credibility signal: a write-role relationship with widely-used packages is one of the few user-attested identities downstream consumers actually depend on. Cached weekly. PyPI is a planned follow-up (no public reverse-lookup API today).</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:24px">
       <h3>May 2, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.22</span></h3>
       <ul>
         <li><strong>OSSF Scorecard (Starter+)</strong> &mdash; when a repo is provided in the score request (<code>?repo=owner/name</code>), the contributor scorecard now surfaces the OpenSSF Scorecard assessment for that repo: aggregate score (0&ndash;10) plus per-check results for Code-Review, Branch-Protection, Maintained, Vulnerabilities, Token-Permissions, Fuzzing, SAST, and others. Cached weekly to align with upstream cadence. Repo-quality context that helps separate "credible contributor in a healthy project" from "credible contributor in an abandoned codebase."</li>

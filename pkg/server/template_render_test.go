@@ -188,6 +188,16 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 				{Name: "License", Score: 9, Reason: "license file detected"},
 			},
 		},
+		Publisher: &model.Publisher{
+			TotalPackages: 42,
+			NPM: &model.RegistryProfile{
+				PackageCount: 42,
+				Top: []model.Package{
+					{Name: "alpha-pkg", Role: "write", URL: "https://www.npmjs.com/package/alpha-pkg"},
+					{Name: "beta-pkg", Role: "write", URL: "https://www.npmjs.com/package/beta-pkg"},
+				},
+			},
+		},
 	}
 
 	data := scorecardTestData(enrichment)
@@ -233,6 +243,10 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 		"Fuzzing", "N/A", // -1 score renders as N/A
 		"License", "license file detected",
 		"https://example.com/cr",
+		// Publisher (npm v1)
+		"Package Publisher", "npm", "42 packages",
+		"alpha-pkg", "beta-pkg",
+		"https://www.npmjs.com/package/alpha-pkg",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(body, want) {
@@ -260,7 +274,7 @@ func TestScorecardWithoutEnrichmentRenders(t *testing.T) {
 	}
 	body := rec.Body.String()
 	// The enrichment headings must NOT appear when no data is provided.
-	for _, mustNotContain := range []string{">Activity ", "Reciprocity", "Owned Repositories", "Linked Accounts", "Security Credits", "OSSF Scorecard"} {
+	for _, mustNotContain := range []string{">Activity ", "Reciprocity", "Owned Repositories", "Linked Accounts", "Security Credits", "OSSF Scorecard", "Package Publisher"} {
 		if strings.Contains(body, mustNotContain) {
 			t.Errorf("scorecard rendered %q despite nil Enrichment", mustNotContain)
 		}

@@ -52,6 +52,40 @@ type Enrichment struct {
 	OwnedRepos          *OwnedRepos        `json:"owned_repos,omitempty"`
 	SecurityCredits     *SecurityCredits   `json:"security_credits,omitempty"`
 	OSSFScorecard       *OSSFScorecard     `json:"ossf_scorecard,omitempty"`
+	Publisher           *Publisher         `json:"publisher,omitempty"`
+}
+
+// Publisher aggregates the contributor's published-package presence
+// across registries. Strong supply-chain credibility signal: a
+// contributor whose GitHub handle owns published npm/PyPI packages
+// has user-attested publisher identity that downstream consumers
+// rely on. v1 covers npm only; PyPI is a known gap (no public
+// reverse-lookup API). A non-nil Publisher with TotalPackages == 0
+// is meaningful — it records "we looked, nothing found" — but the
+// UI render path treats it as absent.
+type Publisher struct {
+	NPM           *RegistryProfile `json:"npm,omitempty"`
+	PyPI          *RegistryProfile `json:"pypi,omitempty"`
+	TotalPackages int              `json:"total_packages"`
+}
+
+// RegistryProfile is the per-registry slice of a contributor's
+// publisher footprint. Top is capped at the display limit; the full
+// list is intentionally not exposed in the API to avoid leaking the
+// entire alphabet for prolific publishers.
+type RegistryProfile struct {
+	PackageCount int       `json:"package_count"`
+	Top          []Package `json:"top,omitempty"`
+}
+
+// Package is a single published package surfaced in a RegistryProfile.
+// Role reflects the publisher's relationship to the package as
+// reported by the registry (npm: "write" / "read"; PyPI: "owner" /
+// "maintainer"). URL points to the registry's package page.
+type Package struct {
+	Name string `json:"name"`
+	Role string `json:"role,omitempty"`
+	URL  string `json:"url,omitempty"`
 }
 
 // OSSFScorecard summarizes the OSSF Scorecard project assessment for a

@@ -178,6 +178,9 @@ Data flow: GitHub App webhook → tenant repos → background ingest worker → 
 - `DEVTRACE_SECURITY_CREDITS_ENABLED` — set to `true` to enable live GHSA-credit fetching (default off; v0.21 query hit a non-existent GraphQL field)
 - `DEVTRACE_OSSF_TTL` — OSSF Scorecard cache freshness (Go duration, default 168h)
 - `DEVTRACE_OSSF_TIMEOUT` — per-call timeout for the OSSF Scorecard HTTP client (Go duration, default 10s)
+- `DEVTRACE_PUBLISHER_TTL` — publisher-package cache freshness (Go duration, default 168h)
+- `DEVTRACE_PUBLISHER_TIMEOUT` — per-call timeout for publisher registry HTTP clients (Go duration, default 10s)
+- `DEVTRACE_PUBLISHER_TOP_LIMIT` — cap on packages surfaced in the top list per registry (default 5)
 - `ANTHROPIC_API_KEY` — optional, enables AI risk sensing
 - `SEND_API_KEY` — email service API key (enables contact form on help page)
 - `SUPPORT_EMAIL` — support email address for contact form
