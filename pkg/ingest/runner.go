@@ -32,6 +32,12 @@ const (
 	notificationPruneInterval = 24 * time.Hour
 
 	digestMaxEventsPerEmail = 10
+
+	// providerGitHub is the provider tag stamped on rows the GH Archive
+	// pipeline produces. Mirrors model.ProviderGitHub but kept as a
+	// plain string here so postgres struct literals don't need to
+	// import/cast a typed constant.
+	providerGitHub = "github"
 )
 
 // ingestStore defines the store operations needed by the ingest runner.
@@ -40,6 +46,8 @@ type ingestStore interface {
 	SaveSyncState(ctx context.Context, key string, val time.Time) error
 	GetTenantRepos(ctx context.Context) (map[string]bool, error)
 	BatchUpsertActivity(ctx context.Context, summaries []postgres.HourlySummary) (int, error)
+	BatchUpsertPREvents(ctx context.Context, events []postgres.PREventRow) (int, error)
+	PrunePREvents(ctx context.Context, retention time.Duration) (int64, error)
 	EnqueueForScoring(ctx context.Context, username, provider string, priority int) error
 	ContributorExists(ctx context.Context, username, provider string) (bool, error)
 	PurgeNonTenantQueue(ctx context.Context) (int64, error)
@@ -149,6 +157,14 @@ func maybeCompact(ctx context.Context, store ingestStore) {
 		slog.Info("pruned old score history", "rows_deleted", histPruned)
 	}
 
+	// Prune old PR-event rows on the same retention horizon as activity.
+	prPruned, err := store.PrunePREvents(ctx, pruneActivityRetention)
+	if err != nil {
+		slog.Error("prune pr events failed", "error", err)
+	} else if prPruned > 0 {
+		slog.Info("pruned old pr events", "rows_deleted", prPruned)
+	}
+
 	if err := store.SaveSyncState(ctx, compactStateKey, time.Now().UTC()); err != nil {
 		slog.Error("save compaction state", "error", err)
 	}
@@ -208,7 +224,7 @@ func processHour(ctx context.Context, store ingestStore, reader *ArchiveReader,
 		}
 		pgSummaries = append(pgSummaries, postgres.HourlySummary{
 			Username:      s.Username,
-			Provider:      "github",
+			Provider:      providerGitHub,
 			Hour:          agg.Hour(),
 			PRsOpened:     s.PRsOpened,
 			PRsMerged:     s.PRsMerged,
@@ -227,6 +243,28 @@ func processHour(ctx context.Context, store ingestStore, reader *ArchiveReader,
 		return fmt.Errorf("batch upsert activity %s: %w", hour.Format("2006-01-02-15"), err)
 	}
 
+	// Persist per-PR observations (merge graph) so the opened-event
+	// (actor = author) and merged-event (actor often a CI bot) can
+	// be joined later for "PRs authored by X that got merged" queries.
+	prRows := agg.PREvents()
+	pgPREvents := make([]postgres.PREventRow, 0, len(prRows))
+	for _, p := range prRows {
+		pgPREvents = append(pgPREvents, postgres.PREventRow{
+			Provider: providerGitHub,
+			Repo:     p.Repo,
+			Number:   p.Number,
+			Action:   p.Action,
+			Author:   p.Author,
+			OccurAt:  p.OccurAt,
+		})
+	}
+	prStored, err := store.BatchUpsertPREvents(ctx, pgPREvents)
+	if err != nil {
+		// PR-graph persistence is non-critical for the hourly summary
+		// pipeline; log and continue rather than failing the whole hour.
+		slog.Warn("batch upsert pr events", "hour", hour.Format("2006-01-02-15"), "error", err)
+	}
+
 	qr := queueContributors(ctx, store, results, tenantRepos, watchlistTargets)
 
 	slog.Info("archive hour complete",
@@ -235,6 +273,7 @@ func processHour(ctx context.Context, store ingestStore, reader *ArchiveReader,
 		"events", eventCount,
 		"contributors", len(results),
 		"stored", stored,
+		"pr_events", prStored,
 		"queued", qr.queued,
 		"skipped_non_tenant", qr.skippedNonTenant,
 		"duration_sec", time.Since(start).Seconds(),
@@ -252,7 +291,7 @@ func queueContributors(ctx context.Context, store ingestStore,
 	summaries []Summary, tenantRepos map[string]bool, watchlistTargets map[string][]postgres.WatchlistEntry) queueResult {
 	var qr queueResult
 	for _, s := range summaries {
-		exists, _ := store.ContributorExists(ctx, s.Username, "github")
+		exists, _ := store.ContributorExists(ctx, s.Username, providerGitHub)
 
 		touchesTenant := false
 		for repo := range s.Repos {
@@ -284,7 +323,7 @@ func queueContributors(ctx context.Context, store ingestStore,
 			priority = 3
 		}
 
-		if err := store.EnqueueForScoring(ctx, s.Username, "github", priority); err != nil {
+		if err := store.EnqueueForScoring(ctx, s.Username, providerGitHub, priority); err != nil {
 			slog.Debug("enqueue", "username", s.Username, "error", err)
 			continue
 		}

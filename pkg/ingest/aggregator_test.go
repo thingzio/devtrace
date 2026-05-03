@@ -127,6 +127,91 @@ func TestAggregatorSkipsBots(t *testing.T) {
 	}
 }
 
+// TestAggregatorPREventsCorrelateAuthor pins the merge-graph
+// behavior: the opened action attributes the PR to its human author,
+// but merged/closed events from any actor (including bots) record
+// only the timestamp on the same (repo, pr_number) record. This is
+// the foundation for "PRs authored by X that got merged" — at
+// storage time the records merge so author + opened_at + merged_at
+// land on a single row.
+func TestAggregatorPREventsCorrelateAuthor(t *testing.T) {
+	a := NewAggregator(time.Now())
+	repo := "org/repo"
+	a.Add(Event{Type: "PullRequestEvent", Action: "opened", Actor: "human-author", Repo: repo, PRNumber: 42, CreatedAt: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)})
+	a.Add(Event{Type: "PullRequestEvent", Action: "merged", Actor: "github-actions[bot]", Repo: repo, PRNumber: 42, CreatedAt: time.Date(2026, 3, 5, 18, 0, 0, 0, time.UTC)})
+
+	pre := a.PREvents()
+	if len(pre) != 2 {
+		t.Fatalf("PR events: got %d, want 2", len(pre))
+	}
+	var opened, merged *PREvent
+	for i := range pre {
+		switch pre[i].Action {
+		case "opened":
+			opened = &pre[i]
+		case "merged":
+			merged = &pre[i]
+		}
+	}
+	if opened == nil || opened.Author != "human-author" {
+		t.Errorf("opened event must carry the human author, got %+v", opened)
+	}
+	if merged == nil || merged.Author != "" {
+		t.Errorf("merged event must NOT carry an author (the bot is filtered), got %+v", merged)
+	}
+	if opened.Number != 42 || merged.Number != 42 {
+		t.Errorf("PR numbers mismatch: opened=%d merged=%d", opened.Number, merged.Number)
+	}
+}
+
+// TestAggregatorPREventsBotOpenerNotAttributed asserts that PRs
+// opened by bots (Renovate, Dependabot) do NOT carry an Author
+// through to the merge graph: we don't credit bots with merged-PR
+// authorship later. The opened observation still gets recorded so
+// the PR is known to exist; just without an author.
+func TestAggregatorPREventsBotOpenerNotAttributed(t *testing.T) {
+	a := NewAggregator(time.Now())
+	a.Add(Event{Type: "PullRequestEvent", Action: "opened", Actor: "renovate[bot]", Repo: "org/repo", PRNumber: 7})
+
+	pre := a.PREvents()
+	if len(pre) != 1 {
+		t.Fatalf("PR events: got %d, want 1", len(pre))
+	}
+	if pre[0].Author != "" {
+		t.Errorf("bot-opened PR must have empty Author, got %q", pre[0].Author)
+	}
+}
+
+// TestAggregatorPREventsDedupeWithinHour: a single (repo, number,
+// action) tuple recorded only once per hour even if duplicate events
+// arrive (which can happen with archive replays). The summary path's
+// per-actor counts are unaffected — this dedupe is specific to the
+// merge graph where double-counting an open or merge is a real risk.
+func TestAggregatorPREventsDedupeWithinHour(t *testing.T) {
+	a := NewAggregator(time.Now())
+	repo := "org/repo"
+	a.Add(Event{Type: "PullRequestEvent", Action: "merged", Actor: "actor-1", Repo: repo, PRNumber: 1})
+	a.Add(Event{Type: "PullRequestEvent", Action: "merged", Actor: "actor-2", Repo: repo, PRNumber: 1})
+	a.Add(Event{Type: "PullRequestEvent", Action: "merged", Actor: "actor-3", Repo: repo, PRNumber: 1})
+
+	pre := a.PREvents()
+	if len(pre) != 1 {
+		t.Errorf("PR events should dedupe to 1 per (repo, number, action), got %d", len(pre))
+	}
+}
+
+// TestAggregatorPREventsSkipsZeroNumber: events without a PR number
+// (other event types, or malformed PullRequestEvent) don't pollute
+// the merge graph.
+func TestAggregatorPREventsSkipsZeroNumber(t *testing.T) {
+	a := NewAggregator(time.Now())
+	a.Add(Event{Type: "IssuesEvent", Action: "opened", Actor: "u", Repo: "org/r"})
+	a.Add(Event{Type: "PullRequestEvent", Action: "opened", Actor: "u", Repo: "org/r", PRNumber: 0})
+	if got := len(a.PREvents()); got != 0 {
+		t.Errorf("expected 0 PR events, got %d", got)
+	}
+}
+
 // TestAggregatorMergedAction pins the action="merged" → PRsMerged
 // routing. GH Archive emits a distinct "merged" action when a PR is
 // merged; we historically watched for action="closed" with a separate

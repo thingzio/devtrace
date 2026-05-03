@@ -32,10 +32,41 @@ type Summary struct {
 	Repos         map[string]bool
 }
 
-// Aggregator collects events into per-contributor hourly summaries.
+// PREvent is one observation of a PullRequestEvent, persisted to the
+// merge-graph table so opened/merged/closed actions on the same PR
+// can be joined later. Without this, "PRs merged authored by X"
+// can't be computed: GH Archive attributes the merged action to
+// whoever clicked merge (usually a CI bot), not the PR author.
+//
+// Per-event records are keyed by (repo, pr_number) at storage
+// time; the storage layer COALESCEs fields so each action stamps
+// only its own column without clobbering earlier observations of
+// the same PR.
+type PREvent struct {
+	Repo    string
+	Number  int
+	Action  string    // opened, merged, closed
+	Author  string    // populated for opened action; empty otherwise
+	OccurAt time.Time // event timestamp
+}
+
+// prEventKey identifies a unique PR within an hour, used to dedupe
+// repeated events on the same PR within a single archive hour
+// (a PR being opened then immediately closed in the same hour
+// is rare but possible; we keep the first observation per action
+// to avoid double-counting).
+type prEventKey struct {
+	Repo   string
+	Number int
+	Action string
+}
+
+// Aggregator collects events into per-contributor hourly summaries
+// and per-PR observations for the merge graph.
 type Aggregator struct {
 	hour      time.Time
 	summaries map[string]*Summary // key: username
+	prEvents  map[prEventKey]PREvent
 }
 
 // NewAggregator creates an aggregator for the given hour (truncated to the hour boundary).
@@ -43,11 +74,45 @@ func NewAggregator(hour time.Time) *Aggregator {
 	return &Aggregator{
 		hour:      hour.Truncate(time.Hour),
 		summaries: make(map[string]*Summary),
+		prEvents:  make(map[prEventKey]PREvent),
 	}
 }
 
-// Add processes a single event. Bot actors are silently skipped.
+// Add processes a single event. Bot actors are skipped for the
+// per-contributor summaries (we don't credit bots with activity)
+// but PullRequestEvent observations are recorded in the merge graph
+// regardless of actor — the merge action's actor is typically a CI
+// bot, and that observation IS the merge graph's reason to exist.
 func (a *Aggregator) Add(ev Event) {
+	// Capture PR-level observations before the bot filter — the bot
+	// IS the merge actor in modern OSS workflows, so filtering here
+	// would drop the very signal we need to correlate later. The
+	// author of an "opened" event is still a human (we don't insert
+	// PRs opened by bots into the merge graph because the action
+	// fires the bot filter below before we record the author), so
+	// we only stash the actor on the opened path.
+	if ev.Type == EventPullRequest && ev.Repo != "" && ev.PRNumber > 0 {
+		switch ev.Action {
+		case actionOpened, actionMerged, actionClosed:
+			key := prEventKey{Repo: ev.Repo, Number: ev.PRNumber, Action: ev.Action}
+			if _, dup := a.prEvents[key]; !dup {
+				rec := PREvent{
+					Repo:    ev.Repo,
+					Number:  ev.PRNumber,
+					Action:  ev.Action,
+					OccurAt: ev.CreatedAt,
+				}
+				// Only record an author for opened — and only when the
+				// actor is a human. Bot-opened PRs (Renovate, Dependabot)
+				// aren't credited as authored merges later.
+				if ev.Action == actionOpened && !bot.IsBot(ev.Actor) {
+					rec.Author = ev.Actor
+				}
+				a.prEvents[key] = rec
+			}
+		}
+	}
+
 	if bot.IsBot(ev.Actor) {
 		return
 	}
@@ -105,6 +170,19 @@ func (a *Aggregator) Results() []Summary {
 		results = append(results, *s)
 	}
 	return results
+}
+
+// PREvents returns all collected PR-level observations for this
+// hour. Each (repo, pr_number, action) tuple is unique within an
+// hour; the storage layer COALESCEs across hours into a single PR
+// row whose author / opened_at / merged_at / closed_at columns
+// fill in as the corresponding events arrive.
+func (a *Aggregator) PREvents() []PREvent {
+	out := make([]PREvent, 0, len(a.prEvents))
+	for _, ev := range a.prEvents {
+		out = append(out, ev)
+	}
+	return out
 }
 
 // Count returns the number of unique contributors aggregated.

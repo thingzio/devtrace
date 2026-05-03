@@ -190,7 +190,7 @@ func processBackfillHour(ctx context.Context, store ingestStore, reader *Archive
 		}
 		pgSummaries = append(pgSummaries, postgres.HourlySummary{
 			Username:      s.Username,
-			Provider:      "github",
+			Provider:      providerGitHub,
 			Hour:          agg.Hour(),
 			PRsOpened:     s.PRsOpened,
 			PRsMerged:     s.PRsMerged,

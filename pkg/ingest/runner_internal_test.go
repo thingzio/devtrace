@@ -31,6 +31,9 @@ type mockIngestStore struct {
 	pruneHistoryAge  time.Duration
 	batchUpsertErr   error
 
+	prEvents       []postgres.PREventRow
+	prunedPREvents bool
+
 	// Watchlist support
 	watchlistTargets map[string][]postgres.WatchlistEntry
 	notifications    []notifEntry
@@ -89,6 +92,16 @@ func (m *mockIngestStore) BatchUpsertActivity(_ context.Context, summaries []pos
 	}
 	m.upserted = append(m.upserted, summaries...)
 	return len(summaries), nil
+}
+
+func (m *mockIngestStore) BatchUpsertPREvents(_ context.Context, events []postgres.PREventRow) (int, error) {
+	m.prEvents = append(m.prEvents, events...)
+	return len(events), nil
+}
+
+func (m *mockIngestStore) PrunePREvents(_ context.Context, _ time.Duration) (int64, error) {
+	m.prunedPREvents = true
+	return 0, nil
 }
 
 func (m *mockIngestStore) EnqueueForScoring(_ context.Context, username, _ string, priority int) error {

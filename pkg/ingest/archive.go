@@ -30,6 +30,12 @@ type Event struct {
 	Actor     string
 	Repo      string
 	CreatedAt time.Time
+	// PRNumber is populated for PullRequestEvent only; zero for other
+	// event types. Used by the merge-graph aggregator to correlate
+	// opened/merged/closed events on the same PR (the actor differs:
+	// opens are attributed to the author, merges are usually attributed
+	// to a CI bot in modern OSS workflows).
+	PRNumber int
 }
 
 type ArchiveReader struct {
@@ -112,12 +118,13 @@ func parseEvent(line []byte) (Event, bool) {
 	default:
 		return Event{}, false
 	}
-	// Only the action field is needed from the payload — the
-	// pull_request object in GH Archive carries no `merged` field
-	// (just url/id/number/head/base). Merge detection is via
-	// action="merged"; see aggregator.go.
+	// PullRequestEvent payloads carry a top-level `number` field with
+	// the PR number; the merge-graph aggregator needs it to correlate
+	// opened/merged/closed events on the same PR. Other event types
+	// don't need PR numbers, but the field harmlessly stays zero.
 	var payload struct {
 		Action string `json:"action"`
+		Number int    `json:"number"`
 	}
 	_ = json.Unmarshal(raw.Payload, &payload)
 	t, _ := time.Parse(time.RFC3339, raw.CreatedAt)
@@ -127,5 +134,6 @@ func parseEvent(line []byte) (Event, bool) {
 		Actor:     raw.Actor.Login,
 		Repo:      raw.Repo.Name,
 		CreatedAt: t,
+		PRNumber:  payload.Number,
 	}, raw.Actor.Login != "" && raw.Repo.Name != ""
 }
