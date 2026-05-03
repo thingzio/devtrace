@@ -53,6 +53,29 @@ type Enrichment struct {
 	SecurityCredits     *SecurityCredits   `json:"security_credits,omitempty"`
 	OSSFScorecard       *OSSFScorecard     `json:"ossf_scorecard,omitempty"`
 	Publisher           *Publisher         `json:"publisher,omitempty"`
+	StackOverflow       *StackOverflow     `json:"stack_overflow,omitempty"`
+}
+
+// StackOverflow surfaces the contributor's Stack Overflow presence as
+// a cross-platform reputation signal. A high-reputation account that
+// declares the GitHub profile in its `website_url` is a strong
+// "real practitioner" indicator (T2 confidence — declared link).
+//
+// We discover the SO user via a stackoverflow.com link found on the
+// GitHub profile (already classified by pkg/profile/extract.go); the
+// SE Data API supplies the reputation, badge counts, and creation
+// date. Cached weekly; SE has a 300/day per-IP quota that the cache
+// keeps us comfortably under.
+type StackOverflow struct {
+	UserID       int64      `json:"user_id"`
+	DisplayName  string     `json:"display_name"`
+	Reputation   int64      `json:"reputation"`
+	BadgeBronze  int        `json:"badge_bronze"`
+	BadgeSilver  int        `json:"badge_silver"`
+	BadgeGold    int        `json:"badge_gold"`
+	URL          string     `json:"url"`
+	CreatedAt    *time.Time `json:"created_at,omitempty"`
+	LastAccessAt *time.Time `json:"last_access_at,omitempty"`
 }
 
 // Publisher aggregates the contributor's published-package presence

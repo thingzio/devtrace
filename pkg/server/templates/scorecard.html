@@ -258,6 +258,34 @@
   </section>
   {{end}}
 
+  {{with .StackOverflow}}{{if gt .UserID 0}}
+  <section class="enrichment-section enrichment-stackoverflow">
+    <h2>Stack Overflow <span class="plan-badge">Starter+</span> <span class="scope-badge scope-badge-global">Global</span></h2>
+    <p class="metric-desc" style="margin-bottom:0.75rem;">Cross-platform reputation signal (T2 confidence — link declared on the contributor's GitHub profile). High reputation on widely-trafficked Q&amp;A sites indicates real practitioner engagement.</p>
+    <div class="metric-cards">
+      <div class="metric-card">
+        <div class="metric-value">{{fmtnum .Reputation}}</div>
+        <div class="metric-label">Reputation</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-value"><span style="color:#ffac33;">&#9679;</span> {{.BadgeGold}} <span style="color:#b4b8bc;">&#9679;</span> {{.BadgeSilver}} <span style="color:#cd7f32;">&#9679;</span> {{.BadgeBronze}}</div>
+        <div class="metric-label">Badges</div>
+      </div>
+      {{if .CreatedAt}}
+      <div class="metric-card">
+        <div class="metric-value" style="font-size:1rem;">{{.CreatedAt.Format "Jan 2006"}}</div>
+        <div class="metric-label">Member Since</div>
+      </div>
+      {{end}}
+    </div>
+    {{if .URL}}
+    <p class="metric-desc" style="margin-top:0.75rem;">
+      <a href="{{.URL}}" target="_blank" rel="noopener">{{.DisplayName}}</a> on Stack Overflow
+    </p>
+    {{end}}
+  </section>
+  {{end}}{{end}}
+
   {{if or .LinkedAccounts .Emails}}
   <section class="enrichment-section enrichment-linked">
     <h2>Linked Accounts <span class="scope-badge scope-badge-global">Global</span></h2>

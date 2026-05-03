@@ -128,6 +128,35 @@ func PublisherTopLimit() int {
 	return GetEnvAsInt("DEVTRACE_PUBLISHER_TOP_LIMIT", defaultPublisherTopLimit)
 }
 
+const (
+	// defaultStackOverflowTTL is the freshness window for cached SO
+	// profiles. Reputation updates daily but doesn't churn rapidly;
+	// a week comfortably stays under SE's 300/day per-IP quota.
+	defaultStackOverflowTTL = 7 * 24 * time.Hour
+
+	// defaultStackOverflowTimeout bounds a single SE API call.
+	defaultStackOverflowTimeout = 10 * time.Second
+)
+
+// StackOverflowTTL returns the freshness window for cached SO
+// profiles. Override via DEVTRACE_SO_TTL.
+func StackOverflowTTL() time.Duration {
+	return GetEnvAsDuration("DEVTRACE_SO_TTL", defaultStackOverflowTTL)
+}
+
+// StackOverflowTimeout returns the per-call timeout for the SE
+// Data API client. Override via DEVTRACE_SO_TIMEOUT.
+func StackOverflowTimeout() time.Duration {
+	return GetEnvAsDuration("DEVTRACE_SO_TIMEOUT", defaultStackOverflowTimeout)
+}
+
+// StackOverflowAPIKey returns the optional Stack Exchange API key.
+// Empty string runs against the unauthenticated 300/day per-IP quota;
+// providing a key (DEVTRACE_SO_API_KEY) lifts that to 10000/day.
+func StackOverflowAPIKey() string {
+	return GetEnv("DEVTRACE_SO_API_KEY", "")
+}
+
 // GetEnvAsDuration parses the env var as a Go duration; falls back to
 // the default on absent or invalid values.
 func GetEnvAsDuration(key string, fallback time.Duration) time.Duration {

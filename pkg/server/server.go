@@ -64,7 +64,22 @@ var templateFuncs = template.FuncMap{
 		}
 		return neg + s
 	},
-	"fmtnum": func(n int) string {
+	"fmtnum": func(v any) string {
+		// Accept int / int64 / int32 / etc. so templates that surface
+		// counts of varying width (e.g., model.StackOverflow.Reputation
+		// is int64; postgres row counts are int) all use the same
+		// thousands-separator formatter without per-call conversions.
+		var n int64
+		switch x := v.(type) {
+		case int:
+			n = int64(x)
+		case int64:
+			n = x
+		case int32:
+			n = int64(x)
+		default:
+			return fmt.Sprintf("%v", v)
+		}
 		neg := ""
 		if n < 0 {
 			neg = "-"

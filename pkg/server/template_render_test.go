@@ -198,6 +198,19 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 				},
 			},
 		},
+		StackOverflow: func() *model.StackOverflow {
+			created := time.Date(2008, 9, 26, 12, 0, 0, 0, time.UTC)
+			return &model.StackOverflow{
+				UserID:      22656,
+				DisplayName: "Jon Skeet",
+				Reputation:  1500000,
+				BadgeBronze: 9000,
+				BadgeSilver: 9000,
+				BadgeGold:   800,
+				URL:         "https://stackoverflow.com/users/22656/jon-skeet",
+				CreatedAt:   &created,
+			}
+		}(),
 	}
 
 	data := scorecardTestData(enrichment)
@@ -247,6 +260,10 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 		"Package Publisher", "npm", "42 packages",
 		"alpha-pkg", "beta-pkg",
 		"https://www.npmjs.com/package/alpha-pkg",
+		// Stack Overflow
+		"Stack Overflow", "Jon Skeet",
+		"Sep 2008", // CreatedAt formatted as "Member Since"
+		"https://stackoverflow.com/users/22656/jon-skeet",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(body, want) {
@@ -274,7 +291,7 @@ func TestScorecardWithoutEnrichmentRenders(t *testing.T) {
 	}
 	body := rec.Body.String()
 	// The enrichment headings must NOT appear when no data is provided.
-	for _, mustNotContain := range []string{">Activity ", "Reciprocity", "Owned Repositories", "Linked Accounts", "Security Credits", "OSSF Scorecard", "Package Publisher"} {
+	for _, mustNotContain := range []string{">Activity ", "Reciprocity", "Owned Repositories", "Linked Accounts", "Security Credits", "OSSF Scorecard", "Package Publisher", "Stack Overflow"} {
 		if strings.Contains(body, mustNotContain) {
 			t.Errorf("scorecard rendered %q despite nil Enrichment", mustNotContain)
 		}

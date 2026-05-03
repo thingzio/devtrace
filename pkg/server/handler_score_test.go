@@ -151,6 +151,14 @@ func (s *stubBehaviorStore) SavePublisherProfile(_ context.Context, _, _, _ stri
 	return nil
 }
 
+func (s *stubBehaviorStore) GetStackOverflowProfile(_ context.Context, _, _ string) (*model.StackOverflow, time.Time, error) {
+	return nil, time.Time{}, nil
+}
+
+func (s *stubBehaviorStore) SaveStackOverflowProfile(_ context.Context, _, _ string, _ *model.StackOverflow) error {
+	return nil
+}
+
 func TestScoreHandlerEnrichmentByPlan(t *testing.T) {
 	mock := &mockGH{
 		profile: &ghclient.UserProfile{Username: "testuser", PublicRepos: 5, Followers: 10},

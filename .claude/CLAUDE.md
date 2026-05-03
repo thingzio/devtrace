@@ -181,6 +181,9 @@ Data flow: GitHub App webhook → tenant repos → background ingest worker → 
 - `DEVTRACE_PUBLISHER_TTL` — publisher-package cache freshness (Go duration, default 168h)
 - `DEVTRACE_PUBLISHER_TIMEOUT` — per-call timeout for publisher registry HTTP clients (Go duration, default 10s)
 - `DEVTRACE_PUBLISHER_TOP_LIMIT` — cap on packages surfaced in the top list per registry (default 5)
+- `DEVTRACE_SO_TTL` — Stack Overflow profile cache freshness (Go duration, default 168h)
+- `DEVTRACE_SO_TIMEOUT` — per-call timeout for the Stack Exchange Data API client (Go duration, default 10s)
+- `DEVTRACE_SO_API_KEY` — optional Stack Exchange API key; lifts unauthenticated 300/day per-IP quota to 10000/day
 - `ANTHROPIC_API_KEY` — optional, enables AI risk sensing
 - `SEND_API_KEY` — email service API key (enables contact form on help page)
 - `SUPPORT_EMAIL` — support email address for contact form

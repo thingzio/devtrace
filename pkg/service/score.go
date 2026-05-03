@@ -18,6 +18,7 @@ import (
 	profilepkg "github.com/thingzio/devtrace/pkg/profile"
 	"github.com/thingzio/devtrace/pkg/registry"
 	"github.com/thingzio/devtrace/pkg/score"
+	"github.com/thingzio/devtrace/pkg/stackoverflow"
 )
 
 // OSSFFetcher is the subset of the OSSF Scorecard client used by the
@@ -33,6 +34,13 @@ type OSSFFetcher interface {
 // total is the unbounded count and top is the display-capped list.
 type NPMFetcher interface {
 	FetchUserPackages(ctx context.Context, username string, topLimit int) (int, []registry.Package, error)
+}
+
+// StackOverflowFetcher is the subset of the SE Data API client used
+// by the score service. Defined here so tests can inject a mock
+// without spinning up an httptest server.
+type StackOverflowFetcher interface {
+	FetchUser(ctx context.Context, userID int64) (*stackoverflow.Profile, error)
 }
 
 // BehaviorStore provides behavioral signal data from contributor activity.
@@ -54,6 +62,8 @@ type BehaviorStore interface {
 	SaveOSSFScorecard(ctx context.Context, provider, owner, repo string, card *model.OSSFScorecard) error
 	GetPublisherProfile(ctx context.Context, provider, username, registry string) (*model.RegistryProfile, time.Time, error)
 	SavePublisherProfile(ctx context.Context, provider, username, registry string, profile *model.RegistryProfile) error
+	GetStackOverflowProfile(ctx context.Context, provider, username string) (*model.StackOverflow, time.Time, error)
+	SaveStackOverflowProfile(ctx context.Context, provider, username string, profile *model.StackOverflow) error
 }
 
 // topContributedRepoLimit caps the number of repos surfaced in enrichment.
@@ -69,23 +79,26 @@ const logKeyRepo = "repo"
 // ScoreService orchestrates signal fetching, scoring, and response enrichment.
 type ScoreService struct {
 	gh       ghclient.Client
-	behStore BehaviorStore // nil-safe; behavioral signals omitted when nil
-	ossf     OSSFFetcher   // nil-safe; repo OSSF Scorecard enrichment omitted when nil
-	npm      NPMFetcher    // nil-safe; npm publisher enrichment omitted when nil
+	behStore BehaviorStore        // nil-safe; behavioral signals omitted when nil
+	ossf     OSSFFetcher          // nil-safe; repo OSSF Scorecard enrichment omitted when nil
+	npm      NPMFetcher           // nil-safe; npm publisher enrichment omitted when nil
+	so       StackOverflowFetcher // nil-safe; SO enrichment omitted when nil
 	cache    *scoreCache
 	claude   *claude.Client // nil = fallback to templates
 	version  string         // DevTrace build version stamped on every response
 }
 
 // NewScoreService returns a ScoreService wired to the given GitHub client.
-// The OSSF Scorecard fetcher and the npm publisher fetcher are initialized
-// to defaults; pass SetOSSFFetcher / SetNPMFetcher to override (e.g., a
-// test mock or to disable entirely).
+// The OSSF Scorecard, npm publisher, and Stack Overflow fetchers are
+// initialized to defaults; pass SetOSSFFetcher / SetNPMFetcher /
+// SetStackOverflowFetcher to override (e.g., a test mock or to
+// disable entirely).
 func NewScoreService(gh ghclient.Client, version string) *ScoreService {
 	return &ScoreService{
 		gh:      gh,
 		ossf:    ossf.NewClient(config.OSSFTimeout()),
 		npm:     registry.NewNPMClient(config.PublisherTimeout()),
+		so:      stackoverflow.NewClient(config.StackOverflowTimeout(), config.StackOverflowAPIKey()),
 		cache:   newScoreCache(),
 		version: version,
 	}
@@ -120,6 +133,12 @@ func (s *ScoreService) SetOSSFFetcher(f OSSFFetcher) {
 // and for environments where the npm registry is unreachable.
 func (s *ScoreService) SetNPMFetcher(f NPMFetcher) {
 	s.npm = f
+}
+
+// SetStackOverflowFetcher overrides the default Stack Exchange API
+// client. Pass nil to disable SO enrichment entirely.
+func (s *ScoreService) SetStackOverflowFetcher(f StackOverflowFetcher) {
+	s.so = f
 }
 
 // Score fetches signals, computes a reputation score, and builds a plan-aware response.
@@ -284,15 +303,17 @@ func enrichForPlan(full *model.ScoreResponse, planName string) *model.ScoreRespo
 		} else {
 			resp.AISensing = &model.AISensing{}
 		}
-		// Email extraction, security credits, OSSF Scorecard, and
-		// publisher detection are Starter+. Emails are gated to deter
-		// scraping; the others are paid-tier upgrade hooks
-		// (repo-quality, credibility, and supply-chain signals).
+		// Email extraction, security credits, OSSF Scorecard,
+		// publisher detection, and Stack Overflow are Starter+.
+		// Emails are gated to deter scraping; the others are
+		// paid-tier upgrade hooks (repo-quality, credibility,
+		// supply-chain, and cross-platform reputation signals).
 		if resp.Enrichment != nil {
 			resp.Enrichment.Emails = nil
 			resp.Enrichment.SecurityCredits = nil
 			resp.Enrichment.OSSFScorecard = nil
 			resp.Enrichment.Publisher = nil
+			resp.Enrichment.StackOverflow = nil
 		}
 
 	case plan.PlanStarter:
@@ -356,6 +377,7 @@ func buildScopeInfo(hasRepo bool) *model.ScopeInfo {
 		"enrichment.owned_repos",
 		"enrichment.security_credits",
 		"enrichment.publisher",
+		"enrichment.stack_overflow",
 	}
 	repoScoped := []string{}
 	if hasRepo {
@@ -523,16 +545,7 @@ func deepCopyEnrichment(src *model.Enrichment) *model.Enrichment {
 		r := *src.Reciprocity
 		dst.Reciprocity = &r
 	}
-	if src.OwnedRepos != nil {
-		or := *src.OwnedRepos
-		if src.OwnedRepos.Top != nil {
-			or.Top = append([]model.OwnedRepo(nil), src.OwnedRepos.Top...)
-		}
-		if src.OwnedRepos.Languages != nil {
-			or.Languages = append([]model.LanguageBucket(nil), src.OwnedRepos.Languages...)
-		}
-		dst.OwnedRepos = &or
-	}
+	dst.OwnedRepos = copyOwnedRepos(src.OwnedRepos)
 	if src.TopContributedRepos != nil {
 		dst.TopContributedRepos = append([]model.RepoContribution(nil), src.TopContributedRepos...)
 	}
@@ -542,45 +555,90 @@ func deepCopyEnrichment(src *model.Enrichment) *model.Enrichment {
 	if src.Emails != nil {
 		dst.Emails = append([]string(nil), src.Emails...)
 	}
-	if src.SecurityCredits != nil {
-		sc := *src.SecurityCredits
-		if src.SecurityCredits.BySeverity != nil {
-			sc.BySeverity = make(map[string]int, len(src.SecurityCredits.BySeverity))
-			for k, v := range src.SecurityCredits.BySeverity {
-				sc.BySeverity[k] = v
-			}
-		}
-		if src.SecurityCredits.Recent != nil {
-			sc.Recent = append([]model.SecurityCredit(nil), src.SecurityCredits.Recent...)
-		}
-		dst.SecurityCredits = &sc
-	}
-	if src.OSSFScorecard != nil {
-		o := *src.OSSFScorecard
-		if src.OSSFScorecard.Checks != nil {
-			o.Checks = append([]model.OSSFCheck(nil), src.OSSFScorecard.Checks...)
-		}
-		dst.OSSFScorecard = &o
-	}
-	if src.Publisher != nil {
-		p := *src.Publisher
-		if src.Publisher.NPM != nil {
-			n := *src.Publisher.NPM
-			if src.Publisher.NPM.Top != nil {
-				n.Top = append([]model.Package(nil), src.Publisher.NPM.Top...)
-			}
-			p.NPM = &n
-		}
-		if src.Publisher.PyPI != nil {
-			py := *src.Publisher.PyPI
-			if src.Publisher.PyPI.Top != nil {
-				py.Top = append([]model.Package(nil), src.Publisher.PyPI.Top...)
-			}
-			p.PyPI = &py
-		}
-		dst.Publisher = &p
-	}
+	dst.SecurityCredits = copySecurityCredits(src.SecurityCredits)
+	dst.OSSFScorecard = copyOSSFScorecard(src.OSSFScorecard)
+	dst.Publisher = copyPublisher(src.Publisher)
+	dst.StackOverflow = copyStackOverflow(src.StackOverflow)
 	return &dst
+}
+
+func copyOwnedRepos(src *model.OwnedRepos) *model.OwnedRepos {
+	if src == nil {
+		return nil
+	}
+	or := *src
+	if src.Top != nil {
+		or.Top = append([]model.OwnedRepo(nil), src.Top...)
+	}
+	if src.Languages != nil {
+		or.Languages = append([]model.LanguageBucket(nil), src.Languages...)
+	}
+	return &or
+}
+
+func copySecurityCredits(src *model.SecurityCredits) *model.SecurityCredits {
+	if src == nil {
+		return nil
+	}
+	sc := *src
+	if src.BySeverity != nil {
+		sc.BySeverity = make(map[string]int, len(src.BySeverity))
+		for k, v := range src.BySeverity {
+			sc.BySeverity[k] = v
+		}
+	}
+	if src.Recent != nil {
+		sc.Recent = append([]model.SecurityCredit(nil), src.Recent...)
+	}
+	return &sc
+}
+
+func copyOSSFScorecard(src *model.OSSFScorecard) *model.OSSFScorecard {
+	if src == nil {
+		return nil
+	}
+	o := *src
+	if src.Checks != nil {
+		o.Checks = append([]model.OSSFCheck(nil), src.Checks...)
+	}
+	return &o
+}
+
+func copyPublisher(src *model.Publisher) *model.Publisher {
+	if src == nil {
+		return nil
+	}
+	p := *src
+	p.NPM = copyRegistryProfile(src.NPM)
+	p.PyPI = copyRegistryProfile(src.PyPI)
+	return &p
+}
+
+func copyRegistryProfile(src *model.RegistryProfile) *model.RegistryProfile {
+	if src == nil {
+		return nil
+	}
+	rp := *src
+	if src.Top != nil {
+		rp.Top = append([]model.Package(nil), src.Top...)
+	}
+	return &rp
+}
+
+func copyStackOverflow(src *model.StackOverflow) *model.StackOverflow {
+	if src == nil {
+		return nil
+	}
+	so := *src
+	if src.CreatedAt != nil {
+		t := *src.CreatedAt
+		so.CreatedAt = &t
+	}
+	if src.LastAccessAt != nil {
+		t := *src.LastAccessAt
+		so.LastAccessAt = &t
+	}
+	return &so
 }
 
 // buildEnrichment populates the optional Enrichment block from the
@@ -642,10 +700,126 @@ func (s *ScoreService) buildEnrichment(ctx context.Context, username, repo strin
 		populated = true
 	}
 
+	if so := s.stackOverflowEnrichment(ctx, username, enr.LinkedAccounts); so != nil {
+		enr.StackOverflow = so
+		populated = true
+	}
+
 	if !populated {
 		return nil
 	}
 	return enr
+}
+
+// stackOverflowEnrichment surfaces the contributor's Stack Overflow
+// profile when their GitHub bio/blog declares a stackoverflow.com
+// link. Discovery is two-stage:
+//
+//  1. The profile pkg has already classified declared links into
+//     LinkedAccounts (we get them passed in here, not re-extracted).
+//  2. We extract the SO numeric user_id from the first SO-platform
+//     link, look up the cached SO profile, and refresh from the SE
+//     Data API when stale.
+//
+// A user without an SO link declared on their GitHub profile gets a
+// zero-rep sentinel saved on first lookup so the TTL check suppresses
+// re-asking. UI render path treats UserID==0 as "no SO data".
+func (s *ScoreService) stackOverflowEnrichment(ctx context.Context, username string, linked []model.LinkedAccount) *model.StackOverflow {
+	if s.behStore == nil || s.so == nil {
+		return nil
+	}
+	provider := string(model.ProviderGitHub)
+
+	cached, fetchedAt, err := s.behStore.GetStackOverflowProfile(ctx, provider, username)
+	if err == nil && !fetchedAt.IsZero() && time.Since(fetchedAt) < config.StackOverflowTTL() {
+		return materializeSO(cached)
+	}
+
+	soURL, soUserID := pickStackOverflowLink(linked)
+	if soUserID == 0 {
+		// No SO link declared on profile. Save sentinel so the TTL
+		// check stops us from re-scanning LinkedAccounts every score
+		// request — the answer won't change without a profile update.
+		empty := &model.StackOverflow{}
+		if err := s.behStore.SaveStackOverflowProfile(ctx, provider, username, empty); err != nil {
+			slog.Warn("save stackoverflow sentinel", "username", username, "error", err)
+		}
+		return nil
+	}
+
+	prof, ferr := s.so.FetchUser(ctx, soUserID)
+	switch {
+	case errors.Is(ferr, stackoverflow.ErrNotFound):
+		// SO link points to a user the SE API doesn't recognize
+		// (deleted account, typo). Sentinel-save so we don't keep
+		// asking; UI shows nothing.
+		empty := &model.StackOverflow{}
+		if err := s.behStore.SaveStackOverflowProfile(ctx, provider, username, empty); err != nil {
+			slog.Warn("save stackoverflow not-found sentinel", "username", username, "error", err)
+		}
+		return nil
+	case ferr != nil:
+		slog.Warn("fetch stackoverflow profile",
+			"username", username,
+			"so_user_id", soUserID,
+			"error", ferr,
+			"had_cache", cached != nil,
+		)
+		return materializeSO(cached)
+	}
+
+	out := &model.StackOverflow{
+		UserID:      prof.UserID,
+		DisplayName: prof.DisplayName,
+		Reputation:  prof.Reputation,
+		BadgeBronze: prof.BadgeBronze,
+		BadgeSilver: prof.BadgeSilver,
+		BadgeGold:   prof.BadgeGold,
+		URL:         prof.URL,
+	}
+	if !prof.CreatedAt.IsZero() {
+		t := prof.CreatedAt
+		out.CreatedAt = &t
+	}
+	if !prof.LastAccessAt.IsZero() {
+		t := prof.LastAccessAt
+		out.LastAccessAt = &t
+	}
+	// SE Link sometimes lacks the URL we expect; preserve the
+	// originating profile link as a fallback for the UI.
+	if out.URL == "" && soURL != "" {
+		out.URL = soURL
+	}
+	if err := s.behStore.SaveStackOverflowProfile(ctx, provider, username, out); err != nil {
+		slog.Warn("save stackoverflow profile", "username", username, "error", err)
+	}
+	return out
+}
+
+// materializeSO converts a cached SO row into a renderable result.
+// Zero-rep / zero-id sentinels collapse to nil so the UI render
+// path's `{{with .StackOverflow}}` falls through cleanly.
+func materializeSO(card *model.StackOverflow) *model.StackOverflow {
+	if card == nil || card.UserID == 0 {
+		return nil
+	}
+	return card
+}
+
+// pickStackOverflowLink returns the first stackoverflow URL +
+// extracted user ID from the contributor's classified linked
+// accounts. Returns (url, 0) if no SO link is found or the URL
+// can't be parsed for an ID.
+func pickStackOverflowLink(linked []model.LinkedAccount) (string, int64) {
+	for _, a := range linked {
+		if a.Platform != "stackoverflow" {
+			continue
+		}
+		if id := stackoverflow.ExtractUserID(a.URL); id > 0 {
+			return a.URL, id
+		}
+	}
+	return "", 0
 }
 
 // publisherEnrichment returns the cached publisher profile aggregate

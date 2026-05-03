@@ -11,6 +11,13 @@
   <div style="max-width:700px;margin:0 auto">
 
     <div class="landing-feature" style="margin-bottom:24px">
+      <h3>May 3, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.25</span></h3>
+      <ul>
+        <li><strong>Stack Overflow reputation (Starter+)</strong> &mdash; when the contributor's GitHub bio or blog declares a <code>stackoverflow.com/users/{id}</code> link, the scorecard now surfaces their SO reputation, badge counts (gold / silver / bronze), and account age. Cross-platform credibility signal at T2 confidence (declared link). Cached weekly to stay well under the SE Data API's 300/day per-IP quota; optional <code>DEVTRACE_SO_API_KEY</code> lifts that to 10000/day.</li>
+      </ul>
+    </div>
+
+    <div class="landing-feature" style="margin-bottom:24px">
       <h3>May 3, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.23</span></h3>
       <ul>
         <li><strong>Package Publisher detection (Starter+)</strong> &mdash; the contributor scorecard now surfaces npm packages this contributor publishes under their handle, including aggregate count and a top-N list with package names, roles, and registry links. Strong supply-chain credibility signal: a write-role relationship with widely-used packages is one of the few user-attested identities downstream consumers actually depend on. Cached weekly. PyPI is a planned follow-up (no public reverse-lookup API today).</li>

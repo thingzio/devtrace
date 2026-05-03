@@ -13,6 +13,7 @@ import (
 	"github.com/thingzio/devtrace/pkg/ossf"
 	"github.com/thingzio/devtrace/pkg/registry"
 	"github.com/thingzio/devtrace/pkg/score"
+	"github.com/thingzio/devtrace/pkg/stackoverflow"
 )
 
 // mockBehaviorStore implements service.BehaviorStore for testing the
@@ -36,6 +37,10 @@ type mockBehaviorStore struct {
 	publisherProfile   *model.RegistryProfile
 	publisherFetchedAt time.Time
 	savedPublisher     *model.RegistryProfile
+
+	soProfile   *model.StackOverflow
+	soFetchedAt time.Time
+	savedSO     *model.StackOverflow
 }
 
 func (m *mockBehaviorStore) GetBehavioralSignals(_ context.Context, _, _ string) (*model.Behavior, error) {
@@ -84,6 +89,15 @@ func (m *mockBehaviorStore) GetPublisherProfile(_ context.Context, _, _, _ strin
 
 func (m *mockBehaviorStore) SavePublisherProfile(_ context.Context, _, _, _ string, profile *model.RegistryProfile) error {
 	m.savedPublisher = profile
+	return nil
+}
+
+func (m *mockBehaviorStore) GetStackOverflowProfile(_ context.Context, _, _ string) (*model.StackOverflow, time.Time, error) {
+	return m.soProfile, m.soFetchedAt, nil
+}
+
+func (m *mockBehaviorStore) SaveStackOverflowProfile(_ context.Context, _, _ string, profile *model.StackOverflow) error {
+	m.savedSO = profile
 	return nil
 }
 
@@ -1219,6 +1233,194 @@ func TestOSSFStrippedForFree(t *testing.T) {
 			has := resp.Enrichment.OSSFScorecard != nil
 			if has != tc.wantSet {
 				t.Errorf("plan=%s OSSFScorecard present=%v, want %v", tc.plan, has, tc.wantSet)
+			}
+		})
+	}
+}
+
+// mockSO implements service.StackOverflowFetcher for testing the SO
+// enrichment path without an httptest server.
+type mockSO struct {
+	prof  *stackoverflow.Profile
+	err   error
+	calls int
+}
+
+func (m *mockSO) FetchUser(_ context.Context, _ int64) (*stackoverflow.Profile, error) {
+	m.calls++
+	return m.prof, m.err
+}
+
+// soProfileWithLink returns a profile with a stackoverflow link
+// extracted into LinkedAccounts (mirrors what profilepkg.Extract
+// produces from a real GitHub bio/blog).
+func soProfileWithLink() *ghclient.UserProfile {
+	return &ghclient.UserProfile{
+		Username: "testuser",
+		Bio:      "Find me at https://stackoverflow.com/users/22656/jon-skeet",
+	}
+}
+
+// TestStackOverflowEnrichmentCacheHit: fresh cached row → no upstream
+// SE API call; the cached profile flows through unchanged.
+func TestStackOverflowEnrichmentCacheHit(t *testing.T) {
+	cached := &model.StackOverflow{
+		UserID: 22656, Reputation: 1500000, DisplayName: "Cached Skeet",
+	}
+	store := &mockBehaviorStore{
+		soProfile:   cached,
+		soFetchedAt: time.Now().Add(-1 * time.Hour),
+	}
+	mc := &mockSO{prof: &stackoverflow.Profile{UserID: 22656, Reputation: 9999, DisplayName: "Stale"}}
+
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: soProfileWithLink(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetStackOverflowFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment == nil || resp.Enrichment.StackOverflow == nil {
+		t.Fatal("expected SO in enrichment")
+	}
+	if resp.Enrichment.StackOverflow.Reputation != 1500000 {
+		t.Errorf("Reputation: got %d, want 1500000 (cache hit)", resp.Enrichment.StackOverflow.Reputation)
+	}
+	if mc.calls != 0 {
+		t.Errorf("expected 0 SE calls on cache hit, got %d", mc.calls)
+	}
+}
+
+// TestStackOverflowEnrichmentNoLinkSavesSentinel: contributor has no
+// SO link declared → save zero-id sentinel, return nil. Subsequent
+// requests within the TTL must not re-scan LinkedAccounts.
+func TestStackOverflowEnrichmentNoLinkSavesSentinel(t *testing.T) {
+	store := &mockBehaviorStore{}
+	mc := &mockSO{}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: &ghclient.UserProfile{Username: "testuser", Bio: "no SO link here"},
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetStackOverflowFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment != nil && resp.Enrichment.StackOverflow != nil {
+		t.Errorf("expected nil SO when no link declared, got %+v", resp.Enrichment.StackOverflow)
+	}
+	if store.savedSO == nil || store.savedSO.UserID != 0 {
+		t.Errorf("expected zero-id sentinel save, got %+v", store.savedSO)
+	}
+	if mc.calls != 0 {
+		t.Errorf("must not call SE API when no link to lookup, got %d", mc.calls)
+	}
+}
+
+// TestStackOverflowEnrichmentNotFoundSavesSentinel: SO link points
+// to a deleted/missing user → SE returns ErrNotFound → save sentinel.
+func TestStackOverflowEnrichmentNotFoundSavesSentinel(t *testing.T) {
+	store := &mockBehaviorStore{}
+	mc := &mockSO{err: stackoverflow.ErrNotFound}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: soProfileWithLink(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetStackOverflowFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if resp.Enrichment != nil && resp.Enrichment.StackOverflow != nil {
+		t.Errorf("expected nil SO on not-found, got %+v", resp.Enrichment.StackOverflow)
+	}
+	if store.savedSO == nil || store.savedSO.UserID != 0 {
+		t.Errorf("expected sentinel save on not-found, got %+v", store.savedSO)
+	}
+}
+
+// TestStackOverflowEnrichmentStaleRefresh: stale cache + valid SO link
+// → SE call → save fresh profile.
+func TestStackOverflowEnrichmentStaleRefresh(t *testing.T) {
+	store := &mockBehaviorStore{
+		soProfile:   &model.StackOverflow{UserID: 22656, Reputation: 100},
+		soFetchedAt: time.Now().Add(-30 * 24 * time.Hour),
+	}
+	mc := &mockSO{
+		prof: &stackoverflow.Profile{
+			UserID:      22656,
+			DisplayName: "Refreshed Skeet",
+			Reputation:  2000000,
+			BadgeGold:   1000,
+		},
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: soProfileWithLink(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetStackOverflowFetcher(mc)
+
+	resp, err := svc.Score(context.Background(), "testuser", "", "starter", nil)
+	if err != nil {
+		t.Fatalf("score: %v", err)
+	}
+	if mc.calls != 1 {
+		t.Errorf("expected 1 SE call on stale refresh, got %d", mc.calls)
+	}
+	if resp.Enrichment == nil || resp.Enrichment.StackOverflow == nil {
+		t.Fatal("expected SO in enrichment after refresh")
+	}
+	if resp.Enrichment.StackOverflow.Reputation != 2000000 {
+		t.Errorf("Reputation: got %d, want 2000000 (refresh)", resp.Enrichment.StackOverflow.Reputation)
+	}
+	if store.savedSO == nil || store.savedSO.Reputation != 2000000 {
+		t.Errorf("expected refreshed save, got %+v", store.savedSO)
+	}
+}
+
+// TestStackOverflowStrippedForFree: Free-tier callers don't see the
+// Stack Overflow block.
+func TestStackOverflowStrippedForFree(t *testing.T) {
+	store := &mockBehaviorStore{
+		soProfile:   &model.StackOverflow{UserID: 22656, Reputation: 1500000, DisplayName: "Skeet"},
+		soFetchedAt: time.Now().Add(-1 * time.Hour),
+	}
+	svc := NewScoreService(&mockClient{
+		signals: establishedSignals(),
+		profile: soProfileWithLink(),
+	}, "v0.0.1-test")
+	svc.SetBehaviorStore(store)
+	svc.SetStackOverflowFetcher(&mockSO{})
+
+	tests := []struct {
+		plan    string
+		wantSet bool
+	}{
+		{"free", false},
+		{"starter", true},
+		{"pro", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.plan, func(t *testing.T) {
+			resp, err := svc.Score(context.Background(), "testuser", "", tc.plan, nil)
+			if err != nil {
+				t.Fatalf("score: %v", err)
+			}
+			if resp.Enrichment == nil {
+				t.Fatal("expected enrichment block")
+			}
+			has := resp.Enrichment.StackOverflow != nil
+			if has != tc.wantSet {
+				t.Errorf("plan=%s SO present=%v, want %v", tc.plan, has, tc.wantSet)
 			}
 		})
 	}
