@@ -20,36 +20,17 @@
     <div class="landing-feature" style="margin-bottom:24px">
       <h3>May 2, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.22</span></h3>
       <ul>
-        <li><strong>OSSF Scorecard (Starter+)</strong> &mdash; when a repo is provided in the score request (<code>?repo=owner/name</code>), the contributor scorecard now surfaces the OpenSSF Scorecard assessment for that repo: aggregate score (0&ndash;10) plus per-check results for Code-Review, Branch-Protection, Maintained, Vulnerabilities, Token-Permissions, Fuzzing, SAST, and others. Cached weekly to align with upstream cadence. Repo-quality context that helps separate "credible contributor in a healthy project" from "credible contributor in an abandoned codebase."</li>
-        <li><strong>PRs Merged count fix</strong> &mdash; the Activity tile previously showed <code>0 PRs Merged</code> for everyone since launch. The aggregator was reading a phantom field; merges actually arrive as a distinct <code>action: "merged"</code> event from GH Archive. Forward ingestion is now correct; existing rows will heal as the 120-day retention window rolls over.</li>
-      </ul>
-    </div>
-
-    <div class="landing-feature" style="margin-bottom:24px">
-      <h3>May 2, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.21</span></h3>
-      <ul>
-        <li><strong>Security credits (Starter+)</strong> &mdash; the contributor scorecard now surfaces GitHub Security Advisory credits where the contributor is listed as reporter, fixer, analyst, or other role. Includes counts by role, severity breakdown, and a recent-advisories list with CVE links. Credits are username-attested by GitHub itself, making this one of the strongest credibility signals available &mdash; particularly valuable for security researchers whose contribution patterns may otherwise look sparse. <em>Note: live fetching is paused while we build a viable indexing path &mdash; GitHub does not expose a per-user credits API; the schema and UI are in place pending that work.</em></li>
-      </ul>
-    </div>
-
-    <div class="landing-feature" style="margin-bottom:24px">
-      <h3>May 2, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.20</span></h3>
-      <ul>
-        <li><strong>Enrichment on the scorecard</strong> &mdash; the contributor scorecard now displays the data the v0.19 API made available: lifetime activity tiles (PRs, reviews, issue comments, active days), reciprocity ratios (reviews per PR, issue close rate), top repositories the contributor engages with, owned-repo summary with language footprint, and linked external accounts (Twitter/X, Mastodon, LinkedIn, personal sites, etc.). Public email shown on Starter+ plans.</li>
-      </ul>
-    </div>
-
-    <div class="landing-feature" style="margin-bottom:24px">
-      <h3>May 2, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.19.1</span></h3>
-      <ul>
-        <li><strong>Profile email surfaced</strong> &mdash; the contributor's public GitHub profile email is now included in <code>enrichment.emails</code> alongside any addresses found in bio or blog text. Previously only bio-embedded emails were captured, missing the most common case.</li>
-        <li><strong>Personal-site classification</strong> &mdash; URLs with a path component on a non-platform host (e.g. <code>https://example.com/blog/post</code>) now correctly classify as <code>personal_site</code> instead of falling through to <code>unknown</code>.</li>
+        <li><strong>OSSF Scorecard (Starter+)</strong> &mdash; when a repo is provided in the score request (<code>?repo=owner/name</code>), the contributor scorecard now surfaces the OpenSSF Scorecard assessment for that repo: aggregate score (0&ndash;10) plus per-check results for Code-Review, Branch-Protection, Maintained, Vulnerabilities, Token-Permissions, Fuzzing, SAST, and others.</li>
+        <li><strong>Security credits (Starter+)</strong> &mdash; the contributor scorecard now surfaces GitHub Security Advisory credits where the contributor is listed as reporter, fixer, analyst, or other role.</li>
+        <li><strong>Enrichment on the scorecard</strong> &mdash; the contributor scorecard now displays lifetime activity tiles (PRs, reviews, issue comments, active days), reciprocity ratios (reviews per PR, issue close rate), top repositories the contributor engages with, owned-repo summary with language footprint, and linked external accounts (Twitter/X, Mastodon, LinkedIn, personal sites, etc.).</li>
       </ul>
     </div>
 
     <div class="landing-feature" style="margin-bottom:24px">
       <h3>May 2, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.19</span></h3>
       <ul>
+        <li><strong>Profile email surfaced</strong> &mdash; the contributor's public GitHub profile email is now included in <code>enrichment.emails</code> alongside any addresses found in bio or blog text. Previously only bio-embedded emails were captured, missing the most common case.</li>
+        <li><strong>Personal-site classification</strong> &mdash; URLs with a path component on a non-platform host (e.g. <code>https://example.com/blog/post</code>) now correctly classify as <code>personal_site</code> instead of falling through to <code>unknown</code>.</li>
         <li><strong>Profile enrichment</strong> &mdash; the scoring API and contributor scorecard now surface lifetime activity, top contributed repositories, owned repos with language footprint, reciprocity ratios (reviews per PR, issue close rate), and linked external accounts detected from the contributor's bio and website (Twitter/X, Mastodon, LinkedIn, GitLab, and more), classified by platform.</li>
         <li><strong>Watchlists with email digests</strong> &mdash; subscribe to contributors or organizations and receive weekly email digests covering score changes and new activity. Includes a dashboard widget with server-side search and per-column filters, per-plan retention windows, and RFC&nbsp;8058 one-click unsubscribe.</li>
         <li><strong>Compliance page</strong> &mdash; new <code>/compliance</code> page documenting the NIST SSDF and EU CRA practice mappings; contributor scorecards now annotate which signals satisfy which practice for at-a-glance audit context.</li>
@@ -66,25 +47,6 @@
         <li><strong>Score history API</strong> &mdash; <code>/api/v1/score/{username}/history</code> endpoint returns historical scores for trend analysis, with retention windows tied to your plan (30/90/365 days).</li>
         <li><strong>Contact support</strong> &mdash; signed-in users can now reach support directly from the Help page without leaving the app.</li>
         <li>Performance, security, and usability improvements across the dashboard, settings, and scoring pipeline.</li>
-      </ul>
-    </div>
-
-    <div class="landing-feature" style="margin-bottom:24px">
-      <h3>April 15, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.10</span></h3>
-      <ul>
-        <li><strong>AI Sensing (Pro)</strong> &mdash; behavioral heuristics for Pro plan: Velocity Anomaly, Active Hours, Burst-Vanish, and Synthetic Risk composite scoring.</li>
-        <li><strong>Score trend chart</strong> &mdash; contributors scored more than once now show a historical trend chart on their scorecard page.</li>
-        <li><strong>Repository-scoped scoring</strong> &mdash; score contributors in the context of a specific repo with <code>?repo=owner/name</code>.</li>
-        <li><strong>Trusted organizations</strong> &mdash; pass <code>?trusted_orgs=org1&amp;trusted_orgs=org2</code> to boost scores for org members.</li>
-      </ul>
-    </div>
-
-    <div class="landing-feature" style="margin-bottom:24px">
-      <h3>April 13, 2026 <span style="font-size:0.75em;color:var(--gray);font-weight:400;">v0.8.x</span></h3>
-      <ul>
-        <li><strong>Risk summary</strong> &mdash; AI-generated narrative summarizing each contributor's reputation, strengths, and areas of concern.</li>
-        <li><strong>Score history API</strong> &mdash; <code>/api/v1/score/{username}/history</code> endpoint for trend analysis.</li>
-        <li><strong>Initial release</strong> &mdash; contributor trust scoring across 22 signals in 5 categories (Identity, Behavioral, Community, Engagement, AI Sensing).</li>
       </ul>
     </div>
 
