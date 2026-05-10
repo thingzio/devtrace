@@ -162,8 +162,8 @@ func TestListTenantsWithoutInstall(t *testing.T) {
 	for _, r := range results {
 		if r.Username == "no-install" {
 			found = true
-			if r.Plan != "free" {
-				t.Errorf("plan = %q, want %q", r.Plan, "free")
+			if r.Plan != "pro" {
+				t.Errorf("plan = %q, want %q", r.Plan, "pro")
 			}
 		}
 		if r.Username == "has-install" {

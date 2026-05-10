@@ -8,7 +8,7 @@
         <tr>
           <th></th>
           {{range .Plans}}
-          <th id="plan-{{.Name}}">{{.DisplayName}}{{if .PriceLabel}} <span style="font-size:0.75em;font-weight:normal;color:var(--gray);">({{.PriceLabel}})</span>{{end}}</th>
+          <th id="plan-{{.Name}}"{{if eq .Name "pro"}} class="plan-highlight"{{end}}><span{{if eq .Name "pro"}} class="plan-name-highlight"{{end}}>{{.DisplayName}}</span>{{if .PriceLabel}} <span style="font-size:0.75em;font-weight:normal;color:var(--gray);">({{.PriceLabel}})</span>{{end}}</th>
           {{end}}
         </tr>
       </thead>
@@ -19,13 +19,13 @@
           {{if .Span}}
           <td colspan="{{len $.Plans}}">{{index .Values 0}}</td>
           {{else}}
-          {{range .Values}}<td{{if eq . "Coming soon"}} class="coming-soon"{{end}}>{{.}}</td>{{end}}
+          {{range $i, $v := .Values}}<td{{$p := index $.Plans $i}}{{if eq $p.Name "pro"}} class="plan-highlight{{if eq $v "Coming soon"}} coming-soon{{end}}"{{else if eq $v "Coming soon"}} class="coming-soon"{{end}}>{{$v}}</td>{{end}}
           {{end}}
         </tr>
         {{end}}
       </tbody>
     </table>
-    <p style="margin-top:8px;font-size:0.8em;color:var(--gray);text-align:right;">* All plans are free during the beta preview.</p>
+    <p style="margin-top:8px;font-size:0.8em;color:var(--gray);text-align:right;">* During the beta preview the Pro plan is free for all users.</p>
   </div>
   <div id="feature-tooltip" class="feature-tooltip" style="display:none;">
     <div class="feature-tooltip-content">

@@ -52,11 +52,11 @@ func TestUpsertTenant(t *testing.T) {
 	if got.Username != "alice" {
 		t.Fatalf("username = %q, want %q", got.Username, "alice")
 	}
-	if got.Plan != "free" {
-		t.Fatalf("plan = %q, want %q", got.Plan, "free")
+	if got.Plan != "pro" {
+		t.Fatalf("plan = %q, want %q", got.Plan, "pro")
 	}
-	if got.MaxContributors != 50 {
-		t.Fatalf("max_contributors = %d, want 50", got.MaxContributors)
+	if got.MaxContributors != 2000 {
+		t.Fatalf("max_contributors = %d, want 2000", got.MaxContributors)
 	}
 	if got.ToSAcceptedAt != nil {
 		t.Fatal("tos_accepted_at should be nil on create")

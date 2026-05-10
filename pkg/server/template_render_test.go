@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/thingzio/devtrace/pkg/model"
+	"github.com/thingzio/devtrace/pkg/plan"
 )
 
 // truncate is a small helper used by failure-message assembly to keep
@@ -312,6 +313,76 @@ func TestScorecardWithoutEnrichmentRenders(t *testing.T) {
 		if strings.Contains(body, mustNotContain) {
 			t.Errorf("scorecard rendered %q despite nil Enrichment", mustNotContain)
 		}
+	}
+}
+
+// TestLandingPlansTableHighlightsPro renders the landing page and asserts:
+//   - the beta footnote text was updated to the Pro-specific wording, and
+//   - the Pro plan column is rendered with the plan-highlight class on its
+//     header AND every body cell so CSS can paint the highlighted column
+//     end-to-end.
+//
+// Free and Starter columns must NOT carry the highlight class.
+func TestLandingPlansTableHighlightsPro(t *testing.T) {
+	data := pageData{
+		Title:    "Home",
+		Version:  "v1.0.0",
+		Commit:   "abc1234",
+		Date:     "2026-05-10",
+		Plans:    plan.DisplayPlans(),
+		Features: plan.DisplayFeatures(),
+	}
+
+	rec := httptest.NewRecorder()
+	renderTemplate(rec, "landing.html", data)
+	if rec.Code != 200 {
+		t.Fatalf("render failed: status %d, body: %s", rec.Code, truncate(rec.Body.String(), 500))
+	}
+	body := rec.Body.String()
+
+	mustContain := []string{
+		// Updated beta footnote — guards against the old wording sneaking back.
+		"During the beta preview the Pro plan is free for all users.",
+		// Pro column header is highlighted and the "Pro" label gets the accent class.
+		`id="plan-pro" class="plan-highlight"`,
+		`class="plan-name-highlight">Pro</span>`,
+	}
+	for _, want := range mustContain {
+		if !strings.Contains(body, want) {
+			t.Errorf("rendered landing missing %q", want)
+		}
+	}
+
+	mustNotContain := []string{
+		// Old footnote must be gone.
+		"All plans are free during the beta preview.",
+		// Free / Starter headers must NOT carry the highlight class.
+		`id="plan-free" class="plan-highlight"`,
+		`id="plan-starter" class="plan-highlight"`,
+	}
+	for _, gone := range mustNotContain {
+		if strings.Contains(body, gone) {
+			t.Errorf("rendered landing still contains %q", gone)
+		}
+	}
+
+	// Body cells: count the number of plan-highlight cells. We render
+	// one row per feature, with one Pro-column cell per feature row,
+	// except span rows which collapse all plan columns into one cell
+	// and therefore contribute no plan-highlight classes.
+	var spanRows, nonSpanRows int
+	for _, f := range plan.DisplayFeatures() {
+		if f.Span {
+			spanRows++
+		} else {
+			nonSpanRows++
+		}
+	}
+	wantHighlightCells := nonSpanRows + 1 // +1 for the <th> header
+	gotHighlightCells := strings.Count(body, `class="plan-highlight`)
+	if gotHighlightCells != wantHighlightCells {
+		t.Errorf("plan-highlight cell count = %d, want %d (span rows: %d, non-span rows: %d)",
+			gotHighlightCells, wantHighlightCells, spanRows, nonSpanRows)
 	}
 }
 

@@ -1797,6 +1797,22 @@ a.link {
   font-style: italic;
 }
 
+.plans-table .plan-highlight {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.plans-table thead th.plan-highlight {
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-color));
+}
+
+.plans-table .plan-name-highlight {
+  color: var(--accent);
+}
+
+.plans-table tbody tr:hover td.plan-highlight {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .plans-table .feature-info {
   cursor: pointer;
   border-bottom: 1px dashed var(--gray);
