@@ -56,9 +56,9 @@
 
   <section class="settings-section">
     <h2>Merge Graph</h2>
-    <p style="color:var(--text-secondary,#8b949e);font-size:0.85rem;margin-bottom:0.75rem;">Per-PR observations recorded for author-attributed merge counts. Author attribution % is the load-bearing health metric: a low value means we're capturing merge events but missing the corresponding opens, which would render the graph useless even as the table grows.</p>
+    <p style="color:var(--text-secondary,#8b949e);font-size:0.85rem;margin-bottom:0.75rem;">Per-PR observations recorded for author-attributed merge counts. Ingest Attribution is the load-bearing health metric: of PRs whose opened event we should have seen, what share we captured. Excludes bot-opened rows (intentional NULL author) and pre-backfill-window rows (no open observable).</p>
     {{if .PREventsStats}}
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1rem;margin-bottom:0.5rem;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1rem;margin-bottom:0.75rem;">
       <div>
         <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Total PR Rows</div>
         <div style="font-size:1.25rem;font-weight:600;">{{fmtnum .PREventsStats.TotalRows}}</div>
@@ -68,13 +68,18 @@
         <div style="font-size:1.25rem;font-weight:600;">{{fmtnum .PREventsStats.Last24hRows}}</div>
       </div>
       <div>
-        <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Author Attribution</div>
-        <div style="font-size:1.25rem;font-weight:600;">{{printf "%.1f" .PREventsStats.AuthorAttributionPct}}%</div>
+        <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Ingest Attribution</div>
+        <div style="font-size:1.25rem;font-weight:600;">{{printf "%.1f" .PREventsStats.IngestAttributionPct}}%</div>
       </div>
       <div>
         <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);margin-bottom:0.25rem;">Last Event</div>
         <div style="font-size:1.25rem;font-weight:600;">{{.PREventsLastEventAge}}</div>
       </div>
+    </div>
+    <div style="font-size:0.75rem;color:var(--text-secondary,#8b949e);">
+      Breakdown: <strong>{{printf "%.1f" .PREventsStats.AuthorAttributionPct}}%</strong> human-authored ·
+      <strong>{{fmtnum .PREventsStats.BotOpenedRows}}</strong> bot-opened ·
+      <strong>{{fmtnum .PREventsStats.MissingOpenRows}}</strong> missing-open (pre-backfill)
     </div>
     {{else}}<p>No merge-graph data yet.</p>{{end}}
   </section>

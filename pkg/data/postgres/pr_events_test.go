@@ -201,10 +201,11 @@ func TestPREventsCountOnlyMergedPRs(t *testing.T) {
 }
 
 // TestPREventsStatsAggregates pins the admin-dashboard metrics:
-// total rows, last-24h rows, and the author-attribution percentage.
-// The percentage is the most operationally meaningful — a near-zero
-// value would mean we're capturing merges but missing opens, which
-// renders the merge graph useless even as the table grows.
+// total rows, last-24h rows, and the three attribution numbers.
+// IngestAttributionPct is the load-bearing one: of PRs we should
+// have seen the open for (withAuthor + missingOpen), the share we
+// did. Excludes bot-opened rows from the denominator so Renovate
+// churn doesn't mask real ingest gaps.
 func TestPREventsStatsAggregates(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()
@@ -229,13 +230,20 @@ func TestPREventsStatsAggregates(t *testing.T) {
 		t.Fatalf("baseline stats: %v", err)
 	}
 
-	// Insert four rows: 3 with authors, 1 without (pure merge action).
+	// Insert six rows exercising every author/opened_at combination:
+	//   3 human-authored opens (author + opened_at)
+	//   1 bot-opened then merged (no author, opened_at set)
+	//   1 merge-only orphan   (no author, no opened_at)
+	//   1 close-only orphan   (no author, no opened_at)
 	now := time.Now()
 	rows := []postgres.PREventRow{
 		{Provider: provider, Repo: repo, Number: 1, Action: "opened", Author: "alice", OccurAt: now},
 		{Provider: provider, Repo: repo, Number: 2, Action: "opened", Author: "bob", OccurAt: now},
 		{Provider: provider, Repo: repo, Number: 3, Action: "opened", Author: "carol", OccurAt: now},
-		{Provider: provider, Repo: repo, Number: 4, Action: "merged", Author: "", OccurAt: now}, // bot-merged orphan
+		{Provider: provider, Repo: repo, Number: 4, Action: "opened", Author: "", OccurAt: now}, // bot-opened
+		{Provider: provider, Repo: repo, Number: 4, Action: "merged", Author: "", OccurAt: now},
+		{Provider: provider, Repo: repo, Number: 5, Action: "merged", Author: "", OccurAt: now}, // missing-open
+		{Provider: provider, Repo: repo, Number: 6, Action: "closed", Author: "", OccurAt: now}, // missing-open
 	}
 	if _, uerr := store.BatchUpsertPREvents(ctx, rows); uerr != nil {
 		t.Fatalf("upsert: %v", uerr)
@@ -245,17 +253,34 @@ func TestPREventsStatsAggregates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stats: %v", err)
 	}
-	if got.TotalRows != baseline.TotalRows+4 {
-		t.Errorf("TotalRows: got %d, want %d", got.TotalRows, baseline.TotalRows+4)
+	// 6 unique PR numbers added (PR 4 gets both opened+merged on one row).
+	if got.TotalRows != baseline.TotalRows+6 {
+		t.Errorf("TotalRows: got %d, want %d", got.TotalRows, baseline.TotalRows+6)
 	}
-	// All four rows are within the last 24h window.
-	if got.Last24hRows < baseline.Last24hRows+4 {
+	if got.Last24hRows < baseline.Last24hRows+6 {
 		t.Errorf("Last24hRows: got %d, want >=%d",
-			got.Last24hRows, baseline.Last24hRows+4)
+			got.Last24hRows, baseline.Last24hRows+6)
 	}
-	// Author-attribution % must be in (0, 100].
+	if got.BotOpenedRows < baseline.BotOpenedRows+1 {
+		t.Errorf("BotOpenedRows: got %d, want >=%d",
+			got.BotOpenedRows, baseline.BotOpenedRows+1)
+	}
+	if got.MissingOpenRows < baseline.MissingOpenRows+2 {
+		t.Errorf("MissingOpenRows: got %d, want >=%d",
+			got.MissingOpenRows, baseline.MissingOpenRows+2)
+	}
+	// AuthorAttributionPct = withAuthor / total — in (0, 100].
 	if got.AuthorAttributionPct <= 0 || got.AuthorAttributionPct > 100 {
 		t.Errorf("AuthorAttributionPct out of range: %v", got.AuthorAttributionPct)
+	}
+	// IngestAttributionPct excludes bot_opened from denominator, so it
+	// must be >= AuthorAttributionPct whenever any bot_opened rows exist.
+	if got.IngestAttributionPct < got.AuthorAttributionPct-1e-9 {
+		t.Errorf("IngestAttributionPct (%.2f) should be >= AuthorAttributionPct (%.2f) "+
+			"when bot-opened rows exist", got.IngestAttributionPct, got.AuthorAttributionPct)
+	}
+	if got.IngestAttributionPct <= 0 || got.IngestAttributionPct > 100 {
+		t.Errorf("IngestAttributionPct out of range: %v", got.IngestAttributionPct)
 	}
 	if got.LastEventAt.IsZero() {
 		t.Error("LastEventAt should be non-zero after upsert")
@@ -263,7 +288,7 @@ func TestPREventsStatsAggregates(t *testing.T) {
 }
 
 // TestPREventsStatsEmptyTable: stats query handles an empty (or
-// near-empty) table without divide-by-zero on the percentage.
+// near-empty) table without divide-by-zero on either percentage.
 func TestPREventsStatsEmptyTable(t *testing.T) {
 	store := testStore(t)
 	ctx := context.Background()
@@ -288,8 +313,71 @@ func TestPREventsStatsEmptyTable(t *testing.T) {
 		t.Errorf("AuthorAttributionPct on empty: got %v, want 0 (no div-by-zero)",
 			got.AuthorAttributionPct)
 	}
+	if got.IngestAttributionPct != 0 {
+		t.Errorf("IngestAttributionPct on empty: got %v, want 0 (no div-by-zero)",
+			got.IngestAttributionPct)
+	}
+	if got.BotOpenedRows != 0 {
+		t.Errorf("BotOpenedRows on empty: got %d, want 0", got.BotOpenedRows)
+	}
+	if got.MissingOpenRows != 0 {
+		t.Errorf("MissingOpenRows on empty: got %d, want 0", got.MissingOpenRows)
+	}
 	if !got.LastEventAt.IsZero() {
 		t.Errorf("LastEventAt on empty: got %v, want zero", got.LastEventAt)
+	}
+}
+
+// TestPREventsStatsIngestAttributionFormula verifies the load-bearing
+// metric arithmetic on an exact, isolated dataset: when there's
+// one missing-open row and two human-authored rows, ingest attribution
+// should be 2/3 (≈66.7%), and bot-opened rows must NOT enter the
+// denominator (otherwise Renovate churn would mask real gaps).
+func TestPREventsStatsIngestAttributionFormula(t *testing.T) {
+	store := testStore(t)
+	ctx := context.Background()
+	if err := store.Migrate(ctx); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	if _, err := store.DB().ExecContext(ctx,
+		`DELETE FROM devtrace_pr_events`); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = store.DB().ExecContext(ctx, `DELETE FROM devtrace_pr_events`)
+	})
+
+	const (
+		provider = "github"
+		repo     = "ingest-attr-formula"
+	)
+	now := time.Now()
+	rows := []postgres.PREventRow{
+		{Provider: provider, Repo: repo, Number: 1, Action: "opened", Author: "alice", OccurAt: now},
+		{Provider: provider, Repo: repo, Number: 2, Action: "opened", Author: "bob", OccurAt: now},
+		// PR 3 is bot-opened — must NOT affect IngestAttributionPct.
+		{Provider: provider, Repo: repo, Number: 3, Action: "opened", Author: "", OccurAt: now},
+		// PR 4 is a missing-open merge — DOES affect IngestAttributionPct.
+		{Provider: provider, Repo: repo, Number: 4, Action: "merged", Author: "", OccurAt: now},
+	}
+	if _, err := store.BatchUpsertPREvents(ctx, rows); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+
+	got, err := store.PREventsStats(ctx)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	const want = 2.0 / 3.0 * 100
+	if diff := got.IngestAttributionPct - want; diff < -0.01 || diff > 0.01 {
+		t.Errorf("IngestAttributionPct: got %.4f, want %.4f (2 authored / (2 authored + 1 missing-open))",
+			got.IngestAttributionPct, want)
+	}
+	if got.BotOpenedRows != 1 {
+		t.Errorf("BotOpenedRows: got %d, want 1", got.BotOpenedRows)
+	}
+	if got.MissingOpenRows != 1 {
+		t.Errorf("MissingOpenRows: got %d, want 1", got.MissingOpenRows)
 	}
 }
 

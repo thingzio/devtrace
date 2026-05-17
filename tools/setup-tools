@@ -19,8 +19,12 @@ setting_val() {
 }
 
 REQUIRED_GO_VER=$(setting_val "go" "1.26")
-REQUIRED_GOLANGCI_VER=$(setting_val "golangci_lint" "v2.11.3")
-REQUIRED_GORELEASER_MAJOR="2"
+REQUIRED_GOLANGCI_VER=$(setting_val "golangci_lint" "v2.12.1")
+REQUIRED_GORELEASER_VER=$(setting_val "goreleaser" "v2.15.4")
+REQUIRED_KO_VER=$(setting_val "ko" "v0.18.1")
+REQUIRED_TFSEC_VER=$(setting_val "tfsec" "v1.28.14")
+REQUIRED_GORELEASER_MAJOR="${REQUIRED_GORELEASER_VER#v}"
+REQUIRED_GORELEASER_MAJOR="${REQUIRED_GORELEASER_MAJOR%%.*}"
 
 OS="$(uname -s)"
 ARCH="$(uname -m)"
@@ -204,6 +208,77 @@ fi
 # psql
 check_tool "psql" "command -v psql" \
     "brew_install libpq && brew link --force libpq || apt_install postgresql-client"
+
+# ---------------------------------------------------------------------------
+# Version comparison summary
+# Reads expected versions from .settings.yaml and prints expected vs installed
+# for every pinned tool. Strategies match how the rest of the script enforces
+# the tool (e.g. golangci-lint is a major-version match).
+# ---------------------------------------------------------------------------
+_strip_v() { echo "${1#v}"; }
+_compare_print() {
+    local name="$1" expected="$2" installed="$3" strategy="${4:-major_minor}"
+    local mark="✓" exp inst
+
+    if [[ -z "$installed" || "$installed" == "missing" ]]; then
+        printf "  %-18s %-15s %-15s %s\n" "$name" "$expected" "missing" "✗"
+        return
+    fi
+
+    case "$strategy" in
+        exact)
+            [[ "$(_strip_v "$installed")" == "$(_strip_v "$expected")" ]] || mark="⚠"
+            ;;
+        major)
+            exp="$(_strip_v "$expected")"; exp="${exp%%.*}"
+            inst="$(_strip_v "$installed")"; inst="${inst%%.*}"
+            [[ "$inst" == "$exp" ]] || mark="⚠"
+            ;;
+        major_minor)
+            exp="$(_strip_v "$expected")"; exp="$(echo "$exp" | cut -d. -f1,2)"
+            inst="$(_strip_v "$installed")"; inst="$(echo "$inst" | cut -d. -f1,2)"
+            [[ "$inst" == "$exp" ]] || mark="⚠"
+            ;;
+    esac
+    printf "  %-18s %-15s %-15s %s\n" "$name" "$expected" "$installed" "$mark"
+}
+
+_go_installed() {
+    command -v go &>/dev/null || { echo missing; return; }
+    local v; v="$(go env GOVERSION 2>/dev/null | sed 's/^go//')"
+    [[ -n "$v" ]] && echo "$v" || echo missing
+}
+_goreleaser_installed() {
+    command -v goreleaser &>/dev/null || { echo missing; return; }
+    local v; v="$(goreleaser --version 2>/dev/null | sed -n 's/^GitVersion:[[:space:]]*//p' | head -1)"
+    [[ -n "$v" ]] && echo "v${v#v}" || echo missing
+}
+_ko_installed() {
+    command -v ko &>/dev/null || { echo missing; return; }
+    local v; v="$(ko version 2>/dev/null | head -1 | tr -d '\r')"
+    [[ -n "$v" ]] && echo "v${v#v}" || echo missing
+}
+_tfsec_installed() {
+    command -v tfsec &>/dev/null || { echo missing; return; }
+    local v; v="$(tfsec --version 2>/dev/null | head -1 | tr -d '\r')"
+    [[ -n "$v" ]] && echo "v${v#v}" || echo missing
+}
+_golangci_installed() {
+    command -v golangci-lint &>/dev/null || { echo missing; return; }
+    local v; v="$(golangci-lint --version 2>/dev/null | awk '{print $4}')"
+    [[ -n "$v" ]] && echo "v${v#v}" || echo missing
+}
+
+echo ""
+msg "Version comparison (.settings.yaml vs installed):"
+printf "  %-18s %-15s %-15s %s\n" "Tool" "Expected" "Installed" "Status"
+printf "  %-18s %-15s %-15s %s\n" "----" "--------" "---------" "------"
+_compare_print "go"            "$REQUIRED_GO_VER"         "$(_go_installed)"         major_minor
+_compare_print "goreleaser"    "$REQUIRED_GORELEASER_VER" "$(_goreleaser_installed)" exact
+_compare_print "ko"            "$REQUIRED_KO_VER"         "$(_ko_installed)"         exact
+_compare_print "tfsec"         "$REQUIRED_TFSEC_VER"      "$(_tfsec_installed)"      exact
+_compare_print "golangci-lint" "$REQUIRED_GOLANGCI_VER"   "$(_golangci_installed)"   exact
+echo "  Legend: ✓ match, ⚠ version drift, ✗ missing"
 
 # Summary
 echo ""
