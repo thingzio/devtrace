@@ -61,6 +61,30 @@
   </section>
 
   <section class="settings-section">
+    <h2>Token Invalidations <span style="font-size:14px;font-weight:400;color:var(--text-secondary,#8b949e)">(last hour: {{.TokenInvalidationsLastHour}})</span></h2>
+    {{if .TokenInvalidations}}
+    <table class="data-table">
+      <thead>
+        <tr><th style="text-align:left">When (UTC)</th><th style="text-align:left">Label</th><th style="text-align:right">Installation ID</th><th style="text-align:left">Disposition</th></tr>
+      </thead>
+      <tbody>
+        {{range .TokenInvalidations}}
+        <tr>
+          <td>{{.At}}</td>
+          <td>{{if .Label}}{{.Label}}{{else}}&mdash;{{end}}</td>
+          <td style="text-align:right">{{if .InstallationID}}{{.InstallationID}}{{else}}&mdash;{{end}}</td>
+          <td>{{if .Permanent}}<span style="color:#ef4444">Permanently disabled</span>{{else}}<span style="color:#eab308">Backoff (re-mint on next refresh)</span>{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    <p style="margin-top:8px;color:var(--text-secondary,#8b949e);font-size:12px">Tokens are invalidated when GitHub returns 401 Bad credentials. PAT entries are permanently disabled (no re-mint path); installation tokens are re-minted by the refresh goroutine.</p>
+    {{else}}
+    <p style="color:var(--text-secondary,#8b949e)">No invalidations recorded since process start.</p>
+    {{end}}
+  </section>
+
+  <section class="settings-section">
     <h2>Pool Utilization</h2>
     <div style="margin-bottom:12px">
       <select id="quota-hours" style="padding:4px 8px;border:1px solid var(--border-color);border-radius:4px;background:var(--card-bg,#161b22);color:var(--text-primary,#e6edf3)">

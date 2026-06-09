@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"net/http"
 	"sync"
 	"time"
 
@@ -118,6 +119,15 @@ func poolDo[T any](ctx context.Context, c *PoolClient, op string, fn func(api *g
 		if err == nil {
 			return result, nil
 		}
+		if isAuthFailure(err) {
+			c.pool.InvalidateAuth(token)
+			c.pool.SignalRefresh()
+			if c.pool.ActiveCount() == 0 {
+				return zero, fmt.Errorf("all tokens invalid: %w", err)
+			}
+			slog.Warn("token auth failure, rotating", "op", op, "attempt", attempt+1)
+			continue
+		}
 		if !isRateLimited(err) {
 			return zero, err
 		}
@@ -187,4 +197,17 @@ func isRateLimited(err error) bool {
 	}
 	var abuseErr *gh.AbuseRateLimitError
 	return errors.As(err, &abuseErr)
+}
+
+// isAuthFailure returns true when GitHub rejected the token with 401.
+// A 401 means the token itself is bad — revoked PAT, suspended/uninstalled
+// GitHub App installation, or rotated App key. Distinct from rate-limit
+// errors (which retry on the same token) and from 404/422 (terminal for
+// the request but not the token).
+func isAuthFailure(err error) bool {
+	var ghErr *gh.ErrorResponse
+	if errors.As(err, &ghErr) && ghErr.Response != nil {
+		return ghErr.Response.StatusCode == http.StatusUnauthorized
+	}
+	return false
 }

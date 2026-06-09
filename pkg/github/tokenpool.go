@@ -18,6 +18,17 @@ const tokenResetFallback = 50 * time.Minute
 
 const tokenExpiryBuffer = 5 * time.Minute
 
+// permanentInvalidationUntil is the "until" sentinel used to mark a PAT
+// entry permanently dead after a 401. A PAT cannot be re-minted, so
+// retrying it after a timeout would only burn latency. ~10 years out is
+// effectively forever for any running process.
+var permanentInvalidationUntil = time.Date(2099, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+// invalidationRingCap caps the in-memory ring of recent invalidation
+// events that the admin dashboard surfaces. Sized for "noisy" hours
+// without unbounded growth; oldest entries roll off.
+const invalidationRingCap = 64
+
 // PoolEntry describes a token source for the pool.
 type PoolEntry struct {
 	InstallationID int64
@@ -46,6 +57,20 @@ type TokenPool struct {
 	exhaustedUntil []time.Time
 	current        int
 	refreshCh      chan<- struct{} // optional; signaled when a near-expiry token is selected
+
+	// invalidations is a bounded ring of recent 401 events for the admin
+	// dashboard. Survives Replace() so operators can still see what
+	// happened in the last hour even after a refresh.
+	invalidations []InvalidationEvent
+}
+
+// InvalidationEvent records that a token was 401'd and removed from
+// rotation. Exposed via RecentInvalidations for the admin dashboard.
+type InvalidationEvent struct {
+	At             time.Time
+	Label          string
+	InstallationID int64
+	Permanent      bool
 }
 
 // NewTokenPool creates a pool from one or more tokens. Tokens can be passed
@@ -194,6 +219,91 @@ func (p *TokenPool) Exhaust(token string, resetAt time.Time) {
 			slog.Warn("token exhausted", "label", e.label, "until", until.Format(time.RFC3339))
 			return
 		}
+	}
+}
+
+// InvalidateAuth marks the given token as exhausted in response to a 401
+// Bad credentials response from GitHub. Distinct log/path from Exhaust so
+// operators can distinguish revoked/rotated credentials from rate-limit
+// backoff.
+//
+// Installation tokens (installationID != 0) get tokenResetFallback so they
+// re-enter rotation after roughly the window an installation token would
+// naturally expire — by then the refresh goroutine will have re-minted
+// them. PAT entries (installationID == 0) get a far-future until so they
+// are permanently disabled until the process restarts: a PAT cannot be
+// re-minted and retrying a revoked one only burns latency.
+func (p *TokenPool) InvalidateAuth(token string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for i, e := range p.entries {
+		if e.token == token {
+			now := time.Now()
+			until := now.Add(tokenResetFallback)
+			permanent := e.installationID == 0
+			if permanent {
+				until = permanentInvalidationUntil
+			}
+			p.exhausted[i] = true
+			p.exhaustedUntil[i] = until
+			p.recordInvalidationLocked(InvalidationEvent{
+				At:             now,
+				Label:          e.label,
+				InstallationID: e.installationID,
+				Permanent:      permanent,
+			})
+			slog.Warn("token invalidated",
+				"label", e.label,
+				"installation_id", e.installationID,
+				"reason", "auth_failure",
+				"permanent", permanent,
+				"until", until.Format(time.RFC3339))
+			return
+		}
+	}
+}
+
+// RecentInvalidations returns events newer than since, oldest first. Pass
+// a zero time to receive every event still in the ring. Safe for the
+// admin dashboard to call without coordinating with the refresh loop.
+func (p *TokenPool) RecentInvalidations(since time.Time) []InvalidationEvent {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]InvalidationEvent, 0, len(p.invalidations))
+	for _, ev := range p.invalidations {
+		if since.IsZero() || ev.At.After(since) {
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+// recordInvalidationLocked appends an event to the ring, dropping the
+// oldest entry when the cap is reached. Caller must hold p.mu.
+func (p *TokenPool) recordInvalidationLocked(ev InvalidationEvent) {
+	if len(p.invalidations) >= invalidationRingCap {
+		p.invalidations = append(p.invalidations[1:], ev)
+		return
+	}
+	p.invalidations = append(p.invalidations, ev)
+}
+
+// SignalRefresh nudges the refresh goroutine to re-mint installation
+// tokens, if a refresh channel has been registered. Non-blocking: if the
+// channel already has a pending signal, this is a no-op. Used by callers
+// that detect a poisoned token (e.g., auth failure) and want fresh
+// credentials minted ahead of the periodic tick.
+func (p *TokenPool) SignalRefresh() {
+	p.mu.Lock()
+	ch := p.refreshCh
+	p.mu.Unlock()
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- struct{}{}:
+	default:
 	}
 }
 

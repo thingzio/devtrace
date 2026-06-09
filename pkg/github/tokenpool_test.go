@@ -467,3 +467,135 @@ func TestCheckQuotasEmptyPool(t *testing.T) {
 		t.Errorf("expected 0 quotas, got %d", len(quotas))
 	}
 }
+
+func TestInvalidateAuthInstallationBackoff(t *testing.T) {
+	t.Parallel()
+	pool := NewTokenPoolFromEntries([]PoolEntry{
+		{InstallationID: 100, Label: "org-a", Token: "tok-a", ExpiresAt: time.Now().Add(time.Hour)},
+		{InstallationID: 200, Label: "org-b", Token: "tok-b", ExpiresAt: time.Now().Add(time.Hour)},
+	})
+
+	pool.InvalidateAuth("tok-a")
+	if pool.ActiveCount() != 1 {
+		t.Fatalf("active: got %d, want 1", pool.ActiveCount())
+	}
+	for range 5 {
+		if got := pool.Token(); got != "tok-b" {
+			t.Errorf("got %q, want tok-b (invalidated token must not return)", got)
+		}
+	}
+
+	events := pool.RecentInvalidations(time.Time{})
+	if len(events) != 1 {
+		t.Fatalf("events: got %d, want 1", len(events))
+	}
+	if events[0].Label != "org-a" || events[0].InstallationID != 100 || events[0].Permanent {
+		t.Errorf("event: %+v", events[0])
+	}
+}
+
+func TestInvalidateAuthPATPermanent(t *testing.T) {
+	t.Parallel()
+	pool := NewTokenPoolFromEntries([]PoolEntry{
+		{Label: "PAT", Token: "pat"}, // installationID 0 → permanent
+		{InstallationID: 100, Label: "org-a", Token: "tok-a"},
+	})
+
+	pool.InvalidateAuth("pat")
+	if pool.ActiveCount() != 1 {
+		t.Fatalf("active: got %d, want 1", pool.ActiveCount())
+	}
+	events := pool.RecentInvalidations(time.Time{})
+	if len(events) != 1 || !events[0].Permanent {
+		t.Fatalf("event should be permanent: %+v", events)
+	}
+}
+
+func TestInvalidateAuthUnknownToken(t *testing.T) {
+	t.Parallel()
+	pool := NewTokenPool("a")
+	pool.InvalidateAuth("not-in-pool")
+	if pool.ActiveCount() != 1 {
+		t.Error("unknown token should not affect pool")
+	}
+	if len(pool.RecentInvalidations(time.Time{})) != 0 {
+		t.Error("no event should be recorded for unknown token")
+	}
+}
+
+func TestRecentInvalidationsSinceFilter(t *testing.T) {
+	t.Parallel()
+	pool := NewTokenPoolFromEntries([]PoolEntry{
+		{InstallationID: 100, Label: "org-a", Token: "a"},
+		{InstallationID: 200, Label: "org-b", Token: "b"},
+	})
+	pool.InvalidateAuth("a")
+	mid := time.Now()
+	time.Sleep(2 * time.Millisecond) // ensure second event sorts after `mid`
+	pool.InvalidateAuth("b")
+
+	all := pool.RecentInvalidations(time.Time{})
+	if len(all) != 2 {
+		t.Fatalf("all: got %d, want 2", len(all))
+	}
+	recent := pool.RecentInvalidations(mid)
+	if len(recent) != 1 || recent[0].Label != "org-b" {
+		t.Errorf("since filter: got %+v", recent)
+	}
+}
+
+func TestRecentInvalidationsRingCap(t *testing.T) {
+	t.Parallel()
+	entries := make([]PoolEntry, invalidationRingCap+5)
+	for i := range entries {
+		entries[i] = PoolEntry{
+			InstallationID: int64(i + 1),
+			Label:          "org",
+			Token:          string(rune('a'+i%26)) + string(rune('0'+i%10)) + string(rune(i%200)),
+		}
+	}
+	pool := NewTokenPoolFromEntries(entries)
+	for _, e := range entries {
+		pool.InvalidateAuth(e.Token)
+	}
+	events := pool.RecentInvalidations(time.Time{})
+	if len(events) != invalidationRingCap {
+		t.Errorf("ring cap: got %d, want %d", len(events), invalidationRingCap)
+	}
+	// oldest entries should have rolled off — first surviving installationID
+	// is 6 (5 entries dropped from the front).
+	if events[0].InstallationID != 6 {
+		t.Errorf("oldest surviving InstallationID = %d, want 6", events[0].InstallationID)
+	}
+}
+
+func TestSignalRefreshNonBlocking(t *testing.T) {
+	t.Parallel()
+	pool := NewTokenPool("a")
+	ch := make(chan struct{}, 1)
+	pool.SetRefreshCh(ch)
+
+	pool.SignalRefresh()
+	select {
+	case <-ch:
+		// expected
+	default:
+		t.Fatal("expected refresh signal")
+	}
+
+	// Fill the channel and signal twice more — must not block, must not
+	// double-buffer.
+	ch <- struct{}{}
+	pool.SignalRefresh()
+	pool.SignalRefresh()
+	if len(ch) != 1 {
+		t.Errorf("channel len = %d, want 1 (signals must coalesce)", len(ch))
+	}
+}
+
+func TestSignalRefreshNilChannel(t *testing.T) {
+	t.Parallel()
+	pool := NewTokenPool("a")
+	// No SetRefreshCh — must not panic.
+	pool.SignalRefresh()
+}

@@ -70,6 +70,13 @@ type tokenQuotaRow struct {
 	Error          string
 }
 
+type tokenInvalidationRow struct {
+	At             string
+	Label          string
+	InstallationID int64
+	Permanent      bool
+}
+
 type activityBar struct {
 	Label   string
 	UTC     string // ISO 8601 timestamp for client-side local time conversion
@@ -552,6 +559,32 @@ func loadPoolQuotas(ctx context.Context, pool *ghclient.TokenPool, data map[stri
 	data["TotalUsed"] = totalUsed
 	data["TotalAvailable"] = totalLimit - totalUsed
 	data["UtilizationPct"] = utilPct
+
+	loadPoolInvalidations(pool, data)
+}
+
+// loadPoolInvalidations exposes recent 401-driven token invalidations to
+// the admin tokens template. Returned newest first so the table reads
+// chronologically from the top.
+func loadPoolInvalidations(pool *ghclient.TokenPool, data map[string]any) {
+	cutoff := time.Now().Add(-1 * time.Hour)
+	events := pool.RecentInvalidations(time.Time{})
+	rows := make([]tokenInvalidationRow, 0, len(events))
+	lastHour := 0
+	for i := len(events) - 1; i >= 0; i-- {
+		ev := events[i]
+		if ev.At.After(cutoff) {
+			lastHour++
+		}
+		rows = append(rows, tokenInvalidationRow{
+			At:             ev.At.UTC().Format(time.RFC3339),
+			Label:          ev.Label,
+			InstallationID: ev.InstallationID,
+			Permanent:      ev.Permanent,
+		})
+	}
+	data["TokenInvalidations"] = rows
+	data["TokenInvalidationsLastHour"] = lastHour
 }
 
 func timeSince(t time.Time) string {
