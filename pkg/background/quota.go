@@ -52,8 +52,14 @@ func sampleQuotas(ctx context.Context, store *postgres.Store, pool *ghclient.Tok
 		if q.Error != "" {
 			continue
 		}
-		used := q.Limit - q.Remaining
-		if err := store.RecordTokenQuotaSample(ctx, q.InstallationID, q.Label, q.Limit, used); err != nil {
+		coreUsed := q.Limit - q.Remaining
+		searchUsed := q.SearchLimit - q.SearchRemaining
+		graphqlUsed := q.GraphQLLimit - q.GraphQLRemaining
+		if err := store.RecordTokenQuotaSample(ctx, q.InstallationID, q.Label,
+			q.Limit, coreUsed,
+			q.SearchLimit, searchUsed,
+			q.GraphQLLimit, graphqlUsed,
+		); err != nil {
 			slog.Warn("recording quota sample", "label", q.Label, "error", err)
 			continue
 		}

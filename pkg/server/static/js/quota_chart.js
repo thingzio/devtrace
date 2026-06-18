@@ -2,6 +2,12 @@
   var chart = null;
   var dangerThreshold = 80;
 
+  var FAMILIES = [
+    { key: 'core',    label: 'Core REST',       color: '#3b82f6', usedKey: 'quota_used',    limitKey: 'quota_limit' },
+    { key: 'search',  label: 'Search (30/min)', color: '#eab308', usedKey: 'search_used',   limitKey: 'search_limit' },
+    { key: 'graphql', label: 'GraphQL',         color: '#22c55e', usedKey: 'graphql_used',  limitKey: 'graphql_limit' }
+  ];
+
   function fmtTime(iso) {
     var d = new Date(iso);
     var mo = d.toLocaleString('en', {month:'short'});
@@ -15,6 +21,25 @@
     return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   }
 
+  // Aggregate per timestamp: sum used + limit across all installations,
+  // per family. A zero limit means "no data" for that family at that
+  // timestamp (pre-cutover sample); the line stays at 0 rather than
+  // jumping to 100%.
+  function aggregate(samples) {
+    var byTime = {};
+    samples.forEach(function(s) {
+      if (!byTime[s.sampled_at]) {
+        byTime[s.sampled_at] = {};
+        FAMILIES.forEach(function(f) { byTime[s.sampled_at][f.key] = { used: 0, limit: 0 }; });
+      }
+      FAMILIES.forEach(function(f) {
+        byTime[s.sampled_at][f.key].used  += s[f.usedKey]  || 0;
+        byTime[s.sampled_at][f.key].limit += s[f.limitKey] || 0;
+      });
+    });
+    return byTime;
+  }
+
   function loadQuotaHistory(hours) {
     fetch('/admin/tokens/quota-history?hours=' + hours)
       .then(function(r) { return r.json(); })
@@ -26,64 +51,49 @@
         }
         document.getElementById('quota-empty').style.display = 'none';
 
-        // Aggregate per timestamp: sum used and limit across all installations.
-        var byTime = {};
-        samples.forEach(function(s) {
-          if (!byTime[s.sampled_at]) {
-            byTime[s.sampled_at] = { used: 0, limit: 0 };
-          }
-          byTime[s.sampled_at].used += s.quota_used;
-          byTime[s.sampled_at].limit += s.quota_limit;
-        });
-
+        var byTime = aggregate(samples);
         var times = Object.keys(byTime).sort();
         var labels = times.map(fmtTime);
-        var pctData = times.map(function(t) {
-          return byTime[t].limit > 0 ? Math.round(byTime[t].used / byTime[t].limit * 100) : 0;
+
+        var datasets = FAMILIES.map(function(f) {
+          var pctData = times.map(function(t) {
+            var d = byTime[t][f.key];
+            return d.limit > 0 ? Math.round(d.used / d.limit * 100) : 0;
+          });
+          return {
+            label: f.label,
+            data: pctData,
+            borderColor: f.color,
+            backgroundColor: f.color + '22',
+            borderWidth: 2,
+            pointRadius: 2,
+            pointBackgroundColor: function(context) {
+              var v = context.parsed && context.parsed.y;
+              return v >= dangerThreshold ? '#ef4444' : f.color;
+            },
+            tension: 0.3,
+            fill: false,
+            // Hidden by default for graphql so the busy lines (core/search)
+            // are easier to read; users can toggle via the legend.
+            hidden: f.key === 'graphql'
+          };
         });
-        var thresholdData = times.map(function() { return dangerThreshold; });
+
+        datasets.push({
+          label: 'Throttle Risk (' + dangerThreshold + '%)',
+          data: times.map(function() { return dangerThreshold; }),
+          borderColor: '#ef4444',
+          borderDash: [6, 3],
+          borderWidth: 1,
+          pointRadius: 0,
+          fill: false
+        });
 
         var ctx = document.getElementById('quotaChart').getContext('2d');
         if (chart) chart.destroy();
         chart = new Chart(ctx, {
           type: 'line',
-          data: {
-            labels: labels,
-            datasets: [
-              {
-                label: 'Pool Utilization',
-                data: pctData,
-                borderColor: '#3b82f6',
-                backgroundColor: function(context) {
-                  var c = context.chart;
-                  var area = c.chartArea;
-                  if (!area) return '#3b82f622';
-                  var grad = c.ctx.createLinearGradient(0, area.bottom, 0, area.top);
-                  grad.addColorStop(0, 'rgba(59,130,246,0.02)');
-                  grad.addColorStop(0.8, 'rgba(59,130,246,0.15)');
-                  grad.addColorStop(1, 'rgba(239,68,68,0.3)');
-                  return grad;
-                },
-                borderWidth: 2,
-                pointRadius: 3,
-                pointBackgroundColor: function(context) {
-                  var v = context.parsed && context.parsed.y;
-                  return v >= dangerThreshold ? '#ef4444' : '#3b82f6';
-                },
-                tension: 0.3,
-                fill: true
-              },
-              {
-                label: 'Throttle Risk (' + dangerThreshold + '%)',
-                data: thresholdData,
-                borderColor: '#ef4444',
-                borderDash: [6, 3],
-                borderWidth: 1,
-                pointRadius: 0,
-                fill: false
-              }
-            ]
-          },
+          data: { labels: labels, datasets: datasets },
           options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -104,10 +114,12 @@
               tooltip: {
                 callbacks: {
                   afterLabel: function(tip) {
-                    if (tip.datasetIndex !== 0) return '';
+                    var family = FAMILIES[tip.datasetIndex];
+                    if (!family) return '';
                     var t = times[tip.dataIndex];
-                    var d = byTime[t];
-                    return comma(d.used) + ' / ' + comma(d.limit) + ' tokens';
+                    var d = byTime[t][family.key];
+                    if (d.limit === 0) return 'no data';
+                    return comma(d.used) + ' / ' + comma(d.limit) + ' calls';
                   }
                 }
               },
