@@ -443,6 +443,12 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 		config.GetEnvAsInt("UNAUTH_RATE_WINDOW", 60),
 	)
 	authRL := newIPRateLimiter(1000, 3600) // ceiling; actual limit per plan via allowWithLimit
+	// Burst limiter: per-tenant 60s window so a tenant cannot drain the
+	// GitHub Search quota inside their hourly cap. Ceiling is generous;
+	// per-plan threshold derived in burstLimitFor. Default on; disable
+	// with BURST_LIMIT_ENABLED=false.
+	burstRL := newIPRateLimiter(100, 60)
+	burstEnabled := config.GetEnvBoolDefault("BURST_LIMIT_ENABLED", true)
 	oauthRL := newIPRateLimiter(
 		config.GetEnvAsInt("OAUTH_RATE_LIMIT", 20),
 		60,
@@ -485,13 +491,13 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 	mux.HandleFunc("GET /digest/unsubscribe", digestUnsubscribeHandler(store))
 
 	// Score card page — accepts any auth, rate-limited (HTML 429)
-	mux.Handle("GET /score/{username}", requireAny(csrf(authAwareRateLimit(unauthRL, authRL, true, opts.Version)(scorecardHandler(store, scoreSvc, opts)))))
+	mux.Handle("GET /score/{username}", requireAny(csrf(authAwareRateLimit(unauthRL, authRL, burstRL, burstEnabled, true, opts.Version)(scorecardHandler(store, scoreSvc, opts)))))
 
 	// Score API — accepts any auth, rate-limited (JSON 429)
-	mux.Handle("GET /api/v1/score/{username}", requireAny(authAwareRateLimit(unauthRL, authRL, false, opts.Version)(scoreHandler(db, store, scoreSvc))))
+	mux.Handle("GET /api/v1/score/{username}", requireAny(authAwareRateLimit(unauthRL, authRL, burstRL, burstEnabled, false, opts.Version)(scoreHandler(db, store, scoreSvc))))
 
 	// Score history API (trend chart data) — rate-limited
-	mux.Handle("GET /api/v1/score/{username}/history", requireAny(authAwareRateLimit(unauthRL, authRL, false, opts.Version)(historyHandler(store))))
+	mux.Handle("GET /api/v1/score/{username}/history", requireAny(authAwareRateLimit(unauthRL, authRL, burstRL, burstEnabled, false, opts.Version)(historyHandler(store))))
 
 	// Token management — requires session auth (UI only)
 	mux.Handle("POST /api/v1/token", requireSession(createTokenHandler(db)))
@@ -528,6 +534,7 @@ func makeRouter(store *postgres.Store, scoreSvc *service.ScoreService, pool *ghc
 		scoreSvc.Close()
 		unauthRL.close()
 		authRL.close()
+		burstRL.close()
 		oauthRL.close()
 	}
 	return mux, cleanup

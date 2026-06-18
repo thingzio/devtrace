@@ -175,13 +175,15 @@ func TestAuthAwareRateLimitUnauth(t *testing.T) {
 	defer close(unauthRL.stop)
 	authRL := newIPRateLimiter(1000, 3600)
 	defer close(authRL.stop)
+	burstRL := newIPRateLimiter(100, 60)
+	defer close(burstRL.stop)
 
 	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
 	t.Run("json mode blocks second unauth request", func(t *testing.T) {
-		handler := authAwareRateLimit(unauthRL, authRL, false, "test")(ok)
+		handler := authAwareRateLimit(unauthRL, authRL, burstRL, true, false, "test")(ok)
 
 		// First request — allowed
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/score/octocat", nil)
@@ -219,7 +221,7 @@ func TestAuthAwareRateLimitUnauth(t *testing.T) {
 		// Use a fresh limiter so previous test state doesn't interfere
 		unauthRL2 := newIPRateLimiter(1, 60)
 		defer close(unauthRL2.stop)
-		handler := authAwareRateLimit(unauthRL2, authRL, true, "test")(ok)
+		handler := authAwareRateLimit(unauthRL2, authRL, burstRL, true, true, "test")(ok)
 
 		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/score/octocat", nil)
 		req.RemoteAddr = "10.0.0.2:1234"
@@ -245,11 +247,13 @@ func TestAuthAwareRateLimitAuth(t *testing.T) {
 	defer close(unauthRL.stop)
 	authRL := newIPRateLimiter(1000, 3600)
 	defer close(authRL.stop)
+	burstRL := newIPRateLimiter(100, 60)
+	defer close(burstRL.stop)
 
 	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := authAwareRateLimit(unauthRL, authRL, false, "test")(ok)
+	handler := authAwareRateLimit(unauthRL, authRL, burstRL, true, false, "test")(ok)
 
 	tn := &tenant.Tenant{ID: "test-tenant-id", Plan: "free"} // free = 60/hr
 
@@ -263,6 +267,110 @@ func TestAuthAwareRateLimitAuth(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("auth request %d: expected 200, got %d", i+1, rec.Code)
+		}
+	}
+}
+
+// TestBurstLimitFor validates the per-plan burst derivation. The mapping
+// must keep Free usable (≥5/min) while preventing a paid plan from
+// concentrating its full hourly cap into a sub-minute burst.
+func TestBurstLimitFor(t *testing.T) {
+	tests := []struct {
+		name    string
+		perHour int
+		want    int
+	}{
+		{"free_60", 60, 5},        // 60/12 = 5, floor exactly
+		{"starter_300", 300, 25},  // 300/12 = 25
+		{"pro_1000", 1000, 83},    // 1000/12 = 83
+		{"huge_2000", 2000, 100},  // 2000/12 = 166, capped at 100
+		{"tiny_1", 1, 5},          // 1/12 = 0, floor lifts to 5
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := burstLimitFor(tc.perHour); got != tc.want {
+				t.Errorf("burstLimitFor(%d) = %d, want %d", tc.perHour, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestAuthAwareRateLimitBurst verifies the burst limiter denies a Free
+// tenant after 5 requests within the same 60s window even though the
+// hourly cap is 60. The 6th request must come back as 429 from the
+// burst gate, not the hourly gate.
+func TestAuthAwareRateLimitBurst(t *testing.T) {
+	unauthRL := newIPRateLimiter(1, 60)
+	defer close(unauthRL.stop)
+	authRL := newIPRateLimiter(1000, 3600)
+	defer close(authRL.stop)
+	burstRL := newIPRateLimiter(100, 60)
+	defer close(burstRL.stop)
+
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := authAwareRateLimit(unauthRL, authRL, burstRL, true, false, "test")(ok)
+
+	tn := &tenant.Tenant{ID: "burst-tenant", Plan: "free"} // free = 60/hr → burst 5/min
+
+	mkReq := func() *http.Request {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/score/octocat", nil)
+		req.RemoteAddr = "10.0.0.99:1234"
+		return req.WithContext(middleware.WithTenantContext(req.Context(), tn))
+	}
+
+	for i := range 5 {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, mkReq())
+		if rec.Code != http.StatusOK {
+			t.Fatalf("burst request %d: expected 200, got %d", i+1, rec.Code)
+		}
+	}
+
+	// 6th request inside the same 60s window must be burst-denied.
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, mkReq())
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("6th request: expected 429, got %d", rec.Code)
+	}
+	if ra := rec.Header().Get("Retry-After"); ra == "" {
+		t.Error("expected Retry-After header on burst-denied response")
+	}
+}
+
+// TestAuthAwareRateLimitBurstDisabled confirms that turning off the
+// burst gate (burstEnabled=false) lets a tenant burn through their full
+// hourly budget without being throttled per-minute. Acts as a kill
+// switch for the env-var rollback path.
+func TestAuthAwareRateLimitBurstDisabled(t *testing.T) {
+	unauthRL := newIPRateLimiter(1, 60)
+	defer close(unauthRL.stop)
+	authRL := newIPRateLimiter(1000, 3600)
+	defer close(authRL.stop)
+	burstRL := newIPRateLimiter(100, 60)
+	defer close(burstRL.stop)
+
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := authAwareRateLimit(unauthRL, authRL, burstRL, false, false, "test")(ok)
+
+	tn := &tenant.Tenant{ID: "burst-off-tenant", Plan: "free"}
+
+	mkReq := func() *http.Request {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/api/v1/score/octocat", nil)
+		req.RemoteAddr = "10.0.0.100:1234"
+		return req.WithContext(middleware.WithTenantContext(req.Context(), tn))
+	}
+
+	// 10 requests in a burst — all should succeed because burst is off
+	// and the hourly cap is 60.
+	for i := range 10 {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, mkReq())
+		if rec.Code != http.StatusOK {
+			t.Fatalf("burst-off request %d: expected 200, got %d", i+1, rec.Code)
 		}
 	}
 }

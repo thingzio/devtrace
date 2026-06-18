@@ -217,6 +217,25 @@ func GetEnvBool(key string) bool {
 	return v == "true" || v == "1"
 }
 
+// GetEnvBoolDefault returns the env var as a bool, falling back to the
+// provided default when unset. Use this for feature flags that default
+// to ON (operator must opt out) rather than the default-OFF
+// GetEnvBool. Accepted truthy/falsy values are the standard pairs:
+// "true"/"false" and "1"/"0", case-insensitive.
+func GetEnvBoolDefault(key string, fallback bool) bool {
+	v := strings.ToLower(os.Getenv(key))
+	if v == "" {
+		return fallback
+	}
+	switch v {
+	case "true", "1":
+		return true
+	case "false", "0":
+		return false
+	}
+	return fallback
+}
+
 func GetEnvAsFloat(key string, fallback float64) float64 {
 	v := os.Getenv(key)
 	if v == "" {

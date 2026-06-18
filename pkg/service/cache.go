@@ -21,7 +21,11 @@ type scoreCache struct {
 }
 
 func newScoreCache() *scoreCache {
-	ttlSec := config.GetEnvAsInt("SCORE_CACHE_TTL_SEC", 1800) // default 30 minutes
+	// Default raised from 30 → 60 minutes to halve the cache-miss rate
+	// for CI integrations that poll the same usernames every few
+	// minutes. Background scorer is unaffected — it does not go through
+	// this cache. Override via SCORE_CACHE_TTL_SEC.
+	ttlSec := config.GetEnvAsInt("SCORE_CACHE_TTL_SEC", 3600)
 	c := &scoreCache{
 		entries: make(map[string]*cacheEntry),
 		ttl:     time.Duration(ttlSec) * time.Second,

@@ -168,6 +168,8 @@ Data flow: GitHub App webhook → tenant repos → background ingest worker → 
 - `DEVTRACE_ADMIN_USERS` — comma-separated GitHub usernames for admin access
 - `SCORER_BATCH_SIZE` — scoring queue batch size (default 100)
 - `SCORER_MIN_QUOTA_PCT` — minimum aggregate token quota % before pausing scorer (default 30)
+- `SCORE_CACHE_TTL_SEC` — score-response cache TTL in seconds (default 3600 = 60 min). Background scorer bypasses this cache.
+- `BURST_LIMIT_ENABLED` — gate the per-tenant 60s burst limiter on `/api/v1/score*` (default `true`). Set `false` to disable; per-plan burst threshold derived from `RateLimitPerHour`/12 with min 5, max 100.
 - `GHARCHIVE_BACKFILL_DAYS` — historical GH Archive backfill depth in days (default 0 = disabled, set to 180 for full coverage)
 - `GHARCHIVE_BACKFILL_BATCH_SIZE` — hours per backfill batch (default 18)
 - `GHARCHIVE_BACKFILL_WORKERS` — concurrent backfill workers (default 3)

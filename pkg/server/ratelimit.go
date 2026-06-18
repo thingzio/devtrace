@@ -130,33 +130,64 @@ func (rl *ipRateLimiter) wrap(next http.Handler) http.Handler {
 	})
 }
 
+// burstLimitFor returns the per-60s burst cap derived from a plan's
+// hourly cap. Approximately RateLimitPerHour/12 with a floor of 5 so
+// the Free tier still gets a usable burst, and a hard cap of 100 to
+// match the underlying limiter's ceiling configuration. Tunable from
+// the plan only; no separate env var.
+func burstLimitFor(perHour int) int {
+	burst := perHour / 12
+	if burst < 5 {
+		burst = 5
+	}
+	if burst > 100 {
+		burst = 100
+	}
+	return burst
+}
+
 // authAwareRateLimit returns middleware that applies different rate limits based
 // on authentication status. Unauthenticated requests are limited per-IP using
 // unauthRL. Authenticated requests are limited per-tenant using authRL with
-// the tenant's plan-based RateLimitPerHour.
+// the tenant's plan-based RateLimitPerHour, plus an optional burst limiter
+// (burstRL) gated by BURST_LIMIT_ENABLED that caps requests-per-60s so a
+// single tenant cannot drain the GitHub Search quota in a 5-minute window.
 //
 // When htmlMode is true, 429 responses render the ratelimit.html template.
-// When false, 429 responses return JSON with Retry-After header.
-func authAwareRateLimit(unauthRL, authRL *ipRateLimiter, htmlMode bool, version string) func(http.Handler) http.Handler {
+// When false, 429 responses return JSON with Retry-After header. If both
+// limiters deny in the same request, the shorter Retry-After is returned
+// so the client can recover as soon as the more restrictive window resets.
+func authAwareRateLimit(unauthRL, authRL, burstRL *ipRateLimiter, burstEnabled bool, htmlMode bool, version string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tn := middleware.TenantFromContext(r.Context())
 
 			var allowed bool
 			var key string
+			var burstDenied bool
 
 			if tn == nil {
 				// Unauthenticated: limit per IP
 				key = extractIP(r)
 				allowed = unauthRL.allow(key)
 			} else {
-				// Authenticated: limit per tenant using plan rate
+				// Authenticated: limit per tenant using plan rate.
 				key = tn.ID
 				p, ok := plan.Get(tn.Plan)
 				if !ok {
 					p = plan.Free()
 				}
 				allowed = authRL.allowWithLimit(key, p.RateLimitPerHour)
+				// Burst gate (per-60s window). Evaluated independently so
+				// even a tenant well within their hourly cap cannot fire
+				// 700 calls in five minutes and drain the Search quota.
+				if allowed && burstEnabled && burstRL != nil {
+					burstAllowed := burstRL.allowWithLimit(key, burstLimitFor(p.RateLimitPerHour))
+					if !burstAllowed {
+						allowed = false
+						burstDenied = true
+					}
+				}
 			}
 
 			if !allowed {
@@ -164,12 +195,15 @@ func authAwareRateLimit(unauthRL, authRL *ipRateLimiter, htmlMode bool, version 
 				if tn != nil {
 					tier = "auth"
 				}
-				slog.Info("rate limit exceeded", "tier", tier, "path", r.URL.Path)
+				slog.Info("rate limit exceeded", "tier", tier, "path", r.URL.Path, "burst", burstDenied)
 
 				var retryAfter int
-				if tn == nil {
+				switch {
+				case tn == nil:
 					retryAfter = unauthRL.retryAfter(key)
-				} else {
+				case burstDenied:
+					retryAfter = burstRL.retryAfter(key)
+				default:
 					retryAfter = authRL.retryAfter(key)
 				}
 
