@@ -101,6 +101,19 @@ func rateLimitReset(err error) time.Time {
 	return time.Time{}
 }
 
+// Rate-limit family labels emitted on the "token exhausted" slog line
+// and consumed by the log-based metric extractor. Names match GitHub's
+// own quota families plus a dedicated "abuse" bucket so alert policies
+// can page on core/abuse and let search/graphql churn appear on
+// dashboards without paging.
+const (
+	familyCore    = "core"
+	familySearch  = "search"
+	familyGraphQL = "graphql"
+	familyAbuse   = "abuse"
+	familyUnknown = "unknown"
+)
+
 // classifyRateLimitFamily classifies a rate-limit error into a stable
 // family string for log-based metric labels. The categories map onto
 // GitHub's own quota families (core/search/graphql) plus a dedicated
@@ -114,20 +127,20 @@ func classifyRateLimitFamily(err error) string {
 		cat := gh.GetRateLimitCategory(req.Method, req.URL.Path)
 		switch cat {
 		case gh.SearchCategory, gh.CodeSearchCategory:
-			return "search"
+			return familySearch
 		case gh.GraphqlCategory:
-			return "graphql"
+			return familyGraphQL
 		case gh.CoreCategory:
-			return "core"
+			return familyCore
 		default:
-			return "core"
+			return familyCore
 		}
 	}
 	var abuseErr *gh.AbuseRateLimitError
 	if errors.As(err, &abuseErr) {
-		return "abuse"
+		return familyAbuse
 	}
-	return "unknown"
+	return familyUnknown
 }
 
 // poolDo runs fn against a fresh client from the pool, retrying on

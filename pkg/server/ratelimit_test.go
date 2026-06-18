@@ -280,11 +280,11 @@ func TestBurstLimitFor(t *testing.T) {
 		perHour int
 		want    int
 	}{
-		{"free_60", 60, 5},        // 60/12 = 5, floor exactly
-		{"starter_300", 300, 25},  // 300/12 = 25
-		{"pro_1000", 1000, 83},    // 1000/12 = 83
-		{"huge_2000", 2000, 100},  // 2000/12 = 166, capped at 100
-		{"tiny_1", 1, 5},          // 1/12 = 0, floor lifts to 5
+		{"free_60", 60, 5},       // 60/12 = 5, floor exactly
+		{"starter_300", 300, 25}, // 300/12 = 25
+		{"pro_1000", 1000, 83},   // 1000/12 = 83
+		{"huge_2000", 2000, 100}, // 2000/12 = 166, capped at 100
+		{"tiny_1", 1, 5},         // 1/12 = 0, floor lifts to 5
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
