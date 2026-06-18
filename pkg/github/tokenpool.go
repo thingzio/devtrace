@@ -201,8 +201,11 @@ func (p *TokenPool) Token() string {
 // Exhaust marks the given token as exhausted so Token() skips it until
 // resetAt. A zero resetAt falls back to tokenResetFallback from now; a
 // resetAt in the past is treated as the fallback (defensive against clock
-// skew between this host and GitHub).
-func (p *TokenPool) Exhaust(token string, resetAt time.Time) {
+// skew between this host and GitHub). The family parameter records which
+// rate-limit family triggered the exhaustion (core/search/graphql/abuse/
+// unknown) so log-based metrics and alerts can distinguish routine search
+// rotation from real REST exhaustion.
+func (p *TokenPool) Exhaust(token string, resetAt time.Time, family string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -216,7 +219,7 @@ func (p *TokenPool) Exhaust(token string, resetAt time.Time) {
 		if e.token == token {
 			p.exhausted[i] = true
 			p.exhaustedUntil[i] = until
-			slog.Warn("token exhausted", "label", e.label, "until", until.Format(time.RFC3339))
+			slog.Warn("token exhausted", "label", e.label, "family", family, "until", until.Format(time.RFC3339))
 			return
 		}
 	}

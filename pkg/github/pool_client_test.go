@@ -56,6 +56,40 @@ func TestIsRateLimited(t *testing.T) {
 	}
 }
 
+func TestClassifyRateLimitFamily(t *testing.T) {
+	t.Parallel()
+
+	// Build a *gh.RateLimitError pinned to a given (method, path) so the
+	// classifier exercises gh.GetRateLimitCategory the same way it would
+	// in production.
+	withURL := func(method, path string) error {
+		req, _ := http.NewRequestWithContext(context.Background(), method, "https://api.github.com"+path, nil)
+		return &gh.RateLimitError{Response: &http.Response{StatusCode: http.StatusForbidden, Request: req}}
+	}
+
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"nil_err", nil, "unknown"},
+		{"plain_err", errForTest("boom"), "unknown"},
+		{"core_users", withURL(http.MethodGet, "/users/octocat"), "core"},
+		{"core_repos", withURL(http.MethodGet, "/repos/owner/repo"), "core"},
+		{"search_issues", withURL(http.MethodGet, "/search/issues"), "search"},
+		{"search_code", withURL(http.MethodGet, "/search/code"), "search"},
+		{"graphql", withURL(http.MethodPost, "/graphql"), "graphql"},
+		{"abuse", &gh.AbuseRateLimitError{Response: &http.Response{StatusCode: http.StatusForbidden}}, "abuse"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := classifyRateLimitFamily(tc.err); got != tc.want {
+				t.Errorf("classifyRateLimitFamily(%v) = %q, want %q", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestIsAuthFailure(t *testing.T) {
 	t.Parallel()
 

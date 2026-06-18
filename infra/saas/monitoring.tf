@@ -266,10 +266,17 @@ resource "google_logging_metric" "token_exhausted" {
       value_type  = "STRING"
       description = "Token pool entry label"
     }
+
+    labels {
+      key         = "family"
+      value_type  = "STRING"
+      description = "Rate-limit family: core, search, graphql, abuse, unknown"
+    }
   }
 
   label_extractors = {
-    "label" = "EXTRACT(jsonPayload.label)"
+    "label"  = "EXTRACT(jsonPayload.label)"
+    "family" = "EXTRACT(jsonPayload.family)"
   }
 }
 

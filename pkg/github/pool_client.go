@@ -101,6 +101,35 @@ func rateLimitReset(err error) time.Time {
 	return time.Time{}
 }
 
+// classifyRateLimitFamily classifies a rate-limit error into a stable
+// family string for log-based metric labels. The categories map onto
+// GitHub's own quota families (core/search/graphql) plus a dedicated
+// "abuse" bucket for secondary-limit errors. Used by the Exhaust slog
+// line so alert policies can page only on core/abuse and let search/
+// graphql churn appear on dashboards without paging.
+func classifyRateLimitFamily(err error) string {
+	var rlErr *gh.RateLimitError
+	if errors.As(err, &rlErr) && rlErr.Response != nil && rlErr.Response.Request != nil {
+		req := rlErr.Response.Request
+		cat := gh.GetRateLimitCategory(req.Method, req.URL.Path)
+		switch cat {
+		case gh.SearchCategory, gh.CodeSearchCategory:
+			return "search"
+		case gh.GraphqlCategory:
+			return "graphql"
+		case gh.CoreCategory:
+			return "core"
+		default:
+			return "core"
+		}
+	}
+	var abuseErr *gh.AbuseRateLimitError
+	if errors.As(err, &abuseErr) {
+		return "abuse"
+	}
+	return "unknown"
+}
+
 // poolDo runs fn against a fresh client from the pool, retrying on
 // rate-limit errors with bounded attempts and exponential backoff. The
 // generic return type lets every Client method share the same loop
@@ -131,7 +160,7 @@ func poolDo[T any](ctx context.Context, c *PoolClient, op string, fn func(api *g
 		if !isRateLimited(err) {
 			return zero, err
 		}
-		c.pool.Exhaust(token, rateLimitReset(err))
+		c.pool.Exhaust(token, rateLimitReset(err), classifyRateLimitFamily(err))
 		if c.pool.ActiveCount() == 0 {
 			return zero, fmt.Errorf("all tokens exhausted: %w", err)
 		}
