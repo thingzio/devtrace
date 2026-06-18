@@ -350,18 +350,56 @@ resource "google_monitoring_alert_policy" "scorer_quota_paused" {
   }
 }
 
-resource "google_monitoring_alert_policy" "token_exhaustion" {
-  display_name          = "${var.prefix}-token-exhaustion"
+resource "google_monitoring_alert_policy" "token_exhaustion_critical" {
+  display_name          = "${var.prefix}-token-exhaustion-critical"
   project               = var.project_id
   combiner              = "OR"
   notification_channels = [google_monitoring_notification_channel.email.name]
 
+  # Core REST (5000/hr) and Abuse (secondary) exhaustion are real
+  # anomalies — the scoring path doesn't burn these at steady state. Any
+  # event in a 1-hour window is worth paging on.
   conditions {
-    display_name = "Token exhaustion > 3 per hour"
+    display_name = "Core/abuse rate-limit exhaustion"
     condition_threshold {
-      filter          = "resource.type = \"cloud_run_revision\" AND metric.type = \"logging.googleapis.com/user/${google_logging_metric.token_exhausted.name}\""
+      filter = join(" AND ", [
+        "resource.type = \"cloud_run_revision\"",
+        "metric.type = \"logging.googleapis.com/user/${google_logging_metric.token_exhausted.name}\"",
+        "(metric.labels.family = \"core\" OR metric.labels.family = \"abuse\")",
+      ])
       comparison      = "COMPARISON_GT"
-      threshold_value = 3
+      threshold_value = 0
+      duration        = "0s"
+
+      aggregations {
+        alignment_period     = "3600s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+    }
+  }
+}
+
+resource "google_monitoring_alert_policy" "token_exhaustion_search" {
+  display_name          = "${var.prefix}-token-exhaustion-search"
+  project               = var.project_id
+  combiner              = "OR"
+  notification_channels = [google_monitoring_notification_channel.email.name]
+
+  # Search (30/min/token) and GraphQL families churn at steady state —
+  # the scoring path issues 3 search calls per contributor. A high
+  # threshold catches sustained quota pressure (a runaway client or a
+  # large backfill) without paging on routine rotation.
+  conditions {
+    display_name = "Search/GraphQL rate-limit exhaustion sustained"
+    condition_threshold {
+      filter = join(" AND ", [
+        "resource.type = \"cloud_run_revision\"",
+        "metric.type = \"logging.googleapis.com/user/${google_logging_metric.token_exhausted.name}\"",
+        "(metric.labels.family = \"search\" OR metric.labels.family = \"graphql\")",
+      ])
+      comparison      = "COMPARISON_GT"
+      threshold_value = 50
       duration        = "0s"
 
       aggregations {

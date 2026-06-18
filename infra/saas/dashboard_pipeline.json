@@ -112,6 +112,25 @@
         }
       },
       {
+        "title": "Token Exhaustion (by family)",
+        "xyChart": {
+          "dataSets": [{
+            "timeSeriesQuery": {
+              "timeSeriesFilter": {
+                "filter": "metric.type=\"logging.googleapis.com/user/devtrace-saas-token-exhausted\"",
+                "aggregation": {
+                  "alignmentPeriod": "3600s",
+                  "perSeriesAligner": "ALIGN_SUM",
+                  "crossSeriesReducer": "REDUCE_SUM",
+                  "groupByFields": ["metric.labels.family"]
+                }
+              }
+            },
+            "plotType": "STACKED_BAR"
+          }]
+        }
+      },
+      {
         "title": "Token Exhaustion (by token)",
         "xyChart": {
           "dataSets": [{
@@ -122,7 +141,7 @@
                   "alignmentPeriod": "3600s",
                   "perSeriesAligner": "ALIGN_SUM",
                   "crossSeriesReducer": "REDUCE_SUM",
-                  "groupByFields": ["metric.labels.label"]
+                  "groupByFields": ["metric.labels.label", "metric.labels.family"]
                 }
               }
             },
