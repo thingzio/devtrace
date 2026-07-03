@@ -32,9 +32,13 @@ func (s *Store) PipelineStats(ctx context.Context) (*PipelineStats, error) {
 		ps.LastIngest = lastIngest.Time
 	}
 
+	// Exact count. The prior pg_stat_user_tables.n_live_tup estimate drifted
+	// high (~56% over) because the hourly upsert churn leaves dead tuples the
+	// planner still counts until autovacuum runs. This admin page already
+	// blocks on multi-second GCP/Anthropic calls, so a COUNT(*) over the
+	// PK-indexed table is negligible by comparison and never misreports.
 	err = s.db.QueryRowContext(ctx,
-		`SELECT COALESCE(n_live_tup, 0) FROM pg_stat_user_tables
-		 WHERE relname = 'devtrace_contributor_activity'`).Scan(&ps.TotalActivities)
+		`SELECT COUNT(*) FROM devtrace_contributor_activity`).Scan(&ps.TotalActivities)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline stats activity count: %w", err)
 	}

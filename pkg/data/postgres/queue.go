@@ -106,12 +106,11 @@ func (s *Store) QueueDepth(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-// ContributorCount returns the approximate number of known contributors.
+// ContributorCount returns the exact number of known contributors.
 func (s *Store) ContributorCount(ctx context.Context) (int, error) {
 	var count int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT COALESCE(n_live_tup, 0) FROM pg_stat_user_tables
-		 WHERE relname = 'devtrace_contributor'`).Scan(&count)
+		`SELECT COUNT(*) FROM devtrace_contributor`).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("contributor count: %w", err)
 	}
