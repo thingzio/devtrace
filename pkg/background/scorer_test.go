@@ -38,6 +38,15 @@ type mockScorerStore struct {
 	watchlists    []postgres.WatchlistEntry
 	notifications []mockNotif
 	bumped        []string
+	requeued      []string
+	dequeueCalls  int
+}
+
+func (m *mockScorerStore) EnqueueForScoring(_ context.Context, username, _ string, _ int) error {
+	m.mu.Lock()
+	m.requeued = append(m.requeued, username)
+	m.mu.Unlock()
+	return nil
 }
 
 type mockNotif struct {
@@ -48,6 +57,9 @@ type mockNotif struct {
 }
 
 func (m *mockScorerStore) DequeueForScoring(_ context.Context, limit int) ([]postgres.QueueEntry, error) {
+	m.mu.Lock()
+	m.dequeueCalls++
+	m.mu.Unlock()
 	if m.dequeueErr != nil {
 		return nil, m.dequeueErr
 	}

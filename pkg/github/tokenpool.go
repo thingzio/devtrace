@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -28,6 +29,11 @@ var permanentInvalidationUntil = time.Date(2099, time.January, 1, 0, 0, 0, 0, ti
 // events that the admin dashboard surfaces. Sized for "noisy" hours
 // without unbounded growth; oldest entries roll off.
 const invalidationRingCap = 64
+
+// ErrNoTokens reports that every token in the pool is exhausted or the pool
+// is empty. Callers pacing background work use it to back off until the
+// pool recovers rather than retrying into a guaranteed failure.
+var ErrNoTokens = errors.New("no available GitHub tokens")
 
 // PoolEntry describes a token source for the pool.
 type PoolEntry struct {
@@ -196,6 +202,27 @@ func (p *TokenPool) Token() string {
 	}
 
 	return ""
+}
+
+// EarliestReset returns the soonest time an exhausted token re-enters
+// rotation, or the zero time when nothing is currently exhausted. Pairs with
+// ActiveCount so background work can sleep exactly until capacity returns
+// instead of retrying into a dry pool.
+func (p *TokenPool) EarliestReset() (earliest time.Time) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	now := time.Now()
+	for i := range p.entries {
+		// Mirror ActiveCount: exhaustion whose reset has passed is spendable.
+		if !p.exhausted[i] || now.After(p.exhaustedUntil[i]) {
+			continue
+		}
+		if earliest.IsZero() || p.exhaustedUntil[i].Before(earliest) {
+			earliest = p.exhaustedUntil[i]
+		}
+	}
+	return earliest
 }
 
 // Exhaust marks the given token as exhausted so Token() skips it until

@@ -55,7 +55,7 @@ func (c *PoolClient) Pool() *TokenPool {
 func (c *PoolClient) ghClient(ctx context.Context) (*gh.Client, string, error) {
 	token := c.pool.Token()
 	if token == "" {
-		return nil, "", errors.New("no available GitHub tokens")
+		return nil, "", ErrNoTokens
 	}
 
 	c.clientCacheMu.Lock()

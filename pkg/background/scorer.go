@@ -27,7 +27,31 @@ const (
 	defaultHighDays    = 30
 	emptyQueueSleep    = 30 * time.Second
 	resetJitter        = 30 * time.Second
+
+	// defaultTokenReserve is how many pool tokens background scoring leaves
+	// for interactive traffic. The search family refills only 30 req/min per
+	// token, so without a reserve a batch can starve the API path.
+	defaultTokenReserve = 1
+
+	// tokenPauseFallback is how long to wait for the pool to recover when no
+	// reset time is known.
+	tokenPauseFallback = 30 * time.Second
 )
+
+// tokenPause reports how long the scorer should wait before its next batch.
+// It pauses while spendable tokens are down to the reserve held for
+// interactive traffic, sleeping until the pool actually recovers.
+func tokenPause(active, reserve int, earliestReset, now time.Time) (time.Duration, bool) {
+	if active > reserve {
+		return 0, false
+	}
+	if wait := earliestReset.Sub(now); wait > 0 {
+		return wait, true
+	}
+	// Reset unknown or already elapsed: wait a fixed window rather than
+	// spinning the loop at full speed.
+	return tokenPauseFallback, true
+}
 
 // scorerStats tracks scoring throughput for periodic logging.
 type scorerStats struct {
@@ -61,6 +85,7 @@ func (s *scorerStats) resetWindow() {
 // scorerStore defines the store operations needed by the background scorer.
 type scorerStore interface {
 	DequeueForScoring(ctx context.Context, limit int) ([]postgres.QueueEntry, error)
+	EnqueueForScoring(ctx context.Context, username, provider string, priority int) error
 	GetStaleContributors(ctx context.Context, lowDays, highDays, limit int) ([]postgres.StaleContributor, error)
 	GetBehavioralSignals(ctx context.Context, username, provider string) (*model.Behavior, error)
 	GetCachedSignals(ctx context.Context, username, provider string) (*score.InputSignals, error)
@@ -79,6 +104,16 @@ type quotaChecker interface {
 	CheckQuotas(ctx context.Context) []ghclient.TokenQuota
 }
 
+// poolState reports live token availability. Where quotaChecker samples
+// GitHub's counters over HTTP — too coarse for the search family, which
+// refills every 60s and is drained by a single batch in seconds — this is
+// the pool's own record of which tokens are spendable right now.
+type poolState interface {
+	ActiveCount() int
+	Size() int
+	EarliestReset() time.Time
+}
+
 // StartBackgroundScorer runs a continuous scoring loop that pauses when
 // aggregate token quota drops below the configured threshold.
 // Returns a cancel function to stop the loop.
@@ -86,27 +121,31 @@ func StartBackgroundScorer(ctx context.Context, store *postgres.Store, gh ghclie
 	batchSize := config.GetEnvAsInt("SCORER_BATCH_SIZE", defaultBatchSize)
 	minQuotaPct := config.GetEnvAsInt("SCORER_MIN_QUOTA_PCT", defaultMinQuotaPct)
 	concurrency := config.GetEnvAsInt("SCORER_CONCURRENCY", defaultConcurrency)
+	tokenReserve := config.GetEnvAsInt("SCORER_TOKEN_RESERVE", defaultTokenReserve)
 
 	slog.Info("starting continuous scorer",
 		"batch_size", batchSize,
 		"min_quota_pct", minQuotaPct,
 		"concurrency", concurrency,
+		"token_reserve", tokenReserve,
 	)
 
 	ctx, cancel := context.WithCancel(ctx)
 
 	var qc quotaChecker
+	var pool poolState
 	if pc, ok := gh.(*ghclient.PoolClient); ok {
 		qc = pc.Pool()
+		pool = pc.Pool()
 	}
 
-	go runContinuousScorer(ctx, store, gh, qc, version, batchSize, minQuotaPct, concurrency)
+	go runContinuousScorer(ctx, store, gh, qc, pool, version, batchSize, minQuotaPct, concurrency, tokenReserve)
 
 	return cancel
 }
 
 func runContinuousScorer(ctx context.Context, store scorerStore, gh ghclient.Client,
-	qc quotaChecker, version string, batchSize, minQuotaPct, concurrency int) {
+	qc quotaChecker, pool poolState, version string, batchSize, minQuotaPct, concurrency, tokenReserve int) {
 	stats := &scorerStats{}
 
 	// Stats reporter runs in its own goroutine so reports fire on a real
@@ -135,6 +174,25 @@ func runContinuousScorer(ctx context.Context, store scorerStore, gh ghclient.Cli
 				"total_errors", stats.totalErrors.Load(),
 			)
 			return
+		}
+
+		// Live pool state first: it costs no API calls and, unlike the
+		// sampled check below, it sees the search family's 60s window —
+		// which a single batch drains in seconds, long before a sample
+		// would ever catch it depleted.
+		if pool != nil {
+			active := pool.ActiveCount()
+			if wait, pause := tokenPause(active, tokenReserve, pool.EarliestReset(), time.Now()); pause {
+				logScorerStats(ctx, store, stats)
+				slog.Warn("scorer paused: token pool at reserve",
+					"active", active,
+					"pool_size", pool.Size(),
+					"reserve", tokenReserve,
+					"resume_in", wait,
+				)
+				sleepCtx(ctx, wait+jitter())
+				continue
+			}
 		}
 
 		// Check quota before each batch. We gate on whichever family is
@@ -216,15 +274,24 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client,
 
 	start := time.Now()
 	var scored, errCount, skipped, hints atomic.Int32
+	var dry atomic.Bool
+	// Each goroutine writes only its own index, so no synchronization is
+	// needed to decide afterwards which entries still owe a score.
+	settled := make([]bool, len(queued))
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 
-	for _, q := range queued {
+	for i, q := range queued {
 		// Explicit pre-check before the select: when the ctx is already
 		// canceled, Go's select non-deterministically picks between
 		// ctx.Done() and a ready sem send, so spawning would be a coin
 		// flip. The pre-check makes cancellation deterministic.
 		if ctx.Err() != nil {
+			break
+		}
+		// The pool is dry: every remaining entry would fail identically.
+		// Stop and let the caller wait for the rate-limit window to reset.
+		if dry.Load() {
 			break
 		}
 		select {
@@ -246,6 +313,11 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client,
 			}
 
 			if serr := scoreContributor(ctx, store, gh, q.Username, q.Provider, version); serr != nil {
+				if errors.Is(serr, ghclient.ErrNoTokens) {
+					dry.Store(true)
+					errCount.Add(1)
+					return
+				}
 				if isTerminalError(serr) {
 					slog.Debug("skipped terminal error", "username", q.Username, "error", serr)
 					skipped.Add(1)
@@ -253,8 +325,10 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client,
 					slog.Warn("score queued", "username", q.Username, "priority", q.Priority, "error", serr)
 					errCount.Add(1)
 				}
+				settled[i] = true
 				return
 			}
+			settled[i] = true
 			scored.Add(1)
 			if hasHints {
 				hints.Add(1)
@@ -262,6 +336,12 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client,
 		}()
 	}
 	wg.Wait()
+
+	// DequeueForScoring consumed these rows, so anything left unscored by a
+	// dry pool has to go back on the queue or the work is lost.
+	if dry.Load() {
+		requeueUnscored(ctx, store, queued, settled)
+	}
 
 	s, e, sk, h := int(scored.Load()), int(errCount.Load()), int(skipped.Load()), int(hints.Load())
 	if stats != nil {
@@ -280,6 +360,27 @@ func drainQueue(ctx context.Context, store scorerStore, gh ghclient.Client,
 	return s
 }
 
+// requeueUnscored puts back work a dry pool prevented us from scoring.
+// settled[i] marks entries that reached a decision (scored, skipped, or a
+// real error) and so must not be re-queued.
+func requeueUnscored(ctx context.Context, store scorerStore, queued []postgres.QueueEntry, settled []bool) {
+	requeued := 0
+	for i, q := range queued {
+		if settled[i] {
+			continue
+		}
+		if err := store.EnqueueForScoring(ctx, q.Username, q.Provider, q.Priority); err != nil {
+			slog.Warn("requeue after dry pool", "username", q.Username, "error", err)
+			continue
+		}
+		requeued++
+	}
+	slog.Warn("queue batch aborted: no available GitHub tokens",
+		"requeued", requeued,
+		"total", len(queued),
+	)
+}
+
 func rescoreStale(ctx context.Context, store scorerStore, gh ghclient.Client,
 	stats *scorerStats, version string, batchSize, concurrency int) int {
 	lowDays := config.GetEnvAsInt("SCORER_LOW_STALE_DAYS", defaultLowDays)
@@ -296,11 +397,18 @@ func rescoreStale(ctx context.Context, store scorerStore, gh ghclient.Client,
 
 	start := time.Now()
 	var scored, errCount, tombstoned atomic.Int32
+	var dry atomic.Bool
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
 
 	for _, c := range stale {
 		if ctx.Err() != nil {
+			break
+		}
+		// Stale contributors are re-read every pass, so abandoning the rest
+		// of the batch loses nothing: they stay stale and are picked up once
+		// the pool recovers.
+		if dry.Load() {
 			break
 		}
 		select {
@@ -317,6 +425,11 @@ func rescoreStale(ctx context.Context, store scorerStore, gh ghclient.Client,
 			defer func() { <-sem }()
 
 			if serr := scoreContributor(ctx, store, gh, c.Username, c.Provider, version); serr != nil {
+				if errors.Is(serr, ghclient.ErrNoTokens) {
+					dry.Store(true)
+					errCount.Add(1)
+					return
+				}
 				if isTerminalError(serr) {
 					if berr := store.BumpScoredAt(ctx, c.Username, c.Provider); berr != nil {
 						slog.Warn("bump scored_at", "username", c.Username, "error", berr)
