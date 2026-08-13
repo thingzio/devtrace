@@ -4,11 +4,27 @@
   <a href="/dashboard" class="back-link">&larr; Dashboard</a>
   <h1>Settings</h1>
 
+  {{if .flash_msg}}<div class="flash-msg">{{.flash_msg}}</div>{{end}}
+
   {{if and (not .has_install) .app_install_url}}
   <section class="settings-section">
     <h2>GitHub App</h2>
-    <p>Install the DevTrace GitHub App to enable contributor scoring for your repositories.</p>
+    <p>Installing contributes API capacity to the pool DevTrace scores with, and auto-creates a watchlist for the repositories you grant. Scoring works without it &mdash; this is how we keep it working at scale.</p>
+    <p><strong>Install on your personal account.</strong> GitHub caps the search API at 30 requests per minute per installation regardless of account size, so a personal install contributes exactly as much as an organization one. No admin approval, about 15 seconds.</p>
     <a href="{{.app_install_url}}" class="btn btn-primary">Install GitHub App</a>
+    <p class="hint">Prefer to install on an organization? That works too, but GitHub routes the request to an org owner for approval.</p>
+    <table class="data-table">
+      <thead>
+        <tr><th>Requested access (all read-only)</th><th>Why it is needed</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Metadata</td><td>Resolve repository and contributor identity</td></tr>
+        <tr><td>Contents</td><td>Commit metadata behind the verification signals</td></tr>
+        <tr><td>Pull requests</td><td>Merged and closed PR counts</td></tr>
+        <tr><td>Members</td><td>Organization membership and trusted-org checks</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">DevTrace never writes to your repositories and never stores your code. You choose which repositories to grant during install.</p>
   </section>
   {{end}}
 
@@ -36,8 +52,6 @@
     <button class="btn btn-primary" disabled title="Coming soon">Change Plan</button>
     <p class="hint">Plan self-service is not available yet. <a href="/help#help-contact">Request a complimentary upgrade</a>.</p>
   </section>
-
-  {{if .flash_msg}}<div class="flash-msg">{{.flash_msg}}</div>{{end}}
 
   <section class="settings-section">
     <h2>Watchlists</h2>

@@ -24,9 +24,36 @@ const (
 	tmplModelVersion = "ModelVersion"
 	tmplValue        = "Value"
 
+	// Lowercase page-data keys used by the dashboard and settings templates.
+	// Distinct from tmplUsername ("Username"), which the scorecard uses.
+	tmplKeyUsername  = "username"
+	tmplKeyPlan      = "plan"
+	tmplKeyRateLimit = "rate_limit"
+
 	msgRateLimitExceeded = "rate limit exceeded"
 
 	// authGitHubPath is the OAuth start URL. Hoisted because handlers,
 	// middleware, and ratelimit JSON envelopes all need to reference it.
 	authGitHubPath = "/auth/github"
 )
+
+// flashMessage maps a ?msg= code to display prose. Unknown codes return the
+// empty string: the parameter is attacker-controllable, and rendering it
+// verbatim would let a crafted link put arbitrary text on a victim's page.
+func flashMessage(code string) string {
+	return flashMessages[code]
+}
+
+var flashMessages = map[string]string{
+	"install_app":             "One more step — install the GitHub App to finish setup.",
+	"watchlist_added":         "Watchlist added.",
+	"watchlist_removed":       "Watchlist removed.",
+	"watchlist_updated":       "Watchlist updated.",
+	"watchlist_limit":         "Watchlist limit reached for your plan.",
+	"watchlist_limit_error":   "Could not check your watchlist limit. Try again.",
+	"watchlist_add_error":     "Could not add that watchlist. Try again.",
+	"watchlist_update_error":  "Could not update that watchlist. Try again.",
+	"watchlist_delete_denied": "That watchlist cannot be deleted.",
+	"invalid_target":          "Invalid org or repo name.",
+	"invalid_request":         "Invalid request.",
+}

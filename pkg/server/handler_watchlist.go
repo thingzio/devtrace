@@ -25,7 +25,7 @@ func addWatchlistHandler(store *postgres.Store) http.HandlerFunc {
 		r.Body = http.MaxBytesReader(w, r.Body, 4096)
 		target := r.FormValue("target")
 		if target == "" || !validTarget.MatchString(target) || len(target) > 100 {
-			http.Redirect(w, r, "/settings?msg=Invalid+org+or+repo+name", http.StatusSeeOther)
+			http.Redirect(w, r, "/settings?msg=invalid_target", http.StatusSeeOther)
 			return
 		}
 
@@ -37,23 +37,23 @@ func addWatchlistHandler(store *postgres.Store) http.HandlerFunc {
 		manualCount, err := store.WatchlistManualCount(r.Context(), tn.ID)
 		if err != nil {
 			slog.Error("watchlist count", "tenant", tn.ID, "error", err)
-			http.Redirect(w, r, "/settings?msg=Error+checking+watchlist+limit", http.StatusSeeOther)
+			http.Redirect(w, r, "/settings?msg=watchlist_limit_error", http.StatusSeeOther)
 			return
 		}
 
 		if manualCount >= p.MaxWatchlists {
-			http.Redirect(w, r, "/settings?msg=Watchlist+limit+reached", http.StatusSeeOther)
+			http.Redirect(w, r, "/settings?msg=watchlist_limit", http.StatusSeeOther)
 			return
 		}
 
 		if err := store.CreateWatchlist(r.Context(), tn.ID, target, "manual"); err != nil {
 			slog.Error("create watchlist", "tenant", tn.ID, "target", target, "error", err)
-			http.Redirect(w, r, "/settings?msg=Error+adding+watchlist", http.StatusSeeOther)
+			http.Redirect(w, r, "/settings?msg=watchlist_add_error", http.StatusSeeOther)
 			return
 		}
 
 		slog.Info("watchlist created", "tenant", tn.Username, "target", target)
-		http.Redirect(w, r, "/settings?msg=Watchlist+added", http.StatusSeeOther)
+		http.Redirect(w, r, "/settings?msg=watchlist_added", http.StatusSeeOther)
 	}
 }
 
@@ -67,18 +67,18 @@ func deleteWatchlistHandler(store *postgres.Store) http.HandlerFunc {
 
 		id := r.PathValue("id")
 		if id == "" {
-			http.Redirect(w, r, "/settings?msg=Invalid+request", http.StatusSeeOther)
+			http.Redirect(w, r, "/settings?msg=invalid_request", http.StatusSeeOther)
 			return
 		}
 
 		if err := store.DeleteWatchlist(r.Context(), id, tn.ID); err != nil {
 			slog.Error("delete watchlist", "tenant", tn.ID, "id", id, "error", err)
-			http.Redirect(w, r, "/settings?msg=Cannot+delete+this+watchlist", http.StatusSeeOther)
+			http.Redirect(w, r, "/settings?msg=watchlist_delete_denied", http.StatusSeeOther)
 			return
 		}
 
 		slog.Info("watchlist deleted", "tenant", tn.Username, "id", id)
-		http.Redirect(w, r, "/settings?msg=Watchlist+removed", http.StatusSeeOther)
+		http.Redirect(w, r, "/settings?msg=watchlist_removed", http.StatusSeeOther)
 	}
 }
 
@@ -129,13 +129,13 @@ func toggleWatchlistEmailHandler(store *postgres.Store) http.HandlerFunc {
 
 		id := r.PathValue("id")
 		if id == "" {
-			http.Redirect(w, r, "/settings?msg=Invalid+request", http.StatusSeeOther)
+			http.Redirect(w, r, "/settings?msg=invalid_request", http.StatusSeeOther)
 			return
 		}
 
 		if err := store.ToggleWatchlistEmail(r.Context(), id, tn.ID); err != nil {
 			slog.Error("toggle watchlist email", "tenant", tn.ID, "id", id, "error", err)
-			http.Redirect(w, r, "/settings?msg=Error+updating+watchlist", http.StatusSeeOther)
+			http.Redirect(w, r, "/settings?msg=watchlist_update_error", http.StatusSeeOther)
 			return
 		}
 
