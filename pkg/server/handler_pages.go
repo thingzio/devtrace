@@ -302,7 +302,7 @@ func tosAcceptHandler(store *postgres.Store) http.HandlerFunc {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		http.Redirect(w, r, "/dashboard", http.StatusFound)
+		http.Redirect(w, r, dashboardPath, http.StatusFound)
 	}
 }
 
@@ -341,7 +341,7 @@ func changelogPageHandler(opts Options) http.HandlerFunc {
 func landingHandler(opts Options) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if middleware.TenantFromContext(r.Context()) != nil {
-			http.Redirect(w, r, "/dashboard", http.StatusFound)
+			http.Redirect(w, r, dashboardPath, http.StatusFound)
 			return
 		}
 		var errMsg string

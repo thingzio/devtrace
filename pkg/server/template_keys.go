@@ -35,6 +35,9 @@ const (
 	// authGitHubPath is the OAuth start URL. Hoisted because handlers,
 	// middleware, and ratelimit JSON envelopes all need to reference it.
 	authGitHubPath = "/auth/github"
+
+	// dashboardPath is the default post-auth landing page.
+	dashboardPath = "/dashboard"
 )
 
 // flashMessage maps a ?msg= code to display prose. Unknown codes return the

@@ -73,7 +73,7 @@ func oauthCallbackHandler(db *sql.DB, cfg *oauth.Config) http.HandlerFunc {
 			// Handle already-consumed code (browser double-click)
 			if sessionCookie, cookieErr := r.Cookie(middleware.SessionCookieName()); cookieErr == nil {
 				if _, valErr := tenant.ValidateSession(r.Context(), db, sessionCookie.Value); valErr == nil {
-					http.Redirect(w, r, "/dashboard", http.StatusFound)
+					http.Redirect(w, r, dashboardPath, http.StatusFound)
 					return
 				}
 			}
@@ -114,15 +114,24 @@ func oauthCallbackHandler(db *sql.DB, cfg *oauth.Config) http.HandlerFunc {
 			return
 		}
 
-		// Nudge users without an app installation to settings.
 		installs, _ := tenant.GetActiveInstallations(r.Context(), db, tn.ID)
-		if len(installs) == 0 {
-			http.Redirect(w, r, "/settings?msg=install_app", http.StatusFound)
-			return
-		}
-
-		http.Redirect(w, r, "/dashboard", http.StatusFound)
+		http.Redirect(w, r, postAuthRedirect(len(installs) > 0, tn.Username), http.StatusFound)
 	}
+}
+
+// postAuthRedirect returns where a signed-in tenant lands, nudging those
+// without an app installation to settings.
+//
+// The nudge branch logs an impression because it is the only place the ask is
+// made: it fires on sign-in, so a tenant who never signs in never sees it.
+// Pairing this count with installation webhooks gives install conversion a
+// real denominator, separating "saw it and declined" from "never came back".
+func postAuthRedirect(hasInstall bool, username string) string {
+	if hasInstall {
+		return dashboardPath
+	}
+	slog.Info("install nudge shown", "username", username)
+	return "/settings?msg=install_app"
 }
 
 func signoutHandler(db *sql.DB) http.HandlerFunc {
