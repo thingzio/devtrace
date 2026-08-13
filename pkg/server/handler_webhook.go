@@ -98,6 +98,17 @@ func handleInstallationEvent(ctx context.Context, db *sql.DB, store *postgres.St
 			event.Installation.Account.Login); err != nil {
 			return fmt.Errorf("saving installation for tenant %s: %w", tn.ID, err)
 		}
+		// Counterpart to the "install nudge shown" impression: together these
+		// give install conversion a denominator. account_type distinguishes
+		// personal from organization installs, which is what the settings
+		// copy steers people toward.
+		slog.Info("installation created",
+			"tenant", tn.ID,
+			"login", event.Installation.Account.Login,
+			"account_type", event.Installation.Account.Type,
+			"installation_id", event.Installation.ID,
+		)
+
 		// Auto-create implicit watchlist for the installed org.
 		if store != nil {
 			if wlErr := store.EnsureImplicitWatchlist(ctx, tn.ID, event.Installation.Account.Login); wlErr != nil {

@@ -412,6 +412,48 @@ resource "google_monitoring_alert_policy" "token_exhaustion_search" {
 }
 
 # ---------------------------------------------------------------------------
+# Log-based metrics: GitHub App Install Funnel
+#
+# The install ask is only made on sign-in, so impressions and installs have to
+# be counted separately to read conversion at all. These are defined as
+# metrics rather than left as log queries because log entries age out after
+# ~30 days, while conversion on a small tenant base is a question measured in
+# months.
+# ---------------------------------------------------------------------------
+
+resource "google_logging_metric" "install_nudge_shown" {
+  name    = "${var.prefix}-install-nudge-shown"
+  project = var.project_id
+  filter  = "resource.type=\"cloud_run_revision\" resource.labels.service_name=\"${var.prefix}-serve\" jsonPayload.msg=\"install nudge shown\""
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+  }
+}
+
+resource "google_logging_metric" "installation_created" {
+  name    = "${var.prefix}-installation-created"
+  project = var.project_id
+  filter  = "resource.type=\"cloud_run_revision\" resource.labels.service_name=\"${var.prefix}-serve\" jsonPayload.msg=\"installation created\""
+
+  metric_descriptor {
+    metric_kind = "DELTA"
+    value_type  = "INT64"
+
+    labels {
+      key         = "account_type"
+      value_type  = "STRING"
+      description = "Install target (User for personal accounts, Organization for orgs)"
+    }
+  }
+
+  label_extractors = {
+    "account_type" = "EXTRACT(jsonPayload.account_type)"
+  }
+}
+
+# ---------------------------------------------------------------------------
 # Dashboards
 # ---------------------------------------------------------------------------
 
