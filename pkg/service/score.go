@@ -374,7 +374,9 @@ func (s *ScoreService) checkTrustedOrgs(ctx context.Context, username string, or
 
 func scoringMode(hasRepo bool) string {
 	if hasRepo {
-		return "repo" //nolint:goconst // distinct semantic from logKeyRepo (slog key); inlining a constant just to share spelling would obscure intent
+		// Distinct semantic from logKeyRepo (slog key); inlining a constant
+		// just to share spelling would obscure intent.
+		return "repo"
 	}
 	return "global"
 }

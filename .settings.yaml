@@ -3,7 +3,7 @@
 
 # Language Versions
 languages:
-  go: '1.26'
+  go: '1.27'
 
 # Build Tools
 build_tools:
@@ -13,7 +13,7 @@ build_tools:
 
 # Linting
 linting:
-  golangci_lint: 'v2.12.1'
+  golangci_lint: 'v2.13.1'
 
 # Quality Thresholds
 quality:
