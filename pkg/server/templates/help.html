@@ -35,7 +35,7 @@
             <li><strong>Behavioral</strong> &mdash; account age, suspension status, contribution patterns</li>
             <li><strong>Community</strong> &mdash; followers, public repos, fork ratio</li>
             <li><strong>Engagement</strong> &mdash; PRs merged, PRs closed, recent PR activity across repos</li>
-            <li><strong>AI Sensing</strong> &mdash; AI-generated contribution transparency signals. Pro plans include behavioral heuristics: Velocity Anomaly (recent vs. baseline PR rate), Active Hours (hour-of-day spread), Burst-Vanish (peak/median activity ratio), and Synthetic Risk (composite flag from profile, reviews, and commit patterns).</li>
+            <li><strong>AI Sensing</strong> &mdash; AI-generated contribution transparency signals. Includes behavioral heuristics: Velocity Anomaly (recent vs. baseline PR rate), Active Hours (hour-of-day spread), Burst-Vanish (peak/median activity ratio), and Synthetic Risk (composite flag from profile, reviews, and commit patterns).</li>
           </ul>
         </li>
         <li><strong>Risk Summary</strong> &mdash; AI-generated narrative summarizing the contributor's reputation, strengths, and areas of concern.</li>
@@ -57,7 +57,7 @@
       <h3>Settings</h3>
       <ul>
         <li><strong>Profile</strong> &mdash; view your GitHub username, name, email, company, location, bio, and account dates.</li>
-        <li><strong>Plan</strong> &mdash; see your current plan, contributor limit per month, and API rate limit.</li>
+        <li><strong>Account limits</strong> &mdash; see your contributor limit per month and API rate limit.</li>
         <li><strong>API Tokens</strong> &mdash; create and revoke API tokens for programmatic access. Tokens are shown once at creation and cannot be recovered. See the API section below for usage.</li>
         <li><strong>Appearance</strong> &mdash; switch between Light, Dark, or System theme. Your preference is saved in the browser.</li>
       </ul>
@@ -78,7 +78,7 @@ export TOKEN=dt_your_token_here</code></pre>
       <pre><code>curl -s $HOST/api/v1/score/octocat</code></pre>
 
       <h4 style="margin-top:16px;">Score a contributor (authenticated)</h4>
-      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Returns the full reputation score based on your plan tier.</p>
+      <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Returns the full reputation score for the account.</p>
       <pre><code>curl -s \
   -H "Authorization: Bearer $TOKEN" \
   $HOST/api/v1/score/octocat</code></pre>
@@ -125,7 +125,7 @@ export TOKEN=dt_your_token_here</code></pre>
   "detail": "Sign up for full signal breakdown -> devtrace.thingz.io"
 }</code></pre>
 
-      <h4 style="margin-top:16px;">Free plan</h4>
+      <h4 style="margin-top:16px;">Authenticated &mdash; base</h4>
       <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Includes profile, signals, categories, risk summary, behavior, and AI sensing metadata.</p>
       <pre><code>{
   "version": "0.13.1",
@@ -175,7 +175,7 @@ export TOKEN=dt_your_token_here</code></pre>
   "scored_at": "2026-04-16T22:50:30.671968868Z"
 }</code></pre>
 
-      <h4 style="margin-top:16px;">Starter plan</h4>
+      <h4 style="margin-top:16px;">Authenticated &mdash; with PR authenticity</h4>
       <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Adds Claude-powered PR authenticity classification.</p>
       <pre><code>{
   "version": "0.13.1",
@@ -201,7 +201,7 @@ export TOKEN=dt_your_token_here</code></pre>
   "scored_at": "2026-04-16T22:50:30.671968868Z"
 }</code></pre>
 
-      <h4 style="margin-top:16px;">Pro plan</h4>
+      <h4 style="margin-top:16px;">Authenticated &mdash; full</h4>
       <p style="font-size:0.85em;color:var(--gray);margin-bottom:6px;">Full response including behavioral heuristics (velocity anomaly, active hours, burst-vanish, synthetic risk).</p>
       <pre><code>{
   "version": "0.13.1",
@@ -265,12 +265,12 @@ export TOKEN=dt_your_token_here</code></pre>
     <div class="landing-feature help-section" style="margin-bottom:20px" id="limits">
       <h3>Usage Limits</h3>
       <ul>
-        <li><strong>Unauthenticated</strong> &mdash; 1 lookup per minute per IP. Sign in with GitHub to unlock higher limits and full features.</li>
-        <li><strong>Free plan</strong> &mdash; 50 unique contributors/month, 60 API requests/hour, basic scoring with category breakdown and risk summary.</li>
-        <li><strong>Starter plan</strong> &mdash; 200 unique contributors/month, 300 API requests/hour, includes PR authenticity analysis.</li>
-        <li><strong>Pro plan</strong> &mdash; 2,000 unique contributors/month, 1,000 API requests/hour, full AI Sensing with behavioral heuristics (Velocity Anomaly, Active Hours, Burst-Vanish, Synthetic Risk).</li>
+        <li><strong>Why limits exist</strong> &mdash; DevTrace is a shared, best-effort service. Per-account limits on scored contributors and API requests keep it responsive for everyone. They are not a paid tier &mdash; there is nothing to buy.</li>
+        <li><strong>Unauthenticated</strong> &mdash; 1 lookup per minute per IP. Sign in with GitHub for higher limits and full features.</li>
+        <li><strong>Your limits</strong> &mdash; see your contributor and rate limits in <a href="/settings">Settings</a>.</li>
         <li><strong>Quota</strong> &mdash; each unique contributor scored counts against your monthly limit. Rescoring the same contributor does not consume additional quota.</li>
-        <li><strong>Rate limiting</strong> &mdash; unauthenticated requests are limited to 1 per minute. Authenticated requests are rate-limited per hour based on your plan. When the limit is reached, requests return HTTP 429 with a <code>Retry-After</code> header.</li>
+        <li><strong>Rate limiting</strong> &mdash; unauthenticated requests are limited to 1 per minute. Authenticated requests are rate-limited per hour. When the limit is reached, requests return HTTP 429 with a <code>Retry-After</code> header.</li>
+        <li><strong>Need more headroom?</strong> &mdash; <a href="#help-contact">ask</a>. Limits are adjusted case by case, at no cost, subject to what the shared instance can carry.</li>
       </ul>
     </div>
 
@@ -280,8 +280,8 @@ export TOKEN=dt_your_token_here</code></pre>
         <li><strong>Stuck in sign-in loop</strong> &mdash; clear your browser cookies for the DevTrace domain and try again.</li>
         <li><strong>Score returns an error</strong> &mdash; check that the GitHub username exists and is spelled correctly. If the GitHub API is rate-limited, wait a few minutes.</li>
         <li><strong>API returns 401</strong> &mdash; your token may be revoked or missing. Generate a new one in <a href="/settings">Settings</a>.</li>
-        <li><strong>API returns 429</strong> &mdash; you've hit the rate limit (1/min unauthenticated, or your plan's hourly limit). Check the <code>Retry-After</code> header for when to retry, or sign in for higher limits.</li>
-        <li><strong>API returns 403</strong> &mdash; you've reached your monthly contributor quota. Wait for the next billing period or upgrade your plan.</li>
+        <li><strong>API returns 429</strong> &mdash; you've hit the rate limit (1/min unauthenticated, or your account's hourly limit). Check the <code>Retry-After</code> header for when to retry, or sign in for higher limits.</li>
+        <li><strong>API returns 403</strong> &mdash; you've reached your monthly contributor quota. Wait for the next monthly period, or <a href="#help-contact">ask</a> for more headroom.</li>
         <li><strong>Score data looks stale</strong> &mdash; scores are cached. The same contributor scored within a short window may return cached results.</li>
       </ul>
     </div>
@@ -289,7 +289,7 @@ export TOKEN=dt_your_token_here</code></pre>
     <div class="landing-feature help-section" style="margin-bottom:20px" id="compliance">
       <h3>Compliance</h3>
       <ul>
-        <li><strong>NIST SSDF</strong> &mdash; Pro plan scorecards include a Regulatory Context section mapping contributor signals to 8 NIST SP 800-218 (SSDF) practices.</li>
+        <li><strong>NIST SSDF</strong> &mdash; scorecards include a Regulatory Context section mapping contributor signals to 8 NIST SP 800-218 (SSDF) practices.</li>
         <li><strong>EU CRA</strong> &mdash; contributor provenance signals support due-diligence obligations under the EU Cyber Resilience Act (enforcement begins 2027).</li>
         <li><strong>Full methodology</strong> &mdash; see the <a href="/compliance">Compliance</a> page for the complete practice mapping, task-level callouts, and disclaimer.</li>
       </ul>

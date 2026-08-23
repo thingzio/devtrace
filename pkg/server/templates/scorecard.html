@@ -151,7 +151,7 @@
 
   {{with .SecurityCredits}}
   <section class="enrichment-section enrichment-security">
-    <h2>Security Credits <span class="plan-badge">Starter+</span> <span class="scope-badge scope-badge-global">Global</span></h2>
+    <h2>Security Credits <span class="scope-badge scope-badge-global">Global</span></h2>
     <p class="metric-desc" style="margin-bottom:0.75rem;">Published GitHub Security Advisories where this contributor is credited (reporter, fixer, analyst, or other roles). Credits are username-attested by GitHub itself.</p>
     <div class="metric-cards">
       <div class="metric-card">
@@ -200,7 +200,7 @@
 
   {{with .OSSFScorecard}}
   <section class="enrichment-section enrichment-ossf">
-    <h2>OSSF Scorecard <span class="plan-badge">Starter+</span> <span class="scope-badge scope-badge-repo">Repo</span></h2>
+    <h2>OSSF Scorecard <span class="scope-badge scope-badge-repo">Repo</span></h2>
     <p class="metric-desc" style="margin-bottom:0.75rem;">Repository quality assessment from the <a href="https://openssf.org/projects/scorecard/" target="_blank" rel="noopener">OpenSSF Scorecard</a> project. Aggregate score is 0&ndash;10; individual checks score &minus;1 (not applicable) through 10. Higher is better.</p>
     <div class="metric-cards">
       <div class="metric-card">
@@ -240,7 +240,7 @@
 
   {{with .Publisher}}
   <section class="enrichment-section enrichment-publisher">
-    <h2>Package Publisher <span class="plan-badge">Starter+</span> <span class="scope-badge scope-badge-global">Global</span></h2>
+    <h2>Package Publisher <span class="scope-badge scope-badge-global">Global</span></h2>
     <p class="metric-desc" style="margin-bottom:0.75rem;">Packages this contributor publishes to public registries under their handle. A publisher relationship on widely-used packages is a strong supply-chain credibility signal.</p>
     {{with .NPM}}
     <h3>npm <span class="item-meta">{{.PackageCount}} package{{if ne .PackageCount 1}}s{{end}}</span></h3>
@@ -260,7 +260,7 @@
 
   {{with .StackOverflow}}{{if gt .UserID 0}}
   <section class="enrichment-section enrichment-stackoverflow">
-    <h2>Stack Overflow <span class="plan-badge">Starter+</span> <span class="scope-badge scope-badge-global">Global</span></h2>
+    <h2>Stack Overflow <span class="scope-badge scope-badge-global">Global</span></h2>
     <p class="metric-desc" style="margin-bottom:0.75rem;">Cross-platform reputation signal (T2 confidence — link declared on the contributor's GitHub profile). High reputation on widely-trafficked Q&amp;A sites indicates real practitioner engagement.</p>
     <div class="metric-cards">
       <div class="metric-card">
@@ -288,7 +288,7 @@
 
   {{with .CrossVCS}}{{if .Matches}}
   <section class="enrichment-section enrichment-cross-vcs">
-    <h2>Cross-Platform Identity <span class="plan-badge">Pro</span> <span class="scope-badge scope-badge-global">Global</span></h2>
+    <h2>Cross-Platform Identity <span class="scope-badge scope-badge-global">Global</span></h2>
     <p class="metric-desc" style="margin-bottom:0.75rem;">Forges where the contributor publishes the same SSH public key as on GitHub. Same private key signs operations on multiple platforms &mdash; T1 cryptographic confidence, the strongest cross-platform identity signal available. Same handle assumed across forges.</p>
     <ul class="enrichment-list">
       {{range .Matches}}
@@ -319,7 +319,7 @@
     {{if .Emails}}
     <div class="enrichment-emails">
       <strong>Public email{{if ne (len .Emails) 1}}s{{end}}</strong>
-      <span class="plan-badge plan-badge-tier">Starter+</span>:
+:
       {{range $i, $e := .Emails}}{{if $i}}, {{end}}<code>{{$e}}</code>{{end}}
     </div>
     {{end}}
@@ -330,7 +330,7 @@
 
   {{if .AISensing}}{{if .AISensing.Behavioral}}
   <section class="ai-sensing">
-    <h2>AI Sensing <span class="plan-badge">Pro</span> <span class="scope-badge scope-badge-global">Global</span></h2>
+    <h2>AI Sensing <span class="scope-badge scope-badge-global">Global</span></h2>
     {{if and (eq .AISensing.Behavioral.VelocityAnomalyRatio 0.0) (eq .AISensing.Behavioral.ActiveHourSpread 0) (eq .AISensing.Behavioral.BurstVanishScore 0.0)}}
     <p class="metric-desc" style="margin-bottom:0.75rem;">Behavioral metrics require contributor activity data (PRs, reviews, commits) ingested over time. Metrics will populate as data becomes available.</p>
     {{end}}
@@ -395,7 +395,7 @@
 
   {{if .Compliance}}
   <section class="compliance">
-    <h2>Regulatory Context <span class="plan-badge">Pro</span> <span class="scope-badge scope-badge-global">Global</span></h2>
+    <h2>Regulatory Context <span class="scope-badge scope-badge-global">Global</span></h2>
     <p class="metric-desc" style="margin-bottom:0.75rem;">NIST SP 800-218 (SSDF) practice mapping based on this contributor's signals. These are informational and do not constitute a compliance determination. <a href="/compliance">Full methodology &rarr;</a></p>
     <table class="signal-table">
       <tr><th>SSDF Practice</th><th>Evidence</th><th style="text-align:center;">Status</th></tr>

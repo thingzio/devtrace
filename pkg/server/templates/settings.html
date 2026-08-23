@@ -43,14 +43,12 @@
   </section>
 
   <section class="settings-section">
-    <h2>Plan</h2>
+    <h2>Account limits</h2>
     <dl>
-      <dt>Current plan</dt><dd><span class="plan-badge">{{.plan}}</span></dd>
       <dt>Contributors/month</dt><dd>{{comma .max_contributors}}</dd>
       <dt>Rate limit</dt><dd>{{comma .rate_limit}}/hour</dd>
     </dl>
-    <button class="btn btn-primary" disabled title="Coming soon">Change Plan</button>
-    <p class="hint">Plan self-service is not available yet. <a href="/help#help-contact">Request a complimentary upgrade</a>.</p>
+    <p class="hint">DevTrace is free to use &mdash; these limits keep a shared, best-effort service responsive and are not a paid tier. <a href="/help#help-contact">Ask for more headroom</a> if you need it.</p>
   </section>
 
   <section class="settings-section">
@@ -74,7 +72,7 @@
           <td>
             <form method="POST" action="/settings/watchlist/{{.ID}}/toggle-email" style="display:inline;">
               <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
-              <button type="submit" class="btn btn-sm{{if .NotifyEmail}} btn-toggle-on{{else}} btn-toggle-off{{end}}" title="{{if .NotifyEmail}}Email on{{else}}Email off{{end}}"{{if not $.digest_email}} disabled title="Upgrade plan for email digests"{{end}}>{{if .NotifyEmail}}On{{else}}Off{{end}}</button>
+              <button type="submit" class="btn btn-sm{{if .NotifyEmail}} btn-toggle-on{{else}} btn-toggle-off{{end}}" title="{{if .NotifyEmail}}Email on{{else}}Email off{{end}}"{{if not $.digest_email}} disabled title="Email digests not enabled for this account"{{end}}>{{if .NotifyEmail}}On{{else}}Off{{end}}</button>
             </form>
           </td>
           <td>
@@ -100,7 +98,7 @@
       <button type="submit" class="btn btn-primary btn-sm">+ Add Watchlist</button>
     </form>
     {{end}}
-    <p class="hint">{{if .can_add_watchlist}}You can add up to {{.max_watchlists}} manual watchlist{{if gt .max_watchlists 1}}s{{end}}.{{else}}{{if eq .max_watchlists 0}}<a href="/help#help-contact">Upgrade</a> to add custom watchlists.{{else}}Manual watchlist limit reached.{{end}}{{end}}</p>
+    <p class="hint">{{if .can_add_watchlist}}You can add up to {{.max_watchlists}} manual watchlist{{if gt .max_watchlists 1}}s{{end}}.{{else}}{{if eq .max_watchlists 0}}Custom watchlists are not enabled for this account &mdash; <a href="/help#help-contact">ask</a> if you need them.{{else}}Manual watchlist limit reached.{{end}}{{end}}</p>
   </section>
 
   <section class="settings-section">

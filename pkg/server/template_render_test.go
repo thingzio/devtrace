@@ -252,7 +252,7 @@ func TestScorecardRendersEnrichmentSections(t *testing.T) {
 		"Linked Accounts",
 		"personal_site", "https://example.dev/blog",
 		"twitter", "https://x.com/jane",
-		"Public email", "Starter+", "jane@example.com",
+		"Public email", "jane@example.com",
 		// Security credits
 		"Security Credits", "GHSA-aaaa-bbbb-cccc",
 		"CVE-2024-001", "Critical RCE in foo",
@@ -316,14 +316,12 @@ func TestScorecardWithoutEnrichmentRenders(t *testing.T) {
 	}
 }
 
-// TestLandingPlansTableHighlightsPro renders the landing page and asserts:
-//   - the beta footnote text was updated to the Pro-specific wording, and
-//   - the Pro plan column is rendered with the plan-highlight class on its
-//     header AND every body cell so CSS can paint the highlighted column
-//     end-to-end.
+// TestLandingHasNoPlanVocabulary renders the landing page and asserts the
+// service is presented as a free, best-effort reference implementation.
 //
-// Free and Starter columns must NOT carry the highlight class.
-func TestLandingPlansTableHighlightsPro(t *testing.T) {
+// DevTrace has no plans, tiers, or pricing. This test guards against tier
+// vocabulary reappearing in user-facing copy.
+func TestLandingHasNoPlanVocabulary(t *testing.T) {
 	data := pageData{
 		Title:    "Home",
 		Version:  "v1.0.0",
@@ -341,11 +339,9 @@ func TestLandingPlansTableHighlightsPro(t *testing.T) {
 	body := rec.Body.String()
 
 	mustContain := []string{
-		// Updated beta footnote — guards against the old wording sneaking back.
-		"During the beta preview the Pro plan is free for all users.",
-		// Pro column header is highlighted and the "Pro" label gets the accent class.
-		`id="plan-pro" class="plan-highlight"`,
-		`class="plan-name-highlight">Pro</span>`,
+		"reference implementation",
+		"best-effort basis",
+		"Apache License 2.0",
 	}
 	for _, want := range mustContain {
 		if !strings.Contains(body, want) {
@@ -353,36 +349,20 @@ func TestLandingPlansTableHighlightsPro(t *testing.T) {
 		}
 	}
 
+	// Tier vocabulary and pricing scaffolding must not reappear.
 	mustNotContain := []string{
-		// Old footnote must be gone.
-		"All plans are free during the beta preview.",
-		// Free / Starter headers must NOT carry the highlight class.
-		`id="plan-free" class="plan-highlight"`,
-		`id="plan-starter" class="plan-highlight"`,
+		"beta preview",
+		"Starter",
+		"Enterprise",
+		"plan-highlight",
+		"plans-table",
+		`id="plan-free"`,
+		`id="plan-pro"`,
 	}
 	for _, gone := range mustNotContain {
 		if strings.Contains(body, gone) {
 			t.Errorf("rendered landing still contains %q", gone)
 		}
-	}
-
-	// Body cells: count the number of plan-highlight cells. We render
-	// one row per feature, with one Pro-column cell per feature row,
-	// except span rows which collapse all plan columns into one cell
-	// and therefore contribute no plan-highlight classes.
-	var spanRows, nonSpanRows int
-	for _, f := range plan.DisplayFeatures() {
-		if f.Span {
-			spanRows++
-		} else {
-			nonSpanRows++
-		}
-	}
-	wantHighlightCells := nonSpanRows + 1 // +1 for the <th> header
-	gotHighlightCells := strings.Count(body, `class="plan-highlight`)
-	if gotHighlightCells != wantHighlightCells {
-		t.Errorf("plan-highlight cell count = %d, want %d (span rows: %d, non-span rows: %d)",
-			gotHighlightCells, wantHighlightCells, spanRows, nonSpanRows)
 	}
 }
 

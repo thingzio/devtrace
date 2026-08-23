@@ -1,38 +1,10 @@
 {{define "plans_table"}}
-{{if .Plans}}
 <div id="plans" class="landing-plans">
-  <h2>Plans</h2>
-  <div class="plans-table-wrap">
-    <table class="plans-table">
-      <thead>
-        <tr>
-          <th></th>
-          {{range .Plans}}
-          <th id="plan-{{.Name}}"{{if eq .Name "pro"}} class="plan-highlight"{{end}}><span{{if eq .Name "pro"}} class="plan-name-highlight"{{end}}>{{.DisplayName}}</span>{{if .PriceLabel}} <span style="font-size:0.75em;font-weight:normal;color:var(--gray);">({{.PriceLabel}})</span>{{end}}</th>
-          {{end}}
-        </tr>
-      </thead>
-      <tbody>
-        {{range .Features}}
-        <tr id="{{.ID}}">
-          <td>{{if .Desc}}<a href="#" class="feature-info" data-desc="{{.Desc}}">{{.Label}}</a>{{else}}{{.Label}}{{end}}</td>
-          {{if .Span}}
-          <td colspan="{{len $.Plans}}">{{index .Values 0}}</td>
-          {{else}}
-          {{range $i, $v := .Values}}<td{{$p := index $.Plans $i}}{{if eq $p.Name "pro"}} class="plan-highlight{{if eq $v "Coming soon"}} coming-soon{{end}}"{{else if eq $v "Coming soon"}} class="coming-soon"{{end}}>{{$v}}</td>{{end}}
-          {{end}}
-        </tr>
-        {{end}}
-      </tbody>
-    </table>
-    <p style="margin-top:8px;font-size:0.8em;color:var(--gray);text-align:right;">* During the beta preview the Pro plan is free for all users.</p>
-  </div>
-  <div id="feature-tooltip" class="feature-tooltip" style="display:none;">
-    <div class="feature-tooltip-content">
-      <span class="feature-tooltip-close">&times;</span>
-      <p id="feature-tooltip-text"></p>
-    </div>
+  <h2>How this service is run</h2>
+  <div class="service-posture">
+    <p>DevTrace is a <strong>reference implementation</strong>, not a commercial product. There are no plans, no pricing, and no subscriptions &mdash; every feature is available to every account.</p>
+    <p>It is operated on a <strong>best-effort basis</strong>: no SLA, no uptime guarantee, and no support commitment. Per-account limits exist only to keep the shared instance responsive for everyone using it.</p>
+    <p>The source for this service is being published under the Apache License 2.0.</p>
   </div>
 </div>
-{{end}}
 {{end}}
