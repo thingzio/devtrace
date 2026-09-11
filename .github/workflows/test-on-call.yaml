@@ -25,11 +25,17 @@ jobs:
       - name: Unit Test
         run: make test
 
+      # Skipped for pull requests from forks. GitHub does not issue an OIDC
+      # token to fork PRs, so use_oidc would fail and show every external
+      # contributor a red check on their first contribution. Coverage for
+      # fork PRs is reported when the change lands on main.
       - name: Upload Coverage
+        if: github.event.pull_request.head.repo.fork != true
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2  # v6.0.0
         with:
           flags: unittests
           use_oidc: true
+          fail_ci_if_error: false
 
   lint:
     runs-on: ubuntu-latest
