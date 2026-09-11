@@ -32,8 +32,12 @@ Tool versions and quality thresholds are centralized in `.settings.yaml` (single
 
 - Commit to `main` branch (not `master`)
 - Do use `-S` to cryptographically sign the commit
-- Do NOT add `Co-Authored-By` lines (organization policy)
-- Do not sign-off commits (no `-s` flag) unless the commit can't be cryptographically signed
+- Do NOT add `Co-Authored-By` lines
+- **Do sign off every commit (`git commit -s`).** This repository enforces the
+  Developer Certificate of Origin, and the DCO bot rejects pull requests whose
+  commits lack a `Signed-off-by` trailer. `-s` and `-S` are different things and
+  both are wanted: `-s` certifies you have the right to submit the code, `-S`
+  cryptographically signs the commit. See CONTRIBUTING.md.
 
 ## Code Conventions
 
