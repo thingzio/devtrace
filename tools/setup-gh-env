@@ -6,11 +6,11 @@ set -euo pipefail
 #
 # Prerequisites:
 #   - gh CLI authenticated
-#   - terraform apply completed in infra/saas/
+#   - terraform apply completed in infra/run/
 
 REPO="thingzio/devtrace"
 ENV_NAME="saas"
-TF_DIR="infra/saas"
+TF_DIR="infra/run"
 
 echo "==> Reading Terraform outputs from ${TF_DIR}..."
 WIF_PROVIDER=$(terraform -chdir="$TF_DIR" output -raw wif_provider)

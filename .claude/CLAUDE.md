@@ -146,7 +146,7 @@ pkg/config/            Environment variable helpers
 pkg/logging/           Logger setup
 pkg/net/               HTTP client utilities, email validation
 pkg/health/            Health check endpoint
-infra/saas/            Terraform for GCP infrastructure
+infra/run/             Terraform for GCP infrastructure
 tools/                 Dev scripts (version bump, e2e, seed, setup)
 ```
 

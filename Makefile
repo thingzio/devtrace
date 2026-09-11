@@ -60,7 +60,7 @@ lint-go: ## Lints Go code with go vet and golangci-lint
 lint-yaml: ## Lints YAML files with yamllint
 	yamllint -c .yamllint.yaml $(YAML_FILES)
 
-TF_DIR := infra/saas
+TF_DIR := infra/run
 export TF_CLI_CONFIG_FILE := $(wildcard $(TF_DIR)/terraformrc)
 
 .PHONY: lint-tf

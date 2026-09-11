@@ -51,7 +51,7 @@ All secret names are prefixed with `${var.prefix}` (`devtrace-saas`) to avoid co
 ## Terraform Structure
 
 ```
-infra/saas/
+infra/run/
 ├── main.tf                    # APIs, locals
 ├── providers.tf               # GCP provider + backend
 ├── variables.tf               # All input variables with defaults
@@ -219,7 +219,7 @@ export GITHUB_APP_ID="your-app-id"
 Cloud Run needs images + secrets to start. First apply creates the infra — Cloud Run will error, that's expected.
 
 ```shell
-cd infra/saas
+cd infra/run
 terraform init
 terraform apply \
   -var="github_oauth_client_id=$GITHUB_OAUTH_CLIENT_ID" \
@@ -258,7 +258,7 @@ KO_DOCKER_REPO=${AR_REGISTRY}/devtrace-site ko build ./cmd/devtrace-site/ --bare
 ### 7. Second Terraform Apply (completes Cloud Run)
 
 ```shell
-cd infra/saas
+cd infra/run
 terraform apply \
   -var="github_oauth_client_id=$GITHUB_OAUTH_CLIENT_ID" \
   -var="github_app_id=$GITHUB_APP_ID"
@@ -305,8 +305,8 @@ gcloud run services update devtrace-saas-serve \
     --region=$REGION --set-env-vars=ENABLE_BACKGROUND_OPS=true
 
 # Enable deletion protection after verifying
-# Edit infra/saas/cloudrun.tf — set deletion_protection = true
-cd infra/saas && terraform apply
+# Edit infra/run/cloudrun.tf — set deletion_protection = true
+cd infra/run && terraform apply
 ```
 
 ---

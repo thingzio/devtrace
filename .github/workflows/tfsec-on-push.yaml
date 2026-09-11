@@ -55,4 +55,4 @@ jobs:
           sudo chmod +x /usr/local/bin/tfsec
           rm -rf "${TFSEC_TMP}"
           tfsec --version
-          tfsec infra/saas
+          tfsec infra/run
