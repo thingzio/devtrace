@@ -1,81 +1,14 @@
-# DevTrace — Infrastructure & Operations
+# DevTrace — Development & Operations
 
-DevTrace shares the same GCP project, VPC, and Cloud SQL instance as DevPulse. It gets its own Cloud Run services, Artifact Registry repo, scheduler jobs, secrets, and service accounts.
+Infrastructure lives in the private [`thingzio/infra`](https://github.com/thingzio/infra)
+repository, under `run/devtrace`. It moved there when this repository went
+public: the Terraform and the document describing it map production topology —
+service and secret names, IAM structure, database wiring — which is worth not
+publishing. Unlike a credential, it cannot be rotated out of a public
+repository's history.
 
----
-
-## GCP Resources
-
-### Cloud Run
-
-| Resource | Type | Description |
-|----------|------|-------------|
-| `devtrace-saas-serve` | Service | Web UI + REST API + background workers (auto-scaling 0-10) |
-
-Single binary (`devtrace-site`) handles HTTP serving, background ingestion, and continuous scoring. `TRUST_PROXY=true` required in production — Cloud Run sits behind Google's LB, and the rate limiter needs the real client IP from `X-Forwarded-For`.
-
-### Supporting Resources
-
-| Resource | Type | Description |
-|----------|------|-------------|
-| `devtrace-saas-images` | Artifact Registry | Container images |
-| `devtrace-saas-run` | Service Account | Runtime SA for Cloud Run |
-| `github-actions-devtrace-saas` | Service Account | CI/CD deployer via WIF |
-
-### Secrets (Secret Manager)
-
-| Secret | Used by |
-|--------|---------|
-| `devtrace-saas-github-app-key` | serve (GitHub App auth) |
-| `devtrace-saas-oauth-client-secret` | serve (OAuth flow) |
-| `devtrace-saas-webhook-secret` | serve (webhook verification) |
-| `devtrace-saas-anthropic-api-key` | serve (Claude API) |
-
-All secret names are prefixed with `${var.prefix}` (`devtrace-saas`) to avoid collision with DevPulse secrets.
-
-### Shared Resources (from DevPulse/thingzio project)
-
-| Resource | Current Name | Notes |
-|----------|-------------|-------|
-| VPC | `thingzio-vpc` | Referenced via `var.vpc_id` |
-| Subnet | `thingzio-subnet` | Referenced via `var.subnet_id` |
-| Cloud SQL | `thingzio-pg` | Shared instance, own DB user (`devtrace`) |
-| Private networking | VPC peering | Already established |
-
-### APIs Enabled
-
-`artifactregistry`, `run`, `secretmanager`, `monitoring`, `iam`, `cloudscheduler`
-
----
-
-## Terraform Structure
-
-```
-infra/run/
-├── main.tf                    # APIs, locals
-├── providers.tf               # GCP provider + backend
-├── variables.tf               # All input variables with defaults
-├── terraform.tfvars           # Variable values
-├── cloudrun.tf                # Cloud Run service
-├── scheduler.tf               # Cloud Scheduler
-├── iam.tf                     # Runtime SA, deployer SA, WIF
-├── secrets.tf                 # Secret Manager resources + IAM
-├── artifact-registry.tf       # Container image repo
-├── database.tf                # DB user, password
-├── monitoring.tf              # Cloud Monitoring dashboards
-├── dashboard_service.json     # Service dashboard definition
-├── dashboard_pipeline.json    # Pipeline dashboard definition
-├── outputs.tf                 # Service URL, SA emails, AR repo
-└── terraformrc                # Provider mirror config
-```
-
-### Terraform Bootstrap Variables
-
-| Variable | Purpose |
-|----------|---------|
-| `github_oauth_client_id` | OAuth App client ID (persisted in Cloud Run env) |
-| `github_app_id` | GitHub App ID (persisted in Cloud Run env) |
-| `github_token` | Bootstrap only — container registry auth during first apply. Not stored in state. |
+What remains here is what a contributor needs: the toolchain, the database
+migrations, how CI is wired, and how to run the thing locally.
 
 ---
 
@@ -117,7 +50,7 @@ DevTrace uses its own `devtrace_tenant` table, not the shared DevPulse `tenant` 
 | Target | Description |
 |--------|-------------|
 | `make test` | Unit tests with race detector + coverage |
-| `make lint` | Go vet + golangci-lint + yamllint + trivy |
+| `make lint` | Go vet + golangci-lint + yamllint |
 | `make qualify` | test-coverage + lint + vulncheck + e2e |
 | `make vulncheck` | Scan for known vulnerabilities |
 | `make e2e` | End-to-end tests (requires Docker) |
@@ -126,7 +59,7 @@ DevTrace uses its own `devtrace_tenant` table, not the shared DevPulse `tenant` 
 | `make seed` | Create test tenant + API token |
 | `make server` | Run devtrace-site locally |
 | `make build` / `release` | goreleaser build/release |
-| `make tf-init` / `tf-plan` / `tf-apply` | Terraform operations |
+
 | `make setup` | Validate and install local dev tools |
 | `make bump-patch` / `bump-minor` / `bump-major` | Version tagging |
 
@@ -141,7 +74,6 @@ DevTrace uses its own `devtrace_tenant` table, not the shared DevPulse `tenant` 
 | `release-on-tag.yaml` | Version tag (`v*.*.*`) | Test, build, push images, create GitHub release |
 | `deploy-saas.yaml` | Manual (workflow_dispatch) | Deploy to Cloud Run |
 | `deploy-cloud-run.yaml` | Reusable (workflow_call) | Cloud Run deployment logic |
-| `terraform-scan-on-push.yaml` | Push/PR (infra changes) | Terraform security scanning, via `thingzio/actions` |
 | `yamllint-on-push.yaml` | Push/PR (YAML changes) | YAML linting |
 
 Deployment workflows use Workload Identity Federation for GCP auth — no stored credentials.
@@ -151,163 +83,6 @@ Deployment workflows use Workload Identity Federation for GCP auth — no stored
 Use `make bump-patch`, `make bump-minor`, or `make bump-major` to tag and push. goreleaser v2 compiles binaries, ko builds container images. Cloud Run service updated via `deploy-saas.yaml` or `release-on-tag.yaml`.
 
 ---
-
-## Bootstrap Guide
-
-Step-by-step guide to deploy DevTrace from scratch on GCP.
-
-### Prerequisites
-
-- [gcloud CLI](https://cloud.google.com/sdk/docs/install) installed and authenticated
-- [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.13
-- [ko](https://ko.build/install/) for building container images
-- [gh CLI](https://cli.github.com/) for GitHub Actions environment setup
-- GCP project with billing enabled (shared with DevPulse)
-- Domain name with DNS access at your registrar
-- GitHub account with org admin access
-- `GITHUB_TOKEN` with `write:packages` scope
-
-### 1. Set Environment
-
-```shell
-export PROJECT_ID="thingzio"
-export REGION="us-west1"
-export DOMAIN="devtrace.thingz.io"
-```
-
-### 2. Register GitHub OAuth App
-
-Go to https://github.com/settings/applications/new
-
-| Field | Value |
-|-------|-------|
-| Application name | DevTrace |
-| Homepage URL | `https://$DOMAIN` |
-| Authorization callback URL | `https://$DOMAIN/auth/github/callback` |
-
-Save the **Client ID** and generate a **Client Secret**.
-
-```shell
-export GITHUB_OAUTH_CLIENT_ID="your-client-id"
-```
-
-### 3. Register GitHub App
-
-Go to https://github.com/settings/apps/new
-
-| Field | Value |
-|-------|-------|
-| GitHub App name | Must be globally unique (e.g. `DevTraceThingz`) |
-| Homepage URL | `https://$DOMAIN` |
-| Webhook URL | `https://$DOMAIN/webhook/github` |
-| Webhook secret | `openssl rand -hex 32` |
-
-Permissions:
-- **Repository**: Metadata (Read-only), Contents (Read-only), Pull requests (Read-only)
-- **Organization**: Members (Read-only) — required for org membership checks and trusted_orgs
-
-Subscribe to events: none required. Installation events are sent automatically.
-
-After creating: note the **App ID**, download the **private key** (.pem), note the **webhook secret**.
-
-```shell
-export GITHUB_APP_ID="your-app-id"
-```
-
-### 4. First Terraform Apply (creates infra — Cloud Run will fail)
-
-Cloud Run needs images + secrets to start. First apply creates the infra — Cloud Run will error, that's expected.
-
-```shell
-cd infra/run
-terraform init
-terraform apply \
-  -var="github_oauth_client_id=$GITHUB_OAUTH_CLIENT_ID" \
-  -var="github_app_id=$GITHUB_APP_ID"
-```
-
-### 5. Store Secret Values
-
-```shell
-echo -n "YOUR_OAUTH_CLIENT_SECRET" | \
-gcloud secrets versions add devtrace-saas-oauth-client-secret \
-    --project=$PROJECT_ID --data-file=-
-
-echo -n "YOUR_WEBHOOK_SECRET" | \
-gcloud secrets versions add devtrace-saas-webhook-secret \
-    --project=$PROJECT_ID --data-file=-
-
-gcloud secrets versions add devtrace-saas-github-app-key \
-    --project=$PROJECT_ID --data-file=path/to/devtrace.pem
-
-echo -n "YOUR_ANTHROPIC_API_KEY" | \
-gcloud secrets versions add devtrace-saas-anthropic-api-key \
-    --project=$PROJECT_ID --data-file=-
-```
-
-### 6. Push Bootstrap Images
-
-```shell
-gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
-
-AR_REGISTRY=$REGION-docker.pkg.dev/$PROJECT_ID/devtrace-saas-images
-
-KO_DOCKER_REPO=${AR_REGISTRY}/devtrace-site ko build ./cmd/devtrace-site/ --bare --tags latest
-```
-
-### 7. Second Terraform Apply (completes Cloud Run)
-
-```shell
-cd infra/run
-terraform apply \
-  -var="github_oauth_client_id=$GITHUB_OAUTH_CLIENT_ID" \
-  -var="github_app_id=$GITHUB_APP_ID"
-```
-
-> `deletion_protection = false` during initial setup. Set to `true` after successful verification.
-
-### 8. Configure GitHub Actions
-
-```shell
-cd ../..  # back to repo root
-./tools/setup-gh-env
-```
-
-Creates variables in the GitHub `saas` environment: `WIF_PROVIDER`, `DEPLOYER_SA`, `SERVICE_NAME`, `REGION`, `PROJECT_ID`, `AR_REPO`.
-
-### 9. Configure DNS
-
-Add a CNAME record for `devtrace` pointing to `ghs.googlehosted.com.`:
-
-```shell
-gcloud beta run domain-mappings create \
-    --service=devtrace-saas-serve \
-    --domain=$DOMAIN \
-    --project=$PROJECT_ID \
-    --region=$REGION
-```
-
-### 10. First Release
-
-```shell
-make bump-minor
-```
-
-### 11. Post-Deploy Configuration
-
-```shell
-# Enable XFF trust (required for rate limiting behind Cloud Run LB)
-gcloud run services update devtrace-saas-serve \
-    --region=$REGION --set-env-vars=TRUST_PROXY=true
-
-# Enable background scoring and DevPulse sync
-gcloud run services update devtrace-saas-serve \
-    --region=$REGION --set-env-vars=ENABLE_BACKGROUND_OPS=true
-
-# Enable deletion protection after verifying
-# Edit infra/run/cloudrun.tf — set deletion_protection = true
-cd infra/run && terraform apply
-```
 
 ---
 

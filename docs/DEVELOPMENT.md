@@ -152,7 +152,6 @@ pkg/compliance/      NIST SSDF practice-to-signal mapping
 pkg/tenant/          Tenants, sessions, API tokens, installations
 pkg/data/postgres/   Store implementation and migrations
 pkg/middleware/      Auth and admin gating
-infra/run/           Terraform for the Cloud Run reference deployment
 ```
 
 ### Adding a tenant column
@@ -198,6 +197,6 @@ Logs are JSON via `log/slog`.
 
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — contribution process, DCO, governance
 - [SECURITY.md](../SECURITY.md) — vulnerability reporting
-- [docs/INFRA.md](INFRA.md) — Terraform and the Cloud Run deployment
+- [docs/INFRA.md](INFRA.md) — toolchain, migrations, CI and local testing
 - [docs/EMAIL.md](EMAIL.md) — transactional email
 - [`.claude/CLAUDE.md`](../.claude/CLAUDE.md) — conventions and the full environment variable list

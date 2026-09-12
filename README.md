@@ -79,7 +79,6 @@ pkg/claude/          Optional AI risk sensing
 pkg/compliance/      NIST SSDF practice-to-signal mapping
 pkg/tenant/          Tenants, sessions, API tokens, GitHub App installs
 pkg/data/postgres/   PostgreSQL store and migrations
-infra/run/           Terraform for the Cloud Run reference deployment
 ```
 
 Signals are cached with per-source TTLs so a scorecard does not re-fetch
@@ -111,10 +110,13 @@ maintainer's app cannot be shared. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md
 
 ## Deploying
 
-[docs/INFRA.md](docs/INFRA.md) covers the Terraform in `infra/run/`, which
-provisions the whole stack on Google Cloud — Cloud Run, Cloud SQL, Secret
-Manager, scheduling. It is turnkey but opinionated toward GCP; it is the
-maintainer's reference deployment, not the only way to run this.
+[docs/INFRA.md](docs/INFRA.md) covers the toolchain, database migrations, CI
+and local testing.
+
+The Cloud Run deployment itself is described in the private `thingzio/infra`
+repository. Its Terraform moved there when this repository went public, because
+it maps production topology — service and secret names, IAM structure, database
+wiring — and that is not something a public history should carry.
 
 ## Contributing
 

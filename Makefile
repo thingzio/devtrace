@@ -52,7 +52,7 @@ upgrade: ## Upgrades all dependencies to latest versions
 # =============================================================================
 
 .PHONY: lint
-lint: lint-go lint-yaml lint-tf ## Lints Go code, YAML files, and Terraform
+lint: lint-go lint-yaml ## Lints Go code and YAML files
 
 .PHONY: lint-go
 lint-go: ## Lints Go code with go vet and golangci-lint
@@ -65,25 +65,6 @@ lint-go: ## Lints Go code with go vet and golangci-lint
 .PHONY: lint-yaml
 lint-yaml: ## Lints YAML files with yamllint
 	yamllint -c .yamllint.yaml $(YAML_FILES)
-
-TF_DIR := infra/run
-export TF_CLI_CONFIG_FILE := $(wildcard $(TF_DIR)/terraformrc)
-
-.PHONY: lint-tf
-lint-tf: ## Scans Terraform for security misconfigurations
-	@if [ -d "$(TF_DIR)" ]; then trivy config $(TF_DIR) --severity HIGH,CRITICAL; else echo "Skipping trivy: $(TF_DIR) not found"; fi
-
-.PHONY: tf-init
-tf-init: ## Initializes Terraform
-	terraform -chdir=$(TF_DIR) init -backend-config=backend.hcl
-
-.PHONY: tf-plan
-tf-plan: ## Plans Terraform changes
-	terraform -chdir=$(TF_DIR) plan
-
-.PHONY: tf-apply
-tf-apply: ## Applies Terraform changes
-	terraform -chdir=$(TF_DIR) apply
 
 .PHONY: test
 test: tidy ## Runs unit tests with race detector and coverage
