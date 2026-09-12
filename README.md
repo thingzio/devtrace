@@ -1,5 +1,9 @@
 # DevTrace
 
+[![Build Status](https://github.com/thingzio/devtrace/actions/workflows/test-on-push.yaml/badge.svg)](https://github.com/thingzio/devtrace/actions/workflows/test-on-push.yaml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/thingzio/devtrace)](https://goreportcard.com/report/github.com/thingzio/devtrace)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+
 Contributor provenance and trust signals for GitHub projects.
 
 DevTrace answers a question that is awkward to answer by hand: *what do we
