@@ -57,7 +57,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Go Environment
-        uses: ./.github/actions/setup-go-env
+        uses: thingzio/actions/.github/actions/setup-go@ff1417093cf175d18c6b78266245a7f35fbe995a  # v1.3.0
 
       - name: Load Settings
         shell: bash

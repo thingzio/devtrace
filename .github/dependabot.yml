@@ -15,11 +15,3 @@ updates:
     groups:
       all-actions:
         patterns: ["*"]
-
-  - package-ecosystem: "github-actions"
-    directory: ".github/actions/setup-go-env"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-actions:
-        patterns: ["*"]
