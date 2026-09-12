@@ -27,7 +27,7 @@ jobs:
   # ref. See https://github.com/thingzio/actions/blob/main/docs/verification.md
   build:
     needs: test
-    uses: thingzio/actions/.github/workflows/build-ko.yaml@cbfa5d64a69b2c197c145afa20c99660052cda95  # v1.0.0
+    uses: thingzio/actions/.github/workflows/build-ko.yaml@8cae31c35ffb538690dfd5ff1b9e4a00b3a265f8  # v1.0.1
     permissions:
       contents: read
       packages: write      # push to ghcr.io
