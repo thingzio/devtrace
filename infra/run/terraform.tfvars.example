@@ -1,0 +1,75 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+#
+# Every variable below is REQUIRED -- variables.tf gives none of them a default,
+# on purpose. Two reasons. Anything that identifies a particular deployment has
+# to be stated rather than inherited, so Terraform cannot silently point at the
+# maintainer's project. And the two secrets below are guarded by
+# `count = var.x != "" ? 1 : 0` in secrets.tf, which means an unset variable
+# does not merely skip them -- it DESTROYS the live secret, its version, and its
+# IAM binding. Without a default, Terraform refuses to plan instead.
+#
+# Variables NOT listed here keep sensible generic defaults: region, prefix,
+# image_tag, and digest_dry_run. Override any of them if you need to; see
+# variables.tf.
+
+# --- Deployment identity ---
+
+# GCP project that will hold the Cloud Run services, secrets, and registry.
+project_id = ""
+
+# Public domain the service is served from.
+domain = ""
+
+# GitHub repository, used to scope Workload Identity Federation so only this
+# repo's workflows can deploy. Format: owner/name.
+git_repo = ""
+
+# --- GitHub integration ---
+#
+# Self-hosters cannot use the maintainer's GitHub App: App private keys are per
+# instance. Register your own at https://github.com/settings/apps/new with the
+# callback set to https://<your domain>/auth/github/callback. The App ID and
+# OAuth client ID are public identifiers; the client secret, webhook secret, and
+# App private key go into Secret Manager out of band.
+
+github_app_id          = ""
+github_oauth_client_id = ""
+
+# Personal access token used for API calls that are not made as the App. An
+# empty string means no token secret is created at all -- see the warning above
+# before setting this to empty on a live deployment.
+github_token = ""
+
+# --- Secrets ---
+
+# HMAC key used to sign digest email unsubscribe links. An empty string destroys
+# the secret rather than skipping it. To recover the current value:
+#
+#   gcloud secrets versions access latest \
+#     --secret=<prefix>-digest-hmac-secret --project=<project_id>
+#
+# For a new deployment, generate one: `openssl rand -base64 32`
+digest_hmac_secret = ""
+
+# --- Contact and access ---
+
+# Where infrastructure alerts are sent.
+notification_email = ""
+
+# Comma-separated GitHub usernames granted admin access.
+admin_users = ""
+
+# Emails allowed to invoke admin-only Cloud Run endpoints directly.
+admin_invoker_emails = []
+
+# --- Shared infrastructure ---
+#
+# Referenced, never created by this configuration. Point these at network and
+# database resources you already own. The maintainer's live in a separate
+# private repository, which is why nothing here creates them.
+
+vpc_id             = ""
+subnet_id          = ""
+db_instance_name   = ""
+db_connection_name = ""  # project:region:instance
+db_name            = ""
