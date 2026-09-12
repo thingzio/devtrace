@@ -45,6 +45,7 @@ upgrade: ## Upgrades all dependencies to latest versions
 	go get -u ./...
 	go mod tidy
 	go mod vendor
+	$(MAKE) notices
 
 # =============================================================================
 # Quality

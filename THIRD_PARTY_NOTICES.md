@@ -16,7 +16,7 @@ directory. Their licenses and attributions are reproduced here as required.
 | `github.com/google/go-github/v83` | v83.0.0 | BSD-3-Clause |
 | `github.com/google/go-querystring` | v1.2.0 | BSD-3-Clause |
 | `github.com/lib/pq` | v1.12.3 | MIT |
-| `golang.org/x/oauth2` | v0.36.0 | BSD-3-Clause |
+| `golang.org/x/oauth2` | v0.37.0 | BSD-3-Clause |
 
 ## License texts
 
