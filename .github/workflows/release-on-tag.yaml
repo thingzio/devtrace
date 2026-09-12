@@ -36,9 +36,10 @@ jobs:
     with:
       image: thingzio/devtrace-site
       main: ./cmd/devtrace-site
-      # Matches the previous ko configuration. Cloud Run is amd64; arm64 can be
-      # added here later at no build-time cost, since ko cross-compiles.
-      platforms: linux/amd64
+      # Cloud Run is amd64, but arm64 costs nothing here -- ko cross-compiles Go
+      # natively, so a multi-platform index comes out of one job with no QEMU.
+      # It is what makes `docker run` work for a contributor on Apple Silicon.
+      platforms: linux/amd64,linux/arm64
 
   release:
     runs-on: ubuntu-latest
