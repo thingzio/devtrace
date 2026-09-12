@@ -3,8 +3,11 @@ name: deploy-saas
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: 'Container image tag to deploy'
+      image_ref:
+        description: >-
+          Immutable image reference, ghcr.io/<org>/<image>@sha256:<digest>.
+          Resolve one with:
+          crane digest ghcr.io/thingzio/devtrace-site:<tag>
         required: true
         type: string
 
@@ -20,7 +23,7 @@ jobs:
   deploy:
     uses: ./.github/workflows/deploy-cloud-run.yaml
     with:
-      image_tag: ${{ inputs.image_tag }}
+      image_ref: ${{ inputs.image_ref }}
     permissions:
       contents: read
       id-token: write

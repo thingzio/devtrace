@@ -3,8 +3,12 @@ name: deploy-cloud-run
 on:
   workflow_call:
     inputs:
-      image_tag:
-        description: 'Container image tag to deploy'
+      image_ref:
+        description: >-
+          Immutable image reference from the build, as
+          ghcr.io/<org>/<image>@sha256:<digest>. A tag is deliberately not
+          accepted: a tag can move between the build and the deploy, and then
+          the thing that was tested is not the thing that ships.
         required: true
         type: string
 
@@ -33,17 +37,29 @@ jobs:
       - name: Deploy to Cloud Run
         shell: bash
         env:
-          TAG: ${{ inputs.image_tag }}
+          IMAGE_REF: ${{ inputs.image_ref }}
           REGION: ${{ vars.REGION }}
           PROJECT_ID: ${{ vars.PROJECT_ID }}
-          AR_REPO: ${{ vars.AR_REPO }}
+          REMOTE_REPO: gh
           SERVICE_NAME: ${{ vars.SERVICE_NAME }}
         run: |
           set -euo pipefail
-          AR="${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPO}"
-          echo "Deploying ${TAG} via ${AR}..."
+
+          # Cloud Run will only pull from Artifact Registry or GCR, so the image
+          # is fetched through the AR remote repository that fronts ghcr.io.
+          # This is a path rewrite, not a copy: the remote repository is a
+          # pull-through cache and the digest is unchanged on the far side,
+          # which is what keeps the deployed bytes identical to the built ones.
+          [[ "$IMAGE_REF" == ghcr.io/*@sha256:* ]] || {
+            echo "::error::expected ghcr.io/<org>/<image>@sha256:<digest>, got ${IMAGE_REF}" >&2
+            exit 1
+          }
+          AR_HOST="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REMOTE_REPO}"
+          IMAGE="${AR_HOST}/${IMAGE_REF#ghcr.io/}"
+
+          echo "Deploying ${IMAGE}"
           gcloud run services update "${SERVICE_NAME}" \
             --region="${REGION}" \
-            --image="${AR}/devtrace-site:${TAG}" \
+            --image="${IMAGE}" \
             --min-instances=1 \
             --max-instances=1
