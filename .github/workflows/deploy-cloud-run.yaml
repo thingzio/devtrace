@@ -1,65 +1,39 @@
+---
 name: deploy-cloud-run
+
+# Thin wrapper over the shared thingzio/actions deploy workflow. All this repo
+# contributes is which resource gets which image; the validation, the Artifact
+# Registry rewrite and the rollout live there.
+#
+# https://github.com/thingzio/actions/blob/main/.github/workflows/deploy-cloud-run.md
 
 on:
   workflow_call:
     inputs:
       image_ref:
         description: >-
-          Immutable image reference from the build, as
-          ghcr.io/<org>/<image>@sha256:<digest>. A tag is deliberately not
-          accepted: a tag can move between the build and the deploy, and then
-          the thing that was tested is not the thing that ships.
+          Immutable image reference, ghcr.io/<org>/<image>@sha256:<digest>. A
+          tag is deliberately not accepted: a tag can move between the build
+          and the deploy, and then the thing that was tested is not the thing
+          that ships.
         required: true
         type: string
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: saas
     permissions:
       contents: read
       id-token: write
-    steps:
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3.0.0
-        with:
-          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
-          service_account: ${{ vars.DEPLOYER_SA }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db  # v3.0.1
-
-      - name: Deploy to Cloud Run
-        shell: bash
-        env:
-          IMAGE_REF: ${{ inputs.image_ref }}
-          REGION: ${{ vars.REGION }}
-          PROJECT_ID: ${{ vars.PROJECT_ID }}
-          REMOTE_REPO: gh
-          SERVICE_NAME: ${{ vars.SERVICE_NAME }}
-        run: |
-          set -euo pipefail
-
-          # Cloud Run will only pull from Artifact Registry or GCR, so the image
-          # is fetched through the AR remote repository that fronts ghcr.io.
-          # This is a path rewrite, not a copy: the remote repository is a
-          # pull-through cache and the digest is unchanged on the far side,
-          # which is what keeps the deployed bytes identical to the built ones.
-          [[ "$IMAGE_REF" == ghcr.io/*@sha256:* ]] || {
-            echo "::error::expected ghcr.io/<org>/<image>@sha256:<digest>, got ${IMAGE_REF}" >&2
-            exit 1
-          }
-          AR_HOST="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REMOTE_REPO}"
-          IMAGE="${AR_HOST}/${IMAGE_REF#ghcr.io/}"
-
-          echo "Deploying ${IMAGE}"
-          gcloud run services update "${SERVICE_NAME}" \
-            --region="${REGION}" \
-            --image="${IMAGE}" \
-            --min-instances=1 \
-            --max-instances=1
+    uses: thingzio/actions/.github/workflows/deploy-cloud-run.yaml@a3528128e23e3bbc03b3982a9a9dc771bcf3e13f  # v1.5.0
+    with:
+      # Named here rather than read from vars.SERVICE_NAME: a job that calls a
+      # reusable workflow cannot see environment-scoped variables, and the
+      # service name is not a secret. Naming it makes the deploy readable.
+      #
+      # Scaling is deliberately not set here. Terraform owns min/max instance
+      # count, and `gcloud run services update --image` leaves it alone.
+      targets: |
+        service=devtrace-saas-serve=${{ inputs.image_ref }}
