@@ -8,7 +8,6 @@ languages:
 # Build Tools
 build_tools:
   goreleaser: 'v2.15.4'
-  ko: 'v0.18.1'
   tfsec: 'v1.28.14'
 
 # Linting

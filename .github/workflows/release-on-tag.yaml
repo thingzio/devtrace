@@ -65,13 +65,10 @@ jobs:
           set -euo pipefail
           echo "GORELEASER_VERSION=$(yq -r '.build_tools.goreleaser' .settings.yaml)" >> "$GITHUB_ENV"
 
-      - name: Setup Build Tools
-        uses: ./.github/actions/setup-build-tools
-        with:
-          install_goreleaser: 'false'
-
       # No GCP credential here any more: goreleaser builds binaries and archives,
       # and the container image is published to ghcr.io by the build job above.
+      # goreleaser-action installs the pinned version itself, so nothing needs
+      # to be staged ahead of it.
       - name: Build Release Artifacts
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94  # v7.2.3
         with:

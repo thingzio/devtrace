@@ -23,11 +23,3 @@ updates:
     groups:
       all-actions:
         patterns: ["*"]
-
-  - package-ecosystem: "github-actions"
-    directory: ".github/actions/setup-build-tools"
-    schedule:
-      interval: "weekly"
-    groups:
-      all-actions:
-        patterns: ["*"]
