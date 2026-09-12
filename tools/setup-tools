@@ -21,8 +21,7 @@ setting_val() {
 REQUIRED_GO_VER=$(setting_val "go" "1.26")
 REQUIRED_GOLANGCI_VER=$(setting_val "golangci_lint" "v2.12.1")
 REQUIRED_GORELEASER_VER=$(setting_val "goreleaser" "v2.15.4")
-REQUIRED_KO_VER=$(setting_val "ko" "v0.18.1")
-REQUIRED_TFSEC_VER=$(setting_val "tfsec" "v1.28.14")
+REQUIRED_TRIVY_VER=$(setting_val "trivy" "v0.74.0")
 REQUIRED_GORELEASER_MAJOR="${REQUIRED_GORELEASER_VER#v}"
 REQUIRED_GORELEASER_MAJOR="${REQUIRED_GORELEASER_MAJOR%%.*}"
 
@@ -160,9 +159,6 @@ else
     fi
 fi
 
-# ko
-check_tool "ko" "command -v ko" \
-    "brew_install ko || go install github.com/google/ko@latest"
 
 # govulncheck
 printf "Checking %-20s ... " "govulncheck"
@@ -188,11 +184,11 @@ fi
 check_tool "yamllint" "command -v yamllint" \
     "brew_install yamllint || apt_install yamllint || pip3 install --user yamllint"
 
-# tfsec
-check_tool "tfsec" "command -v tfsec" \
-    "brew_install tfsec tfsec/tfsec || (
-        curl -sSfL https://github.com/aquasecurity/tfsec/releases/latest/download/tfsec-\$(uname -s | tr '[:upper:]' '[:lower:]')-${ARCH} \
-            -o /usr/local/bin/tfsec && chmod +x /usr/local/bin/tfsec
+# trivy — replaced tfsec, which is end of life (last release v1.28.14, May 2025)
+check_tool "trivy" "command -v trivy" \
+    "brew_install trivy || (
+        curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sh -s -- -b /usr/local/bin
     )"
 
 # docker
@@ -253,14 +249,9 @@ _goreleaser_installed() {
     local v; v="$(goreleaser --version 2>/dev/null | sed -n 's/^GitVersion:[[:space:]]*//p' | head -1)"
     [[ -n "$v" ]] && echo "v${v#v}" || echo missing
 }
-_ko_installed() {
-    command -v ko &>/dev/null || { echo missing; return; }
-    local v; v="$(ko version 2>/dev/null | head -1 | tr -d '\r')"
-    [[ -n "$v" ]] && echo "v${v#v}" || echo missing
-}
-_tfsec_installed() {
-    command -v tfsec &>/dev/null || { echo missing; return; }
-    local v; v="$(tfsec --version 2>/dev/null | head -1 | tr -d '\r')"
+_trivy_installed() {
+    command -v trivy &>/dev/null || { echo missing; return; }
+    local v; v="$(trivy --version 2>/dev/null | sed -n 's/^Version:[[:space:]]*//p' | head -1)"
     [[ -n "$v" ]] && echo "v${v#v}" || echo missing
 }
 _golangci_installed() {
@@ -275,8 +266,7 @@ printf "  %-18s %-15s %-15s %s\n" "Tool" "Expected" "Installed" "Status"
 printf "  %-18s %-15s %-15s %s\n" "----" "--------" "---------" "------"
 _compare_print "go"            "$REQUIRED_GO_VER"         "$(_go_installed)"         major_minor
 _compare_print "goreleaser"    "$REQUIRED_GORELEASER_VER" "$(_goreleaser_installed)" exact
-_compare_print "ko"            "$REQUIRED_KO_VER"         "$(_ko_installed)"         exact
-_compare_print "tfsec"         "$REQUIRED_TFSEC_VER"      "$(_tfsec_installed)"      exact
+_compare_print "trivy"         "$REQUIRED_TRIVY_VER"      "$(_trivy_installed)"      exact
 _compare_print "golangci-lint" "$REQUIRED_GOLANGCI_VER"   "$(_golangci_installed)"   exact
 echo "  Legend: ✓ match, ⚠ version drift, ✗ missing"
 

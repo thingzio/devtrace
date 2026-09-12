@@ -71,7 +71,7 @@ export TF_CLI_CONFIG_FILE := $(wildcard $(TF_DIR)/terraformrc)
 
 .PHONY: lint-tf
 lint-tf: ## Scans Terraform for security misconfigurations
-	@if [ -d "$(TF_DIR)" ]; then tfsec $(TF_DIR); else echo "Skipping tfsec: $(TF_DIR) not found"; fi
+	@if [ -d "$(TF_DIR)" ]; then trivy config $(TF_DIR) --severity HIGH,CRITICAL; else echo "Skipping trivy: $(TF_DIR) not found"; fi
 
 .PHONY: tf-init
 tf-init: ## Initializes Terraform

@@ -115,7 +115,7 @@ public GitHub data without an App.
 |---|---|
 | `make test` | Unit tests, race detector, coverage profile |
 | `make test-coverage` | The above plus the threshold check from `.settings.yaml` |
-| `make lint` | `go vet`, golangci-lint, yamllint, tfsec |
+| `make lint` | `go vet`, golangci-lint, yamllint, trivy |
 | `make vulncheck` | `govulncheck` |
 | `make qualify` | Everything above plus e2e. **This is the CI gate.** |
 

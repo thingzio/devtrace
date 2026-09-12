@@ -117,7 +117,7 @@ DevTrace uses its own `devtrace_tenant` table, not the shared DevPulse `tenant` 
 | Target | Description |
 |--------|-------------|
 | `make test` | Unit tests with race detector + coverage |
-| `make lint` | Go vet + golangci-lint + yamllint + tfsec |
+| `make lint` | Go vet + golangci-lint + yamllint + trivy |
 | `make qualify` | test-coverage + lint + vulncheck + e2e |
 | `make vulncheck` | Scan for known vulnerabilities |
 | `make e2e` | End-to-end tests (requires Docker) |
@@ -141,7 +141,7 @@ DevTrace uses its own `devtrace_tenant` table, not the shared DevPulse `tenant` 
 | `release-on-tag.yaml` | Version tag (`v*.*.*`) | Test, build, push images, create GitHub release |
 | `deploy-saas.yaml` | Manual (workflow_dispatch) | Deploy to Cloud Run |
 | `deploy-cloud-run.yaml` | Reusable (workflow_call) | Cloud Run deployment logic |
-| `tfsec-on-push.yaml` | Push/PR (infra changes) | Terraform security scanning |
+| `terraform-scan-on-push.yaml` | Push/PR (infra changes) | Terraform security scanning, via `thingzio/actions` |
 | `yamllint-on-push.yaml` | Push/PR (YAML changes) | YAML linting |
 
 Deployment workflows use Workload Identity Federation for GCP auth — no stored credentials.
