@@ -9,7 +9,7 @@
 # IAM binding. Without a default, Terraform refuses to plan instead.
 #
 # Variables NOT listed here keep sensible generic defaults: region, prefix,
-# image_tag, and digest_dry_run. Override any of them if you need to; see
+# and digest_dry_run. Override any of them if you need to; see
 # variables.tf.
 
 # --- Deployment identity ---

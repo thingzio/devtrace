@@ -37,7 +37,7 @@ resource "google_cloud_run_v2_service" "serve" {
     }
 
     containers {
-      image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.images.repository_id}/devtrace-site:${var.image_tag}"
+      image = var.bootstrap_image
 
       ports {
         container_port = 8080
@@ -208,6 +208,14 @@ resource "google_cloud_run_v2_service" "serve" {
         instances = [local.db_connection]
       }
     }
+  }
+
+  # CI deploys an immutable digest after this resource is created. Without this
+  # block Terraform would treat the deployed digest as drift and revert the
+  # service to var.bootstrap_image on the next apply -- silently rolling
+  # production back to a placeholder.
+  lifecycle {
+    ignore_changes = [template[0].containers[0].image]
   }
 
   depends_on = [google_project_service.default]

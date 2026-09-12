@@ -61,12 +61,6 @@ variable "admin_users" {
   type        = string
 }
 
-variable "image_tag" {
-  description = "Container image tag to deploy"
-  type        = string
-  default     = "latest"
-}
-
 # --- Shared infrastructure (from thingzio/infra) ---
 
 variable "vpc_id" {
@@ -115,4 +109,16 @@ variable "github_token" {
   description = "GitHub PAT fallback for API calls (optional, used during bootstrap)"
   type        = string
   sensitive   = true
+}
+
+variable "bootstrap_image" {
+  description = <<-EOT
+    Placeholder image used ONLY to create the Cloud Run resources on the first
+    apply, before CI has published the real images. An immutable digest of
+    Google's public sample server, so it depends on nothing in this project.
+    After creation CI sets the real image and Terraform ignores image changes
+    thereafter (see the lifecycle blocks in cloudrun.tf).
+  EOT
+  type        = string
+  default     = "us-docker.pkg.dev/cloudrun/container/hello@sha256:3beb8d6dd8bac1c597d10f3ddf59f5f684d6054ab589c4334c0486dad07a3f97"
 }
