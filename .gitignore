@@ -51,3 +51,6 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
+
+# Terraform partial backend config (deployment-specific)
+backend.hcl

@@ -74,7 +74,7 @@ lint-tf: ## Scans Terraform for security misconfigurations
 
 .PHONY: tf-init
 tf-init: ## Initializes Terraform
-	terraform -chdir=$(TF_DIR) init
+	terraform -chdir=$(TF_DIR) init -backend-config=backend.hcl
 
 .PHONY: tf-plan
 tf-plan: ## Plans Terraform changes
