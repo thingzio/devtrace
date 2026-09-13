@@ -27,7 +27,7 @@ jobs:
   # ref. See https://github.com/thingzio/actions/blob/main/docs/verification.md
   build:
     needs: test
-    uses: thingzio/actions/.github/workflows/build-ko.yaml@8cae31c35ffb538690dfd5ff1b9e4a00b3a265f8  # v1.0.1
+    uses: thingzio/actions/.github/workflows/build-ko.yaml@bb66805bb85b2d5cdf8cbae68b67ebe9bf059892  # v1.7.0
     permissions:
       contents: read
       packages: write      # push to ghcr.io
@@ -41,42 +41,24 @@ jobs:
       # It is what makes `docker run` work for a contributor on Apple Silicon.
       platforms: linux/amd64,linux/arm64
 
+  # Binaries, archives and a Sigstore-signed checksum file come from the shared
+  # release definition, pinned by SHA for the same reason the image build is.
+  # It runs goreleaser in a job holding no OIDC token and signs the result in a
+  # job that runs none of this repository's configuration, which is what makes
+  # the provenance Build Level 3 rather than Level 2.
+  #
+  # publish: false because the draft flip is gated on a successful deploy, in
+  # the publish job below. Everything is signed, verified and attested by the
+  # time this returns; only visibility is deferred.
   release:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
     needs: test
+    uses: thingzio/actions/.github/workflows/release-go.yaml@bb66805bb85b2d5cdf8cbae68b67ebe9bf059892  # v1.7.0
     permissions:
-      contents: write
-      id-token: write
-    environment: saas
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Setup Go Environment
-        uses: thingzio/actions/.github/actions/setup-go@ff1417093cf175d18c6b78266245a7f35fbe995a  # v1.3.0
-
-      - name: Load Settings
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "GORELEASER_VERSION=$(yq -r '.build_tools.goreleaser' .settings.yaml)" >> "$GITHUB_ENV"
-
-      # No GCP credential here any more: goreleaser builds binaries and archives,
-      # and the container image is published to ghcr.io by the build job above.
-      # goreleaser-action installs the pinned version itself, so nothing needs
-      # to be staged ahead of it.
-      - name: Build Release Artifacts
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94  # v7.2.3
-        with:
-          distribution: goreleaser
-          version: ${{ env.GORELEASER_VERSION }}
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      contents: write      # create the draft release, upload artifacts
+      id-token: write      # keyless signing
+      attestations: write  # SLSA provenance
+    with:
+      publish: false
 
   deploy:
     needs:
