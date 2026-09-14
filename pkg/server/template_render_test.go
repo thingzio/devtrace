@@ -367,6 +367,7 @@ func TestLandingHasNoPlanVocabulary(t *testing.T) {
 
 	// Tier vocabulary and pricing scaffolding must not reappear.
 	mustNotContain := []string{
+		"reference implementation",
 		"beta preview",
 		"Starter",
 		"Enterprise",
