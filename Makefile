@@ -138,7 +138,7 @@ release: ## Runs the full release process with goreleaser
 
 .PHONY: server
 server: ## Starts local dev server
-	DATABASE_URL="$(DEV_DB)" DEVTRACE_DEBUG=true go run -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)" ./cmd/devtrace-site
+	DATABASE_URL="$(DEV_DB)" DEVTRACE_DEBUG=true go run -ldflags "-X github.com/thingzio/devtrace/pkg/version.version=$(VERSION) -X github.com/thingzio/devtrace/pkg/version.commit=$(COMMIT) -X github.com/thingzio/devtrace/pkg/version.date=$(DATE)" ./cmd/devtrace-site
 
 .PHONY: bump-major
 bump-major: ## Bumps major version (1.2.3 -> 2.0.0)

@@ -25,26 +25,27 @@ import (
 
 	"github.com/thingzio/devtrace/pkg/logging"
 	"github.com/thingzio/devtrace/pkg/server"
-)
-
-var (
-	version = "v0.0.1-default"
-	commit  = ""
-	date    = ""
+	"github.com/thingzio/devtrace/pkg/version"
 )
 
 func main() {
-	logging.SetupLogger(version)
-	slog.Info("starting devtrace-site", "commit", commit, "date", date)
+	v := version.Get()
+	logging.SetupLogger(v.Version)
 
-	os.Exit(run())
+	slog.Info("starting devtrace-site",
+		"version", v.Version,
+		"commit", v.Commit,
+		"date", v.Date,
+	)
+
+	os.Exit(run(v))
 }
 
-func run() int {
+func run(v version.Info) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := server.Run(ctx, server.Options{Version: version, Commit: commit, Date: date}); err != nil {
+	if err := server.Run(ctx, server.Options{Version: v.Version, Commit: v.Commit, Date: v.Date}); err != nil {
 		slog.Error("fatal error", "error", err)
 		return 1
 	}
