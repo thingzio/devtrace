@@ -333,7 +333,7 @@ func TestScorecardWithoutEnrichmentRenders(t *testing.T) {
 }
 
 // TestLandingHasNoPlanVocabulary renders the landing page and asserts the
-// service is presented as a free, best-effort reference implementation.
+// service is presented as free and best-effort.
 //
 // DevTrace has no plans, tiers, or pricing. This test guards against tier
 // vocabulary reappearing in user-facing copy.
@@ -355,7 +355,7 @@ func TestLandingHasNoPlanVocabulary(t *testing.T) {
 	body := rec.Body.String()
 
 	mustContain := []string{
-		"reference implementation",
+		"no plans, no pricing, and no subscriptions",
 		"best-effort basis",
 		"Apache License 2.0",
 	}
