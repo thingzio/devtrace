@@ -1304,22 +1304,6 @@ a.link {
   background: #0860ca;
 }
 
-/* FOOTER */
-.page-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 20px;
-  text-transform: uppercase;
-  color: var(--page-header-headingColor);
-  font-size: 0.8rem;
-}
-
-.page-footer a {
-  margin: 4px;
-  font-weight: 600;
-}
-
 /* INSIGHT CARDS */
 .insights-summary {
   display: flex;
@@ -2854,32 +2838,34 @@ section h2 {
 }
 
 /* Footer */
-.app-footer {
-  max-width: 800px;
-  margin: 2rem auto 0;
-  padding: 1rem 1rem;
+.page-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.75rem;
-  color: var(--gray);
+  flex-wrap: wrap;
+  gap: 1rem;
+  max-width: 76rem;
+  margin: 2rem auto 0;
+  padding: 1.5rem 30px;
   border-top: 1px solid var(--border-color);
   text-transform: uppercase;
   letter-spacing: 0.03em;
-}
-.footer-left {
   color: var(--gray);
+  font-size: 0.8rem;
 }
-.footer-right {
-  display: flex;
-  gap: 0.25rem;
+
+.page-footer .footer-links {
+  margin-left: auto;
 }
-.app-footer a {
-  color: var(--accent, #58a6ff);
-  text-decoration: none;
+
+.page-footer a {
+  margin: 4px;
+  color: var(--accent);
   font-weight: 600;
+  text-decoration: none;
 }
-.app-footer a:hover {
+
+.page-footer a:hover {
   text-decoration: underline;
 }
 

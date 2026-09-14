@@ -1,9 +1,6 @@
 {{define "footer"}}
 </main>
-<footer class="app-footer">
-  <div class="footer-left">VERSION {{if .version}}{{.version}}{{else}}DEV{{end}}{{if .commit}} ({{.commit}}{{if .date}} - {{.date}}{{end}}){{end}}</div>
-  <div class="footer-right"><a href="/changelog">CHANGELOG</a> &middot; <a href="/help">HELP</a> &middot; <a href="/tos">TERMS</a> &middot; <a href="https://github.com/thingzio/devtrace" rel="noopener">SOURCE</a></div>
-</footer>
+{{template "sitefooter" .}}
 <script src="/static/js/app.js"></script>
 </body>
 </html>

@@ -65,7 +65,13 @@ const (
 	statusAbsent  = "absent"
 )
 
+// serverOpts holds build identity set at Run() time, read by template funcs so
+// the footer does not have to be threaded through every handler's page data.
+var serverOpts Options
+
 var templateFuncs = template.FuncMap{
+	"appVersion": func() string { return serverOpts.Version },
+	"appCommit":  func() string { return serverOpts.Commit },
 	"comma": func(n int) string {
 		if n == 0 {
 			return "Unlimited"
@@ -225,15 +231,15 @@ func init() {
 	pageTemplates = make(map[string]*template.Template, len(simplePages)+3)
 	for _, p := range simplePages {
 		pageTemplates[p] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
-			"templates/layout.html", "templates/"+p))
+			"templates/layout.html", "templates/site_footer.html", "templates/"+p))
 	}
 	// Pages that include the plans table partial.
 	for _, p := range []string{"landing.html", "help.html"} {
 		pageTemplates[p] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
-			"templates/layout.html", "templates/plans_table.html", "templates/"+p))
+			"templates/layout.html", "templates/plans_table.html", "templates/site_footer.html", "templates/"+p))
 	}
 	pageTemplates["home.html"] = template.Must(template.New("").Funcs(templateFuncs).ParseFS(templateFS,
-		"templates/header.html", "templates/home.html", "templates/footer.html"))
+		"templates/header.html", "templates/home.html", "templates/footer.html", "templates/site_footer.html"))
 }
 
 func renderTemplate(w http.ResponseWriter, name string, data any) {
@@ -262,6 +268,8 @@ type Options struct {
 
 // Run starts the HTTP server and blocks until the context is canceled or a fatal error occurs.
 func Run(ctx context.Context, opts Options) error {
+	serverOpts = opts
+
 	store, err := postgres.NewFromEnv(ctx)
 	if err != nil {
 		return fmt.Errorf("init store: %w", err)

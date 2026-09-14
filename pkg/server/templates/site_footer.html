@@ -1,0 +1,6 @@
+{{define "sitefooter"}}
+<footer class="page-footer">
+  {{if appVersion}}<span>VERSION {{appVersion}}{{if appCommit}} ({{appCommit}}){{end}}</span>{{end}}
+  <span class="footer-links"><a href="/help">HELP</a> &middot; <a href="/tos">TERMS</a> &middot; <a href="https://github.com/thingzio/devtrace" rel="noopener">SOURCE</a></span>
+</footer>
+{{end}}
