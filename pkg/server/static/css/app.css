@@ -45,7 +45,7 @@
   --space-16: 4rem;     /*  64px — section bottom */
 
   /* Radii */
-  --radius:      12px;
+  --radius:      6px;
   --radius-pill: 100px;
 
   /* Motion */
@@ -53,12 +53,12 @@
   --dur-fast: 0.2s;
 
   /* Semantic colors */
-  --ok:          #22c55e;
-  --ok-soft:     #22c55e22;
-  --warn:        #eab308;
-  --warn-soft:   #eab30822;
-  --danger:      #ef4444;
-  --danger-soft: #ef444422;
+  --ok:          #3fb950;
+  --ok-soft:     #3fb95022;
+  --warn:        #d29922;
+  --warn-soft:   #d2992222;
+  --danger:      #f85149;
+  --danger-soft: #f8514922;
   --info:        #4a9eff;
 
   /* Elevation */
@@ -999,18 +999,9 @@ fieldset {
     padding: 7px 10px;
   }
 
-  .page-footer {
-    font-size: 10px;
-    letter-spacing: 0;
-  }
 }
 
 @media screen and (min-width: 900px) {
-  .page-footer {
-    font-size: 14px;
-    letter-spacing: 0.1em;
-  }
-
   .story-content a {
     color: var(--link-color);
   }
@@ -2050,7 +2041,7 @@ a.link {
 .feature-card {
   padding: 1.5rem;
   border: 1px solid var(--border-color, #242836);
-  border-radius: var(--radius, 12px);
+  border-radius: var(--radius, 6px);
   background: var(--page-content-blockColor, #171a22);
   color: var(--page-content-txtColor, #e6edf3);
   text-align: center;
