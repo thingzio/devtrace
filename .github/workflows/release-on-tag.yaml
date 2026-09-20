@@ -27,7 +27,7 @@ jobs:
   # ref. See https://github.com/thingzio/actions/blob/main/docs/verification.md
   build:
     needs: test
-    uses: thingzio/actions/.github/workflows/build-ko.yaml@368b3e12df4c41d9079b26e41a03efcd90461d56  # v1.7.1
+    uses: thingzio/actions/.github/workflows/build-ko.yaml@7276775800dbfef1d9671e60c337f3b4b479a4e8  # v1.8.0
     permissions:
       contents: read
       packages: write      # push to ghcr.io
@@ -52,7 +52,7 @@ jobs:
   # time this returns; only visibility is deferred.
   release:
     needs: test
-    uses: thingzio/actions/.github/workflows/release-go.yaml@368b3e12df4c41d9079b26e41a03efcd90461d56  # v1.7.1
+    uses: thingzio/actions/.github/workflows/release-go.yaml@7276775800dbfef1d9671e60c337f3b4b479a4e8  # v1.8.0
     permissions:
       contents: write      # create the draft release, upload artifacts
       id-token: write      # keyless signing
